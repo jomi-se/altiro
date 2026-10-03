@@ -1,6 +1,6 @@
 # 02 — Accessibility editor authority and fake insertion
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 01
 
 ## Authority
@@ -26,4 +26,6 @@ composition, password state, and per-app disable. No model integration.
 
 ## Comments
 
-No execution evidence recorded yet.
+Source implemented in the integration spike. Core behavior tests and compiled
+Android APIs support source correctness. Physical/editor/lifecycle evidence
+remains unverified; see [Gate A](../../../testing/gate-a.md).

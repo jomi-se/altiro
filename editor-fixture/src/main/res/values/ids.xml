@@ -1,0 +1,6 @@
+<resources>
+    <item name="plain_editor" type="id" />
+    <item name="second_editor" type="id" />
+    <item name="filtered_editor" type="id" />
+    <item name="password_editor" type="id" />
+</resources>

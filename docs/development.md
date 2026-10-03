@@ -1,46 +1,77 @@
 # Development
 
-## Current repository foundation
+## Pinned toolchain
 
-The repository currently contains guidance, the supplied Android specification,
-local work tracking, and repository checks. No Gradle scaffold, Android SDK,
-native runtime, model, emulator, or application is provided by this setup.
+| Tool | Version |
+| --- | --- |
+| JDK and bytecode | 21 |
+| Gradle | 9.6.0; wrapper SHA-256 is pinned |
+| Android Gradle Plugin | 9.4.1 |
+| Kotlin and Compose compiler | 2.4.20 |
+| Compose BOM | 2026.09.00 |
+| AndroidX Activity | 1.13.0 |
+| Coroutines | 1.11.0 |
+| Compile/target SDK | API 37, Platform 37.0 |
+| Minimum SDK | API 33 |
+| Build Tools | 36.0.0 |
+| Spotless / ktlint | 8.0.0 / 1.7.1 |
+
+Pins live in [the version catalog](../gradle/libs.versions.toml). AGP 9 supplies
+built-in Kotlin for Android; root JVM/Compose plugins resolve the matching
+pinned Kotlin version. No legacy Kotlin Android plugin is applied. Native
+NDK/CMake/runtime pins await Gate B.
+
+Compatibility sources: [AGP release notes](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
+and official Google/Maven artifact metadata. Executing this build is the check
+of this particular combination.
+
+## Setup
+
+Install JDK 21 and an Android SDK on a supported host. Install
+`platforms;android-37.0` and `build-tools;36.0.0`; platform-tools is needed for
+device work. Set `ANDROID_HOME` or an ignored `local.properties` SDK path.
+Use the committed Gradle wrapper.
+
+Check host architecture first. Official Linux Android resource tools and
+emulators may require x86-64. Host emulation and machine setup are operator
+concerns, not portable product instructions. Source/JVM work does not require
+an emulator or physical device.
+
+## Commands
 
 ```sh
-./scripts/quiet-run.sh "repository checks" ./scripts/verify.sh
+./scripts/quiet-run.sh "verification" ./scripts/verify.sh
+./scripts/quiet-run.sh "core" ./scripts/verify.sh --core-only
+./scripts/quiet-run.sh "docs" ./scripts/verify.sh --docs-only
+./gradlew spotlessApply
+./gradlew :app:installDebug :editor-fixture:installDebug
+./gradlew :app:connectedDebugAndroidTest :editor-fixture:connectedDebugAndroidTest
 ```
 
-The script needs Python 3 and a POSIX shell. It validates required documentation
-and local links, without internet access or credentials.
+Full verification checks formatting, core tests, debug builds, Android lint,
+instrumentation APK compilation, and 16 KiB alignment of bundled native
+libraries. Connected tests execute separately.
+They supplement the [physical Gate A procedure](testing/gate-a.md).
 
-## Android scaffold milestone
+Application IDs are `org.altiro.app` and `org.altiro.fixture`. Core is pure
+Kotlin. Inference and network modules are reserved until their build gates.
 
-[Ticket 01](plan/android-dictation/issues/01-native-scaffold.md) owns the runnable
-build and fixture app. Install a compatible JDK and Android SDK on a supported
-build host; pin versions and document exact wrapper commands in this file when
-they exist. Keep SDK paths in ignored `local.properties` or environment
-configuration. Never commit a developer's SDK path.
+## Output and privacy
 
-Check host architecture before installing tools. Availability of Java alone
-does not establish that Android build tools, ADB, native toolchains, or emulator
-images execute on that host. Source editing and pure Kotlin checks can happen
-independently of Android device testing. Do not claim an ARM host has passed
-an x86 toolchain or emulator gate without executing it.
+Build output defaults to a checkout-specific directory under the system
+temporary directory. Set `ALTIRO_BUILD_ROOT` to an external directory to choose
+its location; each module has its own subdirectory. Set `GRADLE_USER_HOME` for
+an isolated cache. `./gradlew clean` removes configured build output. Keep
+retained APKs, recordings, reports, and screenshots outside Git repositories;
+clean disposable task tooling when finished.
 
-Use a physical Android device for the required microphone/editor experiments.
-ADB authorization and permission prompts remain visible user-controlled actions.
-An emulator supplements the device gate. No Node/browser toolchain is needed.
-
-## Files and artifacts
-
-Keep Gradle/build/native caches, APKs, models, private audio, signing material,
-screenshots, and test logs out of Git. Use an external artifact directory for
-retained evidence and disposable temporary directories for scratch work. Clean
-each task's temporary output when it is no longer needed.
+The spike has no Internet permission. Its recording worker deletes temporary
+audio after capture resources are released, including Stop, Cancel, and errors.
+Result text is process-memory only. No history is persisted.
 
 ## Release boundary
 
-Debug builds can support development once the scaffold exists. Signed release
-APKs require separately supplied signing material and an audited dependency/model
-inventory. Publishing a release or submitting to a store is a separate maintainer
-action. Preserve signing identity continuity; never commit a signing key.
+The spike is a debug APK. Release signing needs separately supplied secure
+material and dependency/native packaging review. Maintain signing identity
+continuity. Pushes, signed releases, store uploads, and publication remain
+separate operator actions.

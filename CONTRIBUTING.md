@@ -13,12 +13,13 @@ frameworks are not prerequisites.
 Run the available checks from the repository root:
 
 ```sh
-./scripts/quiet-run.sh "repository checks" ./scripts/verify.sh
+./scripts/quiet-run.sh "verification" ./scripts/verify.sh
 ```
 
-This foundation check requires Python 3. Add Gradle build, Kotlin formatting,
-lint, and test commands alongside the runnable Android scaffold. Do not present
-those future checks as passing today.
+Use `--core-only` without an Android SDK, or `--docs-only` for documentation.
+Full verification needs JDK 21 and the pinned SDK and compiles Android/test APKs,
+runs core tests/lint, and checks formatting. Connected tests and the physical
+Gate A procedure are separate; do not call compiled tests executed tests.
 
 ## Changes
 

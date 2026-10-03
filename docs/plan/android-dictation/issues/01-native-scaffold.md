@@ -1,6 +1,6 @@
 # 01 — Native Android scaffold and fixture
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: none
 
 ## Authority
@@ -26,5 +26,6 @@ Add formatting, lint, tests, and debug APK commands with read-only CI.
 
 ## Comments
 
-No execution evidence recorded yet. Repository foundation is complete;
-the runnable Android scaffold is this ticket's next deliverable.
+Native modules, pinned wrapper/toolchain, app and editor fixture are implemented.
+Local build checks are recorded in current work; CI is configured but has not
+been executed remotely.

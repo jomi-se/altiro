@@ -1,6 +1,6 @@
 # 03 — Overlay and microphone lifecycle spike
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 02
 
 ## Authority
@@ -27,4 +27,6 @@ and notification denial, cancellation, lock, and service disable.
 
 ## Comments
 
-No execution evidence recorded yet.
+Source implemented in the integration spike. Core behavior tests and compiled
+Android APIs support source correctness. Physical/editor/lifecycle evidence
+remains unverified; see [Gate A](../../../testing/gate-a.md).

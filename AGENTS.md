@@ -21,10 +21,10 @@ from it. Never silently change the architecture to hide a platform failure.
 
 ## Current scope
 
-Repository preparation comes first. The first app milestone is an Android
-integration spike with a deterministic fake recognizer and a separate editor
-fixture app. Prove accessibility insertion, composition guards, destination
-invalidation, and microphone lifecycle before integrating a model.
+The current milestone is an Android integration spike with a deterministic
+fake recognizer and a separate editor fixture app. Prove insertion, composition
+guards, destination invalidation, and microphone lifecycle on a physical phone
+before integrating a model. The spike is not speech recognition.
 
 Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only
@@ -55,9 +55,10 @@ automatic cross-provider failover, or a mandatory hosted backend.
 
 ## Validation and commands
 
-Use `./scripts/verify.sh` for the current repository foundation. Android build
-commands belong in `docs/development.md` when the Gradle scaffold exists; do not
-invent a build or imply that repository checks compile Android.
+Use `./scripts/verify.sh` for formatting checks, core tests, Android compilation,
+lint, and instrumentation APK compilation. `--core-only` runs JVM checks without
+an Android SDK; `--docs-only` checks the documentation foundation. See
+`docs/development.md`. Compiling test APKs does not execute device tests.
 
 For routine non-interactive checks use `scripts/quiet-run.sh`, which delegates
 to shared `quiet-run` when installed and otherwise runs the command directly.

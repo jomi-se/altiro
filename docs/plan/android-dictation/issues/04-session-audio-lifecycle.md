@@ -1,6 +1,6 @@
 # 04 — Serialized session and ephemeral audio lifecycle
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 03
 
 ## Authority
@@ -25,4 +25,6 @@ audio at startup.
 
 ## Comments
 
-No execution evidence recorded yet.
+Source implemented in the integration spike. Core behavior tests and compiled
+Android APIs support source correctness. Physical/editor/lifecycle evidence
+remains unverified; see [Gate A](../../../testing/gate-a.md).

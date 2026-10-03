@@ -1,0 +1,3 @@
+<resources>
+    <string name="accessibility_service_description">Altiro shows a floating microphone beside an editable field and inserts a result only after you ask. It observes editor identity, selection, and composition to avoid inserting into the wrong field. It does not collect screen text, passwords, or clipboard contents. Your keyboard stays selected. This integration preview returns a fixed test phrase; speech recognition is not included yet.</string>
+</resources>
