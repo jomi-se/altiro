@@ -1,0 +1,12 @@
+Altiro
+Copyright 2026 Altiro contributors
+
+Repository-owned content is licensed under Apache License 2.0.
+
+The Android implementation specification was supplied as project guidance and
+adopted into docs/plan/android-dictation/spec.md. Its cited platform documentation
+and upstream projects retain their own licenses.
+
+No third-party inference runtime or model weights are bundled at this stage.
+Add the exact upstream copyright and license notices when dependencies or model
+artifacts are incorporated. The app license does not relicense those artifacts.

@@ -1,0 +1,70 @@
+# Android / Gradle / native build output and machine paths
+.gradle/
+.kotlin/
+**/build/
+**/.cxx/
+**/.externalNativeBuild/
+local.properties
+captures/
+*.apk
+*.aab
+*.apks
+*.dex
+*.hprof
+
+# Models and private capture data
+models/
+*.gguf
+*.ggml
+*.onnx
+*.safetensors
+ggml-*.bin
+*.wav
+*.pcm
+*.m4a
+*.mp3
+*.ogg
+*.flac
+*.mp4
+*.webm
+*.part
+
+# Secrets, signing identities, and operator configuration
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pem
+*.key
+keystore.properties
+signing.properties
+*.local
+.aws/
+.codex/
+.claude/settings.local.json
+
+# Locally materialized skills and harness state
+.agents/skills/
+.agents/bundles/
+.claude/skills/
+skills-lock.json
+.impeccable/
+
+# IDE and operating-system state
+.idea/
+.vscode/
+*.iml
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+
+# Generated reports and scratch work
+/artifacts/
+/reports/
+/logs/
+/tmp/
+*.log
+__pycache__/
