@@ -21,7 +21,11 @@ system settings. Grant microphone permission; allow recording notifications
 when possible. Follow the phone's visible restricted-setting confirmation if
 sideloading requires it. Keep Gboard selected.
 
-## Visible-screen route (default)
+## Visible-screen route (fallback)
+
+Turn off **Record without leaving your app** to exercise this route on the
+current preview, or use **Open recording screen** directly. The original spike
+used this route by default.
 
 1. Focus a fixture editor and type a word so selection/composition callbacks
    arrive. Tap floating Mic to open the recording screen.
@@ -38,16 +42,22 @@ Check the actual editor after dispatch. No automatic retry is allowed.
 Transformed/truncated input is still an insertion attempt. Unknown composition
 or ambiguous identity uses Copy instead of guessing.
 
-## Direct-start experiment (debug only)
+## Record without leaving your app (default)
 
-Enable the labeled direct-start device experiment in Altiro. Focus an editor
+Leave **Record without leaving your app** enabled in Altiro. Focus an editor
 and tap Mic. This attempts microphone foreground-service startup from the
 accessibility service. Record the result; general FGS exemptions alone do not
 prove microphone permission while backgrounded.
 
 On success, Stop without changing editor state and check one automatic
-insertion attempt. On refusal, disable the experiment and use the visible
-screen. The direct route remains experimental until hardware evidence passes.
+insertion attempt. On refusal, use **Open recording screen**; turn the setting
+off to select the separate screen for subsequent taps. This route is the
+[operator-selected preview default](../decisions/0002-record-in-place-default.md),
+not a completed hardware compatibility gate.
+
+On an update from the old preview, check that the new setting starts enabled
+even if the old debug probe was off. Turn it off, restart/update the app, and
+check that this explicit product setting stays off. Check both build types.
 
 ## Failure and lifecycle cases
 

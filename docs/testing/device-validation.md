@@ -1,8 +1,10 @@
 # Device validation
 
 The operator reports that the integration APK records, cancels, and inserts its
-fixed phrase on a phone. The full editor/lifecycle matrix and offline recognition
-are still unverified; OS/build and keyboard metadata have not been supplied.
+fixed phrase on a phone, and later supplies an actual offline-app transcription.
+The test phone is identified as a Pixel 7. The full editor/lifecycle matrix and
+offline recognition acceptance remain unverified; OS/build and keyboard
+metadata have not been supplied.
 No emulator execution has been recorded. See [Gate B](gate-b.md) for the next
 offline recognition experiment.
 

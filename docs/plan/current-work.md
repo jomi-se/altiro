@@ -10,6 +10,10 @@ recognition and Chilean Spanish quality are the next priorities. This is smoke
 feedback, not the full Gate A editor/lifecycle matrix. See
 [the continuation decision](../decisions/0001-offline-preview.md).
 
+The operator identifies the test phone as a Pixel 7 and supplies an actual
+transcription from the offline app. Multilingual, airplane-mode, resource,
+and editor/lifecycle acceptance evidence is still outstanding.
+
 Source now connects completed PCM16/16 kHz WAV capture to a pinned
 whisper.cpp 1.9.4 CPU JNI bridge and a supported multilingual base model.
 Recognition processes all audio windows, has native cancellation and structured
@@ -30,9 +34,13 @@ remain process-memory only, with Insert/Copy/Discard and ten-minute expiry.
 Existing password/composition/stale-target/one-attempt guards remain.
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`; API 33 minimum,
-API 37 compile/target. The visible recording Activity remains default. Its
-focus change requires explicit Insert after recognition. Direct startup remains
-a labeled debug experiment. Toolchain/native/model pins and commands are in
+API 37 compile/target. Recording from the floating mic without switching apps
+is now the default in all build types. **Record without leaving your app**
+selects this route; turning it off uses the separate recording screen, whose
+focus change requires explicit Insert after recognition. **Open recording
+screen** remains available if recording in place is refused. See
+[the default change](../decisions/0002-record-in-place-default.md).
+Toolchain/native/model pins and commands are in
 [development](../development.md).
 
 ## Verification and gates
@@ -57,7 +65,7 @@ phone. No phone recognition latency, memory, multilingual accuracy, or runtime
 
 ## Next work
 
-Install/import the real model on the phone and execute Gate B in airplane mode,
+Execute Gate B in airplane mode using the installed real model,
 including native cancellation and 10/30/120-second English/French/Spanish
 samples. Finish Gate A's composition, changed-target, password, lock, service
 disable, and editor matrix alongside it. Record device/keyboard metadata and

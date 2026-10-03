@@ -14,9 +14,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -25,6 +27,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
@@ -33,8 +36,10 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
@@ -77,13 +82,14 @@ class MainActivity : ComponentActivity() {
                     }
                     ModelControls(controller) { modelImport.launch(arrayOf("*/*")) }
                     Text(if (connected) "Floating mic connected" else "Floating mic is off")
+                    RecordingModeControls(RecordingPreferences(this@MainActivity))
                     Text(
                         "Accessibility access observes the selected editor, cursor and composition, shows a small control, and inserts text. It does not collect screen or clipboard contents. Your keyboard stays selected.",
                     )
                     OutlinedButton(
                         onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) },
                     ) { Text("Open accessibility settings") }
-                    Text(if (allowed) "Microphone permission granted" else "Allow the microphone to run the recording test.")
+                    Text(if (allowed) "Microphone permission granted" else "Allow microphone access to record your voice.")
                     if (!allowed) {
                         OutlinedButton(onClick = {
                             startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName")))
@@ -91,27 +97,10 @@ class MainActivity : ComponentActivity() {
                     }
                     OutlinedButton(onClick = {
                         permissions.launch(arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS))
-                    }) { Text("Allow microphone and controls") }
+                    }) { Text("Allow microphone and notifications") }
                     Button(onClick = {
                         startActivity(Intent(this@MainActivity, RecordingActivity::class.java))
                     }, enabled = allowed) { Text("Open recording screen") }
-                    Text("The visible recording screen is the default while the one-tap background recording route remains unverified.")
-                    if (BuildConfig.DEBUG) {
-                        var probe by remember {
-                            mutableStateOf(
-                                getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("direct-probe", false),
-                            )
-                        }
-                        OutlinedButton(onClick = {
-                            probe = !probe
-                            getSharedPreferences("preferences", MODE_PRIVATE).edit().putBoolean("direct-probe", probe).apply()
-                        }) { Text(if (probe) "Use visible recording screen" else "Enable direct-start device experiment") }
-                        if (probe) {
-                            Text(
-                                "Debug experiment enabled: the floating mic will try direct recording. Android may refuse it; reopen Altiro for the visible recording screen.",
-                            )
-                        }
-                    }
                     ResultControls(controller)
                     var sample by remember { mutableStateOf("") }
                     OutlinedTextField(value = sample, onValueChange = { sample = it }, label = { Text("Try inserting here") })
@@ -124,6 +113,30 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+}
+
+@Composable
+private fun RecordingModeControls(preferences: RecordingPreferences) {
+    var recordInPlace by remember { mutableStateOf(preferences.recordInPlace) }
+    Row(
+        modifier =
+            Modifier.fillMaxWidth().toggleable(value = recordInPlace, role = Role.Switch) {
+                recordInPlace = it
+                preferences.recordInPlace = it
+            },
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text("Record without leaving your app", modifier = Modifier.weight(1f))
+        Switch(checked = recordInPlace, onCheckedChange = null)
+    }
+    Text(
+        if (recordInPlace) {
+            "Tap the floating mic, speak, then tap Stop. If recording is blocked, use Open recording screen below."
+        } else {
+            "The floating mic opens a separate recording screen. Return to your text field and tap Insert after recognition."
+        },
+    )
 }
 
 @Composable

@@ -177,7 +177,7 @@ class DictationAccessibilityService : AccessibilityService() {
     }
 
     private fun openRecording() {
-        if (BuildConfig.DEBUG && getSharedPreferences("preferences", MODE_PRIVATE).getBoolean("direct-probe", false)) {
+        if (RecordingPreferences(this).recordInPlace) {
             if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) {
                 overlay?.showMessage("Allow the microphone in Altiro first.")
                 return
@@ -186,9 +186,9 @@ class DictationAccessibilityService : AccessibilityService() {
             try {
                 startForegroundService(DictationRecordingService.intent(this, DictationRecordingService.START, id))
             } catch (_: ForegroundServiceStartNotAllowedException) {
-                controller.event(SessionEvent.Fail(id, "Android blocked direct recording. Open Altiro for the recording screen."))
+                controller.event(SessionEvent.Fail(id, "Recording here was blocked. Open Altiro and tap Open recording screen."))
             } catch (_: SecurityException) {
-                controller.event(SessionEvent.Fail(id, "Direct microphone access was denied. Open Altiro for the recording screen."))
+                controller.event(SessionEvent.Fail(id, "Microphone access was denied. Open Altiro and tap Open recording screen."))
             }
             return
         }
@@ -198,7 +198,7 @@ class DictationAccessibilityService : AccessibilityService() {
         } catch (_: RuntimeException) {
             // System background-activity restrictions may suppress or reject the launch.
             // The launcher always retains the visible recording path.
-            overlay?.showMessage("Open Altiro to run the recording test.")
+            overlay?.showMessage("Open Altiro and tap Open recording screen.")
         }
     }
 

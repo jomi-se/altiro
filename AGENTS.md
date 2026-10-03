@@ -26,6 +26,10 @@ runtime and verified multilingual base model import, with a separate editor
 fixture app. Initial phone recording, cancellation, and insertion are
 user-reported; full Gate A and B remain unverified. Read
 `docs/decisions/0001-offline-preview.md` for this bounded continuation.
+Recording in place is the operator-selected preview default; the separate
+recording screen remains available. See
+`docs/decisions/0002-record-in-place-default.md`; this change does not pass the
+remaining device gates.
 Chilean Spanish is an explicit quality target; evaluate specialized models
 separately rather than assuming their training labels establish quality.
 

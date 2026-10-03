@@ -46,8 +46,12 @@ private storage and verify its size/SHA-256. No account or network permission
 is required by Altiro. The browser performs the explicit download.
 
 Enable Altiro's accessibility service and microphone permission, keep your
-keyboard selected, and use the visible recording screen. Stop releases the
-microphone before recognition. Focus a destination and tap Insert, or Copy.
+keyboard selected, and tap the floating mic in your text field. **Record without
+leaving your app** is on by default. Stop releases the microphone before
+recognition. An unchanged eligible field allows one automatic insertion attempt;
+otherwise focus a destination and tap Insert, or Copy. If recording is blocked,
+use **Open recording screen** in Altiro. Turn the setting off to always use that
+separate screen, then return to your editor for explicit Insert.
 Use ES for Spanish-only speech. Test airplane mode after installing the model.
 See [Gate B](docs/testing/gate-b.md) for the quality/lifecycle procedure.
 

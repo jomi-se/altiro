@@ -2,6 +2,9 @@
 
 Accepted: 2026-10-03.
 
+The recording-route default below is superseded by
+[0002 — Record in place by default](0002-record-in-place-default.md).
+
 The operator reports that the integration APK inserts its fixed phrase and
 shows microphone capture that stops on Cancel. The operator prioritizes real
 local recognition and Chilean Spanish quality next; visual polish is deferred.
