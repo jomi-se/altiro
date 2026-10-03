@@ -8,7 +8,7 @@ another keyboard. On-device transcription is the default. No account,
 subscription, trial expiry, or business word quota.
 
 **Status:** offline recognition preview. Import the supported multilingual
-Whisper base model, then record and transcribe on the phone without network
+Whisper Small Q8 or FP16 model, then record and transcribe on the phone without network
 access. The floating control, conservative insertion, and editor fixture remain.
 Initial recording/cancellation/insertion are user-reported on a phone; full
 Gate A and B remain unverified. See the
@@ -40,9 +40,18 @@ recording-screen fallback while the remaining evidence is collected.
 
 ## Try offline recognition
 
-Install a debug APK, open Altiro, and choose **Download model in browser**.
-The supported model is 148 MB. Choose **Import ggml-base.bin** to copy it into
-private storage and verify its size/SHA-256. No account or network permission
+Install a debug APK, open Altiro, select **Small · Q8** (264 MB) or **Small ·
+FP16** (488 MB), and choose **Download selected model**. Use the corresponding
+Import button to copy it into private storage and verify its size/SHA-256.
+Both remain installed, so switching needs no new download. Existing Base
+installs remain available. Two experimental Chilean Small variants are also
+supported; their converted files come from the installation page or the
+[preparation command](docs/development.md).
+
+**Record a comparison** processes one recording with both stock Small models,
+optionally adding either Chilean variant, and shows each transcript and elapsed
+time with a separate Copy button. See the
+[comparison procedure](docs/testing/model-comparison.md). No account or network permission
 is required by Altiro. The browser performs the explicit download.
 
 Enable Altiro's accessibility service and microphone permission, keep your

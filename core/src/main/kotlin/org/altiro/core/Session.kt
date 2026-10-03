@@ -59,6 +59,10 @@ sealed interface SessionEvent {
         val text: String,
     ) : SessionEvent
 
+    data class ComparisonComplete(
+        override val id: SessionId,
+    ) : SessionEvent
+
     data class AwaitUser(
         override val id: SessionId,
         val reason: String,
@@ -105,6 +109,12 @@ fun reduce(
             }
         is SessionEvent.AudioReady -> if (session.phase == Phase.FINALIZING) session.copy(phase = Phase.TRANSCRIBING) else session
         is SessionEvent.Result -> if (session.phase == Phase.TRANSCRIBING) session.copy(phase = Phase.READY, text = event.text) else session
+        is SessionEvent.ComparisonComplete ->
+            if (session.phase == Phase.TRANSCRIBING) {
+                session.copy(phase = Phase.IDLE, destination = null, text = null, message = "Comparison ready in Altiro.")
+            } else {
+                session
+            }
         is SessionEvent.AwaitUser ->
             if (session.phase in
                 setOf(Phase.READY, Phase.AWAITING_USER)

@@ -22,7 +22,7 @@ from it. Never silently change the architecture to hide a platform failure.
 ## Current scope
 
 The current milestone is an offline recognition preview using a pinned native
-runtime and verified multilingual base model import, with a separate editor
+runtime and verified multilingual Base/Small model imports, with a separate editor
 fixture app. Initial phone recording, cancellation, and insertion are
 user-reported; full Gate A and B remain unverified. Read
 `docs/decisions/0001-offline-preview.md` for this bounded continuation.
@@ -30,6 +30,9 @@ Recording in place is the operator-selected preview default; the separate
 recording screen remains available. See
 `docs/decisions/0002-record-in-place-default.md`; this change does not pass the
 remaining device gates.
+Small Q8 and FP16 have an in-app picker and same-recording comparison. Two
+experimental Chilean Small variants are allowlisted after conversion/audit.
+See `docs/decisions/0003-small-model-comparison.md`.
 Chilean Spanish is an explicit quality target; evaluate specialized models
 separately rather than assuming their training labels establish quality.
 

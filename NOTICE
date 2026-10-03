@@ -16,13 +16,23 @@ and Bowen Peng (2023); its notice is retained in the same assets/licenses direct
 The statically linked NDK C++/LLVM runtime notices are retained in
 inference-whisper/src/main/assets/licenses/NDK-LLVM-NOTICE.txt from NDK 30.0.16248370.
 
-The supported separately imported multilingual Whisper base weights are
+The supported separately imported stock multilingual Whisper Base and Small weights are
 derived from OpenAI Whisper under the MIT License.
 Copyright (c) 2022 OpenAI.
 The weights license is retained in inference-whisper/src/main/assets/licenses/Whisper-model-MIT.txt.
 The model source, revision, byte size, and SHA-256 are recorded in
-inference-whisper/src/main/assets/whisper-model.json. Model weights are not in Git
-or embedded in the APK. No Chilean fine-tuned weights are distributed by this build.
+inference-whisper/src/main/assets/whisper-models.json. Model weights are not in Git
+or embedded in the APK.
+
+Experimental Chilean Small ES-CL-2 weights are based on OpenAI Whisper and the
+fine-tune by Roberto Castro-Vexler at revision
+57e689bd5edc1ae84e7c8683235178a3c4505cea. The model author declares Apache-2.0.
+That license is retained in assets/licenses/Chilean-model-Apache-2.0.txt alongside
+the upstream OpenAI MIT notice. The source model card and preparation metadata
+accompany converted model files. The card identifies OpenSLR Chilean Spanish
+(ylacombe/google-chilean-spanish); OpenSLR SLR71 declares CC BY-SA 4.0 for its
+recordings. Dataset recordings are not bundled. Exact model-source provenance
+and redistribution obligations remain part of signed-release review.
 
 The APK uses Kotlin, coroutines, and AndroidX/Compose; their
 upstream licenses remain applicable. See docs/dependencies.md for the initial

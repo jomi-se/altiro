@@ -252,7 +252,11 @@ class DictationRecordingService : Service() {
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentTitle(if (processing) "Altiro · recognizing offline" else "Altiro · recording")
                 .setContentText(
-                    if (processing) "Whisper base · $percent% · microphone released" else "Maximum 5 minutes · audio stays on this device",
+                    if (processing) {
+                        "${controller.activeModelName.value} · $percent% · microphone released"
+                    } else {
+                        "Maximum 5 minutes · audio stays on this device"
+                    },
                 ).setContentIntent(open)
                 .setOngoing(true)
                 .addAction(Notification.Action.Builder(null, "Cancel", action(CANCEL, 1)).build())

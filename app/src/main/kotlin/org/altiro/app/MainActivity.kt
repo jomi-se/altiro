@@ -18,14 +18,17 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -43,15 +46,24 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
+    private var pendingImportId: String? = null
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { render() }
     private val modelImport =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
-            uri?.let { (application as AltiroApplication).controller.importModel(it) }
+            val id = pendingImportId
+            pendingImportId = null
+            if (uri != null && id != null) (application as AltiroApplication).controller.importModel(uri, id)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        pendingImportId = savedInstanceState?.getString("pending-import-model")
         render()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("pending-import-model", pendingImportId)
+        super.onSaveInstanceState(outState)
     }
 
     override fun onResume() {
@@ -80,7 +92,18 @@ class MainActivity : ComponentActivity() {
                             Text("No account, network access, transcript history, or word allowance.")
                         }
                     }
-                    ModelControls(controller) { modelImport.launch(arrayOf("*/*")) }
+                    ModelControls(controller) { id ->
+                        pendingImportId = id
+                        modelImport.launch(arrayOf("*/*"))
+                    }
+                    ComparisonControls(controller, allowed) { ids ->
+                        startActivity(
+                            Intent(
+                                this@MainActivity,
+                                RecordingActivity::class.java,
+                            ).putStringArrayListExtra("compare-models", ArrayList(ids)),
+                        )
+                    }
                     Text(if (connected) "Floating mic connected" else "Floating mic is off")
                     RecordingModeControls(RecordingPreferences(this@MainActivity))
                     Text(
@@ -154,32 +177,64 @@ internal fun ResultControls(controller: DictationController) {
     val progress by controller.progress.collectAsState()
     val seconds by controller.processingSeconds.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
+    val modelName by controller.activeModelName.collectAsState()
+    val results by controller.lastRun.collectAsState()
+    val comparing by controller.comparing.collectAsState()
     if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
-        Text("Recognizing offline · $progress% · ${seconds}s")
+        Text("$modelName · $progress% · ${seconds}s")
         Text("Loading the model can take a moment. The microphone is released.")
         LinearProgressIndicator(progress = { progress / 100f })
         OutlinedButton(onClick = controller::cancel) { Text("Cancel recognition") }
     } else if (nativeBusy) {
         Text("Finishing cancellation and releasing the model…")
     }
-    session.text?.let { text ->
-        Text("Transcript", style = MaterialTheme.typography.titleMedium)
-        Text(text)
-        session.message?.let { Text(it) }
-        Text("Return to your editor for Insert. Copy changes the clipboard only when you tap it.")
-        OutlinedButton(onClick = controller::copy) { Text("Copy result") }
-        OutlinedButton(onClick = controller::discard) { Text("Discard result") }
+    if (comparing && results.isNotEmpty()) {
+        Text("Same recording · ${results.size} models", style = MaterialTheme.typography.titleMedium)
+        Text("Times include verification, cold model loading and recognition. Models run one after another; these are not accuracy scores.")
+        for (result in results) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        controller.models.profiles
+                            .first { it.spec.id == result.modelId }
+                            .name,
+                        style = MaterialTheme.typography.titleMedium,
+                    )
+                    Text("${"%.1f".format(java.util.Locale.ROOT, result.elapsedMillis / 1000.0)} seconds")
+                    Text(result.text.ifBlank { "No speech recognized." })
+                    OutlinedButton(
+                        onClick = { controller.copyText(result.text) },
+                        enabled = result.text.isNotBlank(),
+                    ) { Text("Copy this result") }
+                }
+            }
+        }
+        OutlinedButton(onClick = controller::discard) { Text("Clear comparison") }
     }
-    if (session.text == null) session.message?.let { Text(it) }
+    if (!comparing) {
+        session.text?.let { text ->
+            Text("Transcript", style = MaterialTheme.typography.titleMedium)
+            results.firstOrNull()?.let {
+                Text("$modelName · ${"%.1f".format(java.util.Locale.ROOT, it.elapsedMillis / 1000.0)} seconds")
+            }
+            Text(text)
+            session.message?.let { Text(it) }
+            Text("Return to your editor for Insert. Copy changes the clipboard only when you tap it.")
+            OutlinedButton(onClick = controller::copy) { Text("Copy result") }
+            OutlinedButton(onClick = controller::discard) { Text("Discard result") }
+        }
+    }
+    if (session.text == null && !(comparing && results.isNotEmpty())) session.message?.let { Text(it) }
     Spacer(Modifier.height(4.dp))
 }
 
 @Composable
 private fun ModelControls(
     controller: DictationController,
-    importModel: () -> Unit,
+    importModel: (String) -> Unit,
 ) {
-    val ready by controller.models.ready.collectAsState()
+    val selected by controller.models.selected.collectAsState()
+    val installed by controller.models.installed.collectAsState()
     val busy by controller.models.busy.collectAsState()
     val status by controller.models.status.collectAsState()
     val session by controller.session.collectAsState()
@@ -187,22 +242,90 @@ private fun ModelControls(
     val language by controller.language.collectAsState()
     val available = !session.busy && !nativeBusy && !busy
     Text("Speech model", style = MaterialTheme.typography.titleMedium)
+    Text("Choose the model for everyday dictation. Switching installed models needs no download.")
+    for (profile in controller.models.profiles) {
+        val chosen = selected.spec.id == profile.spec.id
+        val sizeMb = (profile.spec.bytes + 500_000) / 1_000_000
+        Row(
+            Modifier.fillMaxWidth().selectable(
+                chosen,
+                enabled = available,
+                role = Role.RadioButton,
+            ) { controller.selectModel(profile.spec.id) },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = chosen, onClick = null, enabled = available)
+            Column(Modifier.weight(1f)) {
+                Text(profile.name)
+                Text(
+                    "$sizeMb MB · ${if (profile.spec.id in installed) "Installed" else "Not installed"}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+    }
+    Text(selected.description)
+    if (selected.experimental) {
+        Text(
+            "Experimental Chilean Spanish fine-tune by Roberto Castro-Vexler. Better recognition of your speech is not yet established. Use ES when comparing Spanish recordings.",
+        )
+        Text(
+            "Download the converted file from the Altiro installation page, then import it here. The source link contains the original model and its declared Apache-2.0 license.",
+        )
+    }
     Text(status)
     Text(
-        "Multilingual base · 148 MB private storage. Keep at least 158 MB free for import; the browser's Downloads copy is separate. Native working memory is additional.",
+        "Import needs ${(selected.spec.bytes + 10_000_000 + 999_999) / 1_000_000} MB free. Keep each model installed to switch quickly; browser downloads use additional storage.",
     )
-    OutlinedButton(onClick = controller::openModelDownload, enabled = available) { Text("Download model in browser") }
-    OutlinedButton(onClick = importModel, enabled = available) { Text(if (ready) "Replace model file" else "Import ggml-base.bin") }
+    OutlinedButton(onClick = controller::openModelDownload, enabled = available) {
+        Text(if (selected.experimental) "Open Chilean model source" else "Download selected model")
+    }
+    OutlinedButton(onClick = { importModel(selected.spec.id) }, enabled = available) { Text("Import ${selected.filename}") }
     if (busy) OutlinedButton(onClick = controller.models::cancelImport) { Text("Cancel import") }
     OutlinedButton(
         onClick = controller::deleteModel,
-        enabled = available && controller.models.file.exists(),
-    ) { Text("Delete installed model") }
+        enabled = available && selected.spec.id in installed,
+    ) { Text("Delete selected model") }
     Text("Language: ${if (language == "auto") "Automatic" else language}")
     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
         for ((value, label) in listOf("auto" to "Auto", "en" to "EN", "fr" to "FR", "es" to "ES")) {
             OutlinedButton(onClick = { controller.selectLanguage(value) }, enabled = available) { Text(label) }
         }
     }
-    Text("Use ES for Spanish-only speech. This base model is multilingual; a Chilean Spanish model is being evaluated separately.")
+    Text("Use ES for Spanish-only speech. Use the same language setting for fair model comparisons.")
+}
+
+@Composable
+private fun ComparisonControls(
+    controller: DictationController,
+    microphoneAllowed: Boolean,
+    open: (List<String>) -> Unit,
+) {
+    val installed by controller.models.installed.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val modelBusy by controller.models.busy.collectAsState()
+    val experimental = controller.models.profiles.filter { it.experimental }
+    var extraIds by remember { mutableStateOf<Set<String>>(emptySet()) }
+    val available = !session.busy && !nativeBusy && !modelBusy && session.text == null
+    val ids = listOf(ModelStore.SMALL_Q8, ModelStore.SMALL_FP16) + experimental.filter { it.spec.id in extraIds }.map { it.spec.id }
+    Text("Compare one recording", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Record once, then compare Small Q8 and FP16 on exactly the same audio. Try 10–20 seconds of natural speech. Results stay in memory for ten minutes.",
+    )
+    for (profile in experimental) {
+        val checked = profile.spec.id in extraIds
+        Row(
+            Modifier.fillMaxWidth().toggleable(checked, enabled = available, role = Role.Checkbox) {
+                extraIds = if (it) extraIds + profile.spec.id else extraIds - profile.spec.id
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = checked, onCheckedChange = null, enabled = available)
+            Text("Also compare ${profile.name}", Modifier.weight(1f))
+        }
+    }
+    if (ids.any { it !in installed }) Text("Install both Small models and any checked Chilean models first.")
+    Button(onClick = { open(ids) }, enabled = available && microphoneAllowed && ids.all { it in installed }) { Text("Record a comparison") }
+    if (session.text != null) Text("Discard the previous result before starting another recording.")
 }

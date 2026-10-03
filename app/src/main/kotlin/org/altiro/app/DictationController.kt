@@ -15,9 +15,11 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.altiro.core.EditorAuthority
 import org.altiro.core.Phase
+import org.altiro.core.RecognitionInput
 import org.altiro.core.Session
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
+import org.altiro.core.TimedTranscript
 import org.altiro.core.reduce
 import java.io.File
 
@@ -33,6 +35,16 @@ class DictationController(
     val models = ModelStore(context)
     val recognition = LocalRecognition()
     val progress = MutableStateFlow(0)
+    val activeModelName = MutableStateFlow("")
+    val lastRun = MutableStateFlow<List<TimedTranscript>>(emptyList())
+    val comparing = MutableStateFlow(false)
+
+    private data class RunPlan(
+        val inputs: List<RecognitionInput>,
+        val language: String,
+    )
+
+    private var runPlan: RunPlan? = null
     val processingSeconds = MutableStateFlow(0)
     val language =
         MutableStateFlow(context.getSharedPreferences("preferences", Context.MODE_PRIVATE).getString("language", "auto") ?: "auto")
@@ -58,11 +70,24 @@ class DictationController(
         refreshSettings?.invoke()
     }
 
-    fun begin(explicit: Boolean): SessionId? {
+    fun begin(
+        explicit: Boolean,
+        compareIds: List<String>? = null,
+    ): SessionId? {
         checkMain()
         val state = session.value
         if (state.busy || state.phase in setOf(Phase.READY, Phase.AWAITING_USER)) return null
-        if (!models.ready.value || models.busy.value || recognition.busy.value) return null
+        if (models.busy.value || recognition.busy.value) return null
+        if (compareIds != null && (!explicit || compareIds.size !in 2..4 || compareIds.distinct().size != compareIds.size)) return null
+        val profiles =
+            (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
+                models.profiles.firstOrNull { it.spec.id == id } ?: return null
+            }
+        if (profiles.any { it.spec.id !in models.installed.value }) return null
+        runPlan = RunPlan(profiles.map(models::snapshot), language.value)
+        comparing.value = compareIds != null
+        lastRun.value = emptyList()
+        activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
         event(SessionEvent.Start(id, if (explicit) null else editor.capture()))
         return id
@@ -101,15 +126,24 @@ class DictationController(
             }
         }
         try {
-            recognition.transcribe(audio, models, language.value, { percent ->
+            val plan = checkNotNull(runPlan)
+            recognition.transcribe(audio, plan.inputs, plan.language, { percent, modelId ->
                 if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                    activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
                     progress.value = percent
                     onProgress(percent)
                 }
             }) { result ->
                 if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
-                    val text = result.getOrNull()?.trim()
+                    val transcripts = result.getOrNull().orEmpty()
+                    lastRun.value = transcripts
+                    val text = transcripts.firstOrNull()?.text
+                    scope.launch {
+                        delay(600_000)
+                        if (session.value.id == id && !session.value.busy) discard()
+                    }
                     when {
+                        comparing.value && result.isSuccess && transcripts.isNotEmpty() -> event(SessionEvent.ComparisonComplete(id))
                         result.isFailure -> event(SessionEvent.Fail(id, "Local recognition failed. Check the model and try again."))
                         text.isNullOrBlank() -> event(SessionEvent.Fail(id, "No speech was recognized. Try again or choose a language."))
                         else -> {
@@ -119,10 +153,6 @@ class DictationController(
                                 insertion?.invoke()
                             } else {
                                 event(SessionEvent.AwaitUser(id, "Text ready. Focus a field and tap Insert."))
-                            }
-                            scope.launch {
-                                delay(600_000)
-                                if (session.value.id == id && !session.value.busy) discard()
                             }
                         }
                     }
@@ -140,8 +170,11 @@ class DictationController(
         }
     }
 
-    fun importModel(uri: Uri) {
-        if (!session.value.busy && !recognition.busy.value) models.importModel(uri)
+    fun importModel(
+        uri: Uri,
+        id: String,
+    ) {
+        if (!session.value.busy && !recognition.busy.value) models.importModel(uri, id)
     }
 
     fun deleteModel() {
@@ -149,12 +182,19 @@ class DictationController(
     }
 
     fun openModelDownload() {
-        context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(models.sourceUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        context.startActivity(
+            Intent(Intent.ACTION_VIEW, Uri.parse(models.selected.value.sourceUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        )
+    }
+
+    fun selectModel(id: String) {
+        if (session.value.busy || recognition.busy.value) return
+        models.select(id)
     }
 
     fun selectLanguage(value: String) {
         require(value in setOf("auto", "en", "fr", "es"))
-        if (session.value.busy || recognition.busy.value) return
+        if (session.value.busy || recognition.busy.value || models.busy.value) return
         language.value = value
         preferences.edit().putString("language", value).apply()
     }
@@ -175,11 +215,22 @@ class DictationController(
     }
 
     fun discard() {
-        if (session.value.busy) cancel() else mutableSession.value = Session()
+        if (session.value.busy) {
+            cancel()
+        } else {
+            mutableSession.value = Session()
+            lastRun.value = emptyList()
+            runPlan = null
+            comparing.value = false
+        }
     }
 
     fun copy() {
         val text = session.value.text ?: return
+        copyText(text)
+    }
+
+    fun copyText(text: String) {
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Altiro dictation", text))
     }
 

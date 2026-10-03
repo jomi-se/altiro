@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -33,8 +35,34 @@ class RecordingActivity : ComponentActivity() {
                 val ready by controller.models.ready.collectAsState()
                 val modelBusy by controller.models.busy.collectAsState()
                 val nativeBusy by controller.recognition.busy.collectAsState()
-                Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Dictate offline", style = MaterialTheme.typography.headlineMedium)
+                val installed by controller.models.installed.collectAsState()
+                val selected by controller.models.selected.collectAsState()
+                val comparing by controller.comparing.collectAsState()
+                val compareIds = intent.getStringArrayListExtra("compare-models")
+                val allReady = if (compareIds != null) compareIds.all { it in installed } else ready
+                Column(
+                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    Text(
+                        if (compareIds != null ||
+                            comparing
+                        ) {
+                            "Compare speech models"
+                        } else {
+                            "Dictate offline"
+                        },
+                        style = MaterialTheme.typography.headlineMedium,
+                    )
+                    Text(
+                        if (compareIds != null ||
+                            comparing
+                        ) {
+                            "One recording is processed by each model sequentially. Nothing is inserted automatically. Copy the result you prefer. Starting another recording clears these results."
+                        } else {
+                            "Using ${selected.name}. Change models in Altiro settings."
+                        },
+                    )
                     Text(
                         "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control.",
                     )
@@ -44,13 +72,13 @@ class RecordingActivity : ComponentActivity() {
                             Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
                             Phase.FINALIZING -> "Finishing recording…"
                             Phase.TRANSCRIBING -> "Recognizing your speech…"
-                            else -> if (ready) "Ready to record" else "Open Altiro and import the supported model first."
+                            else -> if (allReady) "Ready to record" else "Open Altiro and import the supported model first."
                         },
                     )
                     if (session.elapsedSeconds >= 270) Text("Recording stops at five minutes to bound memory and storage.")
                     Button(
                         onClick = ::startRecording,
-                        enabled = ready && !modelBusy && !nativeBusy && !session.busy && session.text == null,
+                        enabled = allReady && !modelBusy && !nativeBusy && !session.busy && session.text == null,
                     ) {
                         Text("Start recording")
                     }
@@ -69,7 +97,7 @@ class RecordingActivity : ComponentActivity() {
     private fun startRecording() {
         if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
         if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
-        val id = controller.begin(explicit = true) ?: return
+        val id = controller.begin(explicit = true, compareIds = intent.getStringArrayListExtra("compare-models")) ?: return
         try {
             startForegroundService(DictationRecordingService.intent(this, DictationRecordingService.START, id))
         } catch (_: ForegroundServiceStartNotAllowedException) {

@@ -1,8 +1,8 @@
 # Chilean Spanish recognition candidates
 
 Reviewed: 2026-10-03. Chilean conversational speech is an explicit quality target.
-None of these candidates has been benchmarked on the reference phone or adopted
-as an installed app profile.
+No candidate has been benchmarked on the reference phone. ES-CL-2 is now an
+explicit experimental app profile; it is not a proven accuracy improvement.
 
 ## A specialized Whisper candidate
 
@@ -15,8 +15,10 @@ verified comparison with stock Whisper or conversational dictation.
 Inspected revision: `57e689bd5edc1ae84e7c8683235178a3c4505cea`.
 The repository supplies `model.safetensors`, not a ready ggml Android artifact.
 It is a possible second model for the existing Whisper runtime, rather than
-requiring another recognition architecture. Conversion compatibility remains
-an inference to verify. Retain source metadata and audit provenance before
+requiring another recognition architecture. The pinned upstream converter now produces allowlisted FP16 and Q8 artifacts.
+Every FP16 tensor was audited against its source at the converter's precision,
+and both artifacts transcribed the public upstream speech sample on the host.
+This establishes compatibility, not Chilean quality. Retain source metadata and audit provenance before
 redistributing a converted artifact.
 
 The same author's
@@ -56,9 +58,10 @@ negation, numbers, names, quiet speech, silence, and Spanish/English switching.
 Measure word errors and meaning changes alongside phone latency, memory, and
 cancellation. Include speakers and utterances outside fine-tuning data.
 
-Before app import support: use the pinned upstream conversion tooling, verify
+For release qualification and changes to the conversion: use the pinned upstream conversion tooling, verify
 converted output against Transformers on fixed samples, evaluate any
 quantization independently, obtain actual byte size/SHA-256, retain notices,
 and add a separate allowlisted model manifest. Do not substitute this model
-silently for the multilingual default. No GPU training or compute account work
+silently for the multilingual default. See the [accepted experiment](../decisions/0003-small-model-comparison.md) and
+[phone comparison procedure](../testing/model-comparison.md). No GPU training or compute account work
 has been initiated.

@@ -27,10 +27,13 @@ to commit `927cfce34f31707e17f2bff35c349632fb9e2c3a` and SHA-256
 `41b664fee09e79176ac277b5237debec34f8d74af3c7d71f333f1ec67989ecde`.
 Its MIT license, additional ggml CPU attribution, OpenAI weights MIT license,
 and the NDK LLVM/runtime license notices are included in APK assets.
-See [the model manifest](../inference-whisper/src/main/assets/whisper-model.json)
-for exact model source/revision/size/hash; the artifact was downloaded and its
-actual hash verified. No fine-tuned Chilean model is bundled or imported by
-this build.
+See [the model catalog](../inference-whisper/src/main/assets/whisper-models.json)
+for exact model source/revision/size/hash. Stock Small FP16/Q8 and experimental
+Chilean ES-CL-2 FP16/Q8 artifacts have verified actual hashes. No weights are
+bundled in the APK. The Chilean source declares Apache-2.0; the APK retains that
+license alongside upstream OpenAI MIT notices. Pinned conversion input hashes
+are in [the conversion metadata](../inference-whisper/src/main/assets/chilean-model-preparation.json).
+Source data provenance and release redistribution qualification remain separate.
 
 Verification checks actual ELF segments and uncompressed APK
 entries for 16 KiB alignment; this does not replace a page-size device run.

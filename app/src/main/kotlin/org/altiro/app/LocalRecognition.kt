@@ -4,11 +4,12 @@ import android.os.Handler
 import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import org.altiro.core.VerifiedModel
+import org.altiro.core.RecognitionBatch
+import org.altiro.core.RecognitionInput
+import org.altiro.core.TimedTranscript
 import org.altiro.inference.NativeProgress
 import org.altiro.inference.NativeWhisper
 import java.io.File
-import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
@@ -28,43 +29,45 @@ class LocalRecognition {
 
     fun transcribe(
         audio: File,
-        model: ModelStore,
+        inputs: List<RecognitionInput>,
         language: String,
-        progress: (Int) -> Unit,
-        complete: (Result<String?>) -> Unit,
+        progress: (Int, String) -> Unit,
+        complete: (Result<List<TimedTranscript>>) -> Unit,
     ) {
         check(Looper.myLooper() == Looper.getMainLooper() && !busy.value)
         val operation = Operation(native.create())
         active = operation
         mutableBusy.value = true
         worker.execute {
+            var index = 0
             val result =
                 runCatching {
-                    check(VerifiedModel.matches(model.file, model.spec, operation.cancelled::get)) { "Model verification failed" }
-                    if (operation.cancelled.get()) throw CancellationException()
-                    native.transcribe(
-                        operation.handle,
-                        model.file.absolutePath,
-                        audio.absolutePath,
-                        language,
-                        NativeProgress { percent ->
-                            main.post {
-                                if (active === operation &&
-                                    !operation.cancelled.get()
-                                ) {
-                                    progress(percent)
+                    RecognitionBatch.run(audio, inputs, operation.cancelled::get, { input ->
+                        val current = index++
+                        main.post {
+                            if (active === operation && !operation.cancelled.get()) progress(current * 100 / inputs.size, input.spec.id)
+                        }
+                        native.transcribe(
+                            operation.handle,
+                            input.file.absolutePath,
+                            audio.absolutePath,
+                            language,
+                            NativeProgress { percent ->
+                                main.post {
+                                    if (active === operation && !operation.cancelled.get()) {
+                                        progress((current * 100 + percent) / inputs.size, input.spec.id)
+                                    }
                                 }
-                            }
-                        },
-                    )
+                            },
+                        )
+                    })
                 }
-            // Native transcribe returns only after its context and buffers are released.
+            // Every native context has been released before deleting the audio or completing.
             native.release(operation.handle)
-            audio.delete()
             main.post {
                 if (active === operation) active = null
                 mutableBusy.value = false
-                complete(if (operation.cancelled.get()) Result.success(null) else result)
+                complete(if (operation.cancelled.get()) Result.success(emptyList()) else result)
             }
         }
     }

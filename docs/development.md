@@ -96,3 +96,54 @@ The preview is a debug APK. Release signing needs separately supplied secure
 material and dependency/native packaging review. Maintain signing identity
 continuity. Pushes, signed releases, store uploads, and publication remain
 separate operator actions.
+
+## Prepare and compare Small models
+
+The [catalog](../inference-whisper/src/main/assets/whisper-models.json) lists
+stock Small Q8_0/FP16, existing Base, and experimental Chilean ES-CL-2 Q8_0/FP16.
+All have separate private slots, exact sizes and hashes. The app picker selects
+the next ordinary dictation model; **Record a comparison** runs both stock Small
+models on identical audio, optionally adding either Chilean variant. See the
+[phone procedure](testing/model-comparison.md).
+
+Prepare stock files without conversion dependencies, using Python 3.12+:
+
+```sh
+python3 scripts/prepare-whisper-models.py --output /path/outside/checkout/models
+```
+
+To regenerate stock Q8 from FP16 and convert both Chilean variants, also install
+`uv`, CMake, and a C++ compiler. Conversion dependencies run in a temporary,
+isolated cache; no GPU or model training is involved:
+
+```sh
+./scripts/quiet-run.sh "prepare models" python3 scripts/prepare-whisper-models.py --output /path/outside/checkout/models --regenerate-q8 --chilean
+python3 scripts/check-model-manifest.py /path/outside/checkout/models/ggml-small.bin /path/outside/checkout/models/ggml-small-q8_0.bin /path/outside/checkout/models/ggml-small-es-cl-2-f16.bin /path/outside/checkout/models/ggml-small-es-cl-2-q8_0.bin
+```
+
+Omit `--chilean` for stock-only preparation; omit `--regenerate-q8` to download
+the published stock Q8 file. All sources and revisions are explicit constants
+in the script. A profile change needs matching catalog/source pins, measured
+output size/hash, conversion audit, and a new phone comparison; do not edit the
+app allowlist to accept arbitrary downloaded weights.
+
+Chilean preparation uses the pinned upstream `convert-h5-to-ggml.py`, safetensors
+input, OpenAI mel filters, Torch 2.9.1, Transformers 4.48.3, and NumPy 2.2.6.
+Every converted FP16 tensor is audited against the source using safetensors 0.5.3.
+Stock quantization must reproduce the published Q8 hash. When preparing the Chilean variants, every compared profile
+must load and recognize the public upstream JFK sample; converted output must
+match the app catalog before replacing an existing file. Keep `preparation.json`,
+source model card, and license notices with the generated files. No model weights
+are bundled in Git or the APK. Source download/preparation makes explicit network
+requests; installed app inference has no Internet permission.
+
+For a production-JNI host compatibility smoke of all four prepared Small files,
+use JDK 21 and a canonical mono PCM16/16 kHz public sample with a 44-byte WAV
+header (strip optional source metadata chunks before supplying it):
+
+```sh
+./scripts/quiet-run.sh "Small JNI compatibility" ./scripts/check-whisper-models.sh /path/outside/checkout/models /path/to/jfk-canonical.wav
+```
+
+These are compatibility checks, not Chilean speech accuracy or Pixel latency
+benchmarks. Real phone validation and release provenance qualification remain.

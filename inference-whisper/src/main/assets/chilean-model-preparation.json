@@ -1,0 +1,66 @@
+{
+  "runtimeRevision": "927cfce34f31707e17f2bff35c349632fb9e2c3a",
+  "stockRevision": "5359861c739e955e79d9a303bcbc70fb988958b1",
+  "openaiRevision": "31243bad24cc746f07d4c8bfdd2d974872cb1803",
+  "chilean": {
+    "repo": "rcastrovexler/whisper-small-es-cl-2",
+    "revision": "57e689bd5edc1ae84e7c8683235178a3c4505cea",
+    "inputs": {
+      "README.md": {
+        "bytes": 2258,
+        "sha256": "c28a23f64baac637f382e8a886783a122e7fdd4c1c6e02eb94123d33be3439ba"
+      },
+      "added_tokens.json": {
+        "bytes": 36213,
+        "sha256": "8a5856a00b438f6fc40d2c6d9d93fea54f2c169bdc817a58d1feddb9ac96302e"
+      },
+      "config.json": {
+        "bytes": 1436,
+        "sha256": "7f8139e2b074ef061baac4c8d14ffd50ea816dba3b9dbe140b91535f51a0179e"
+      },
+      "generation_config.json": {
+        "bytes": 4047,
+        "sha256": "16e7dd19a134039817b54308824fe76154146a98e217c720b94ef83df3c3f190"
+      },
+      "merges.txt": {
+        "bytes": 543870,
+        "sha256": "0b4a5df397fd681b15714777a7ce4af868bac7591eccde0f124b628dce9fba64"
+      },
+      "model.safetensors": {
+        "bytes": 966995080,
+        "sha256": "efd12759bcf5e1ddcbcc0d20ca059aa5fe1e4071f292987d8fcdad3000c9fe74"
+      },
+      "normalizer.json": {
+        "bytes": 54408,
+        "sha256": "6c40cc36b4bb9c5aa8be0ff9023ea4e78a3ab718b3490a1d9cd3cb7ec56f130f"
+      },
+      "preprocessor_config.json": {
+        "bytes": 353,
+        "sha256": "86c752c0f26ae2cc92699a1805eb66366b01c9260b7d31c7bd142d6b9e56017a"
+      },
+      "special_tokens_map.json": {
+        "bytes": 2333,
+        "sha256": "aa84bd013194e2bf2450397e49e656d8b8d9e1f971c0f1702409870b2cf14106"
+      },
+      "tokenizer_config.json": {
+        "bytes": 295703,
+        "sha256": "f46e9819a8910572da1b528afde146a56c63068e1a130ffc66f7b5315093b0e1"
+      },
+      "vocab.json": {
+        "bytes": 1086844,
+        "sha256": "40a31d8bd67dd6b8a8c7531b30595557adbadad6578a2f657c60bcffca7feabd"
+      }
+    },
+    "converter": "models/convert-h5-to-ggml.py",
+    "melFiltersSha256": "7450ae70723a5ef9d341e3cee628c7cb0177f36ce42c44b7ed2bf3325f0f6d4c",
+    "pythonDependencies": [
+      "torch==2.9.1",
+      "transformers==4.48.3",
+      "numpy==2.2.6"
+    ],
+    "auditDependencies": [
+      "numpy==2.2.6",
+      "safetensors==0.5.3"
+    ]
+  }
+}

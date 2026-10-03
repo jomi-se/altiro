@@ -47,4 +47,17 @@ class SessionTest {
         assertEquals(awaiting, reduce(awaiting, SessionEvent.Start(SessionId(2), null)))
         assertFalse(awaiting.attemptConsumed)
     }
+
+    @Test fun `comparison has no insertion payload and stale completion is ignored`() {
+        var state = reduce(Session(), SessionEvent.Start(id, null))
+        for (event in listOf(SessionEvent.FirstFrame(id), SessionEvent.Stop(id), SessionEvent.AudioReady(id))) state = reduce(state, event)
+        val completed = reduce(state, SessionEvent.ComparisonComplete(id))
+        assertEquals(Phase.IDLE, completed.phase)
+        assertEquals(null, completed.text)
+        assertEquals(null, completed.destination)
+        assertEquals(completed, reduce(completed, SessionEvent.Dispatch(id)))
+        val cancelled = reduce(state, SessionEvent.Cancel(id))
+        assertEquals(cancelled, reduce(cancelled, SessionEvent.ComparisonComplete(id)))
+        assertEquals(ready(), reduce(ready(), SessionEvent.ComparisonComplete(id)))
+    }
 }

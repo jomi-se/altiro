@@ -46,8 +46,10 @@ diagnostic logs, analytics, or default history.
 ## Local and remote recognition
 
 Begin with fake recognition. Later pin `whisper.cpp` to an exact revision and
-one verified multilingual model; no native moving-branch builds or placeholder
-hashes. CPU/arm64 is the reference phone path. Measure tiny/base/small rather
+a verified multilingual model; no native moving-branch builds or placeholder
+hashes. The accepted [comparison increment](../decisions/0003-small-model-comparison.md)
+adds a pinned multi-profile catalog and explicit sequential comparison without
+making phone accuracy or latency claims. CPU/arm64 is the reference phone path. Measure tiny/base/small rather
 than promising latency or Pixel accelerator support.
 
 Local dictation makes no network calls. Remote STT and cleanup are independently

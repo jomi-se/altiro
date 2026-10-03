@@ -6,10 +6,10 @@ accuracy or latency recommendation.
 ## Install and import
 
 Update the debug APK without uninstalling to preserve accessibility settings.
-Open Altiro, download the supported multilingual base model in your browser,
-then choose **Import ggml-base.bin** and select it in the system file picker.
-Expect 147,951,465 bytes; the app verifies the manifest's SHA-256 before install
-and before every native load. Import requires a private copy and temporary
+Open Altiro, select Small Q8 or FP16, download the selected model in your browser,
+then use its Import button and select the matching file. Existing Base remains
+supported. The app verifies the catalog's exact byte count and SHA-256 before
+installation and before every native load. Import requires a private copy and temporary
 space; the browser's Downloads copy is separate. Unknown or truncated files
 must fail without replacing an existing valid model.
 
@@ -54,6 +54,7 @@ screenshots, and raw device logs outside Git. No personal samples are published
 without a separate explicit request.
 
 The [Chilean candidate research](../research/chilean-spanish.md) defines the
-comparison needed before adding another model profile. A small fine-tune's
+quality comparison needed before recommending the experimental profiles.
+Use the [same-recording comparison](model-comparison.md) for this experiment. A small fine-tune's
 self-reported WER is not evidence that it outperforms stock Whisper on these
 recordings.

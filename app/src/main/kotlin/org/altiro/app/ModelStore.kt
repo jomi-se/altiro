@@ -7,6 +7,7 @@ import android.os.Looper
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.altiro.core.ModelSpec
+import org.altiro.core.RecognitionInput
 import org.altiro.core.VerifiedModel
 import org.json.JSONObject
 import java.io.IOException
@@ -14,19 +15,47 @@ import java.util.concurrent.CancellationException
 import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 
+data class ModelProfile(
+    val spec: ModelSpec,
+    val name: String,
+    val filename: String,
+    val sourceUrl: String,
+    val description: String,
+    val experimental: Boolean,
+)
+
 class ModelStore(
     private val context: Context,
 ) {
-    private val manifest =
+    val profiles: List<ModelProfile> =
         JSONObject(
             context.assets
-                .open("whisper-model.json")
+                .open("whisper-models.json")
                 .bufferedReader()
                 .use { it.readText() },
-        )
-    val spec = ModelSpec(manifest.getString("id"), manifest.getLong("bytes"), manifest.getString("sha256"))
-    val sourceUrl: String = manifest.getString("sourceUrl")
-    val file = context.filesDir.resolve("models/ggml-base.bin")
+        ).getJSONArray("models")
+            .let { models ->
+                List(models.length()) { index ->
+                    val item = models.getJSONObject(index)
+                    ModelProfile(
+                        ModelSpec(item.getString("id"), item.getLong("bytes"), item.getString("sha256")),
+                        item.getString("displayName"),
+                        item.getString("filename"),
+                        item.getString("sourceUrl"),
+                        item.getString("description"),
+                        item.getBoolean("experimental"),
+                    )
+                }
+            }
+    private val preferences = context.getSharedPreferences("preferences", Context.MODE_PRIVATE)
+    private val initialId =
+        preferences.getString("model", null)
+            ?: if (context.filesDir.resolve("models/ggml-base.bin").isFile) "whisper-base-multilingual" else SMALL_Q8
+    private val mutableSelected =
+        MutableStateFlow(profiles.firstOrNull { it.spec.id == initialId } ?: profiles.first { it.spec.id == SMALL_Q8 })
+    val selected = mutableSelected.asStateFlow()
+    private val mutableInstalled = MutableStateFlow<Set<String>>(emptySet())
+    val installed = mutableInstalled.asStateFlow()
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val cancelled = AtomicBoolean()
@@ -34,52 +63,80 @@ class ModelStore(
     val ready = mutableReady.asStateFlow()
     private val mutableBusy = MutableStateFlow(true)
     val busy = mutableBusy.asStateFlow()
-    private val mutableStatus = MutableStateFlow("Checking installed model…")
+    private val mutableStatus = MutableStateFlow("Checking installed models…")
     val status = mutableStatus.asStateFlow()
 
     init {
         worker.execute {
-            file.parentFile
-                ?.apply { mkdirs() }
-                ?.listFiles()
+            context.filesDir
+                .resolve("models")
+                .apply { mkdirs() }
+                .listFiles()
                 ?.filter { it.name.endsWith(".part") }
                 ?.forEach { it.delete() }
-            val valid = runCatching { VerifiedModel.matches(file, spec) }.getOrDefault(false)
+            val valid =
+                profiles
+                    .filter {
+                        runCatching {
+                            VerifiedModel.matches(
+                                file(it),
+                                it.spec,
+                            )
+                        }.getOrDefault(false)
+                    }.map { it.spec.id }
+                    .toSet()
             main.post {
-                mutableReady.value = valid
+                mutableInstalled.value = valid
+                updateReady()
                 mutableBusy.value = false
-                mutableStatus.value =
-                    if (valid) "Whisper base · multilingual · ready offline" else "Import the multilingual base model to begin."
+                mutableStatus.value = "Select a model below. Installed models are ready offline."
             }
         }
     }
 
-    fun importModel(uri: Uri) {
-        check(Looper.myLooper() == Looper.getMainLooper())
+    fun file(profile: ModelProfile): java.io.File = context.filesDir.resolve("models/${profile.filename}")
+
+    fun snapshot(profile: ModelProfile): RecognitionInput = RecognitionInput(profile.spec, file(profile))
+
+    fun select(id: String) {
+        checkMain()
         if (busy.value) return
+        mutableSelected.value = profiles.first { it.spec.id == id }
+        preferences.edit().putString("model", id).apply()
+        updateReady()
+    }
+
+    fun importModel(
+        uri: Uri,
+        id: String,
+    ) {
+        checkMain()
+        if (busy.value) return
+        val profile = profiles.firstOrNull { it.spec.id == id } ?: return
         mutableBusy.value = true
         cancelled.set(false)
-        mutableStatus.value = "Importing and verifying model…"
+        mutableStatus.value = "Importing ${profile.name}…"
         worker.execute {
-            var result = "Model import failed. Choose the supported ggml-base.bin file and check free storage."
+            var result = "Import failed. Choose ${profile.filename} and check free storage."
             var imported = false
             try {
-                check(context.filesDir.usableSpace >= spec.bytes + 10_000_000) { "Insufficient storage" }
+                check(context.filesDir.usableSpace >= profile.spec.bytes + 10_000_000) { "Insufficient storage" }
                 val source = context.contentResolver.openInputStream(uri) ?: throw IOException()
                 source.use {
-                    VerifiedModel.install(it, file, spec, cancelled::get) { percent ->
-                        main.post { mutableStatus.value = "Importing and verifying · $percent%" }
+                    VerifiedModel.install(it, file(profile), profile.spec, cancelled::get) { percent ->
+                        main.post { mutableStatus.value = "Importing ${profile.name} · $percent%" }
                     }
                 }
                 imported = true
-                result = "Whisper base · multilingual · ready offline"
+                result = "${profile.name} installed and verified."
             } catch (_: CancellationException) {
-                result = "Import cancelled. The previous model was preserved."
+                result = "Import cancelled. Previously installed models were preserved."
             } catch (_: Exception) {
                 // No provider URI, model contents, or private path enters diagnostics.
             }
             main.post {
-                if (imported) mutableReady.value = true
+                if (imported) mutableInstalled.value = installed.value + id
+                updateReady()
                 mutableStatus.value = result
                 mutableBusy.value = false
             }
@@ -90,17 +147,33 @@ class ModelStore(
         cancelled.set(true)
     }
 
-    /** The controller only permits this once capture and native work are finished. */
+    /** The controller blocks deletion while capture or native work owns any model. */
     fun delete() {
+        checkMain()
         if (busy.value) return
+        val profile = selected.value
         mutableBusy.value = true
         worker.execute {
-            val deleted = !file.exists() || file.delete()
+            val deleted = !file(profile).exists() || file(profile).delete()
             main.post {
-                if (deleted) mutableReady.value = false
-                mutableStatus.value = if (deleted) "Model deleted. Import a model to begin." else "Could not delete the model. Try again."
+                if (deleted) mutableInstalled.value = installed.value - profile.spec.id
+                updateReady()
+                mutableStatus.value = if (deleted) "${profile.name} deleted." else "Could not delete the model. Try again."
                 mutableBusy.value = false
             }
         }
+    }
+
+    private fun updateReady() {
+        mutableReady.value = selected.value.spec.id in installed.value
+    }
+
+    private fun checkMain() {
+        check(Looper.myLooper() == Looper.getMainLooper())
+    }
+
+    companion object {
+        const val SMALL_Q8 = "whisper-small-q8"
+        const val SMALL_FP16 = "whisper-small-fp16"
     }
 }

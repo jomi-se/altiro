@@ -80,7 +80,7 @@ Record OS build, SDK target, app versions, permissions, success/failure, and rel
 
 ### Gate B — genuinely offline transcription
 
-Integrate one pinned multilingual model. In airplane mode, transcribe 10-, 30-, and 120-second recordings in the three languages. Verify cancellation, native-memory cleanup, and insertion eligibility. If `base` is too slow, expose `tiny` rather than quietly using a network service. Quality and latency measurements decide the recommended profile.
+Integrate a pinned multilingual model. The accepted [Small comparison increment](../../decisions/0003-small-model-comparison.md) adds separately verified stock Small Q8/FP16 and experimental Chilean variants, with model selection in the app and sequential same-recording comparison. In airplane mode, transcribe 10-, 30-, and 120-second recordings in the three languages. Verify cancellation, native-memory cleanup, and insertion eligibility. If `base` is too slow, expose `tiny` rather than quietly using a network service. Quality and latency measurements decide the recommended profile.
 
 ### Gate C — usable first APK
 
