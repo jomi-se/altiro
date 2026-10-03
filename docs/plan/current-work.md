@@ -2,55 +2,72 @@
 
 Updated: 2026-10-03.
 
-## Android integration spike
+## Offline recognition preview
 
-Source is implemented for the native Android scaffold, separate editor fixture,
-accessibility input-method tracking, metadata-only destination authority,
-non-focusable movable control, explicit Insert/Copy/Discard, and microphone
-foreground-service lifecycle. Recognition returns the fixed phrase
-`Dictation test: café, mañana, Kubernetes.` It is not speech recognition.
+The operator reports that the first fixed-phrase APK inserts, shows microphone
+capture, and cancels capture on a phone. UI polish is deferred; actual local
+recognition and Chilean Spanish quality are the next priorities. This is smoke
+feedback, not the full Gate A editor/lifecycle matrix. See
+[the continuation decision](../decisions/0001-offline-preview.md).
+
+Source now connects completed PCM16/16 kHz WAV capture to a pinned
+whisper.cpp 1.9.4 CPU JNI bridge and a supported multilingual base model.
+Recognition processes all audio windows, has native cancellation and structured
+progress, and supports Auto/EN/FR/ES. Cold-load each session, then release native
+memory before completion; warm residency is deferred. Rechecking the model,
+context ownership, and audio deletion share one serialized native worker.
+
+The app has no Internet permission. Explicit browser download and file-picker
+import acquire the model. Import enforces actual byte size/SHA-256, bounded
+copy, cancellation, and atomic installation. Failed imports preserve a valid
+previous model. A model is reverified before native load. Replacement/deletion
+and new inference stay blocked until native work finishes.
+
+Capture releases the microphone before switching its foreground notification
+to local file processing with progress/Cancel. Audio is deleted after native
+return, failure, or cancellation; abandoned files are swept on startup. Results
+remain process-memory only, with Insert/Copy/Discard and ten-minute expiry.
+Existing password/composition/stale-target/one-attempt guards remain.
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`; API 33 minimum,
-API 37 compile/target. The toolchain is pinned in the wrapper/version catalog.
-Build/test output is external to the repository. See [development](../development.md).
+API 37 compile/target. The visible recording Activity remains default. Its
+focus change requires explicit Insert after recognition. Direct startup remains
+a labeled debug experiment. Toolchain/native/model pins and commands are in
+[development](../development.md).
 
-The recording Activity is the default path. Its focus change invalidates the
-original destination and requires explicit Insert. A labeled debug-only probe
-can attempt direct microphone startup from the overlay; it remains unverified.
-Unknown composition, missing identity, passwords, blocked apps, or stale targets
-prevent insertion. A dispatched attempt is consumed and never retried.
+## Verification and gates
 
-## Validation boundary
+Actual base-model recognition through the production JNI bridge has passed on
+the host using the upstream public speech sample. Tests cover audio beyond
+30 seconds, native decoding cancellation (including automatic-language mode),
+pre-cancelled and stale handles, exact digital-zero silence, and malformed WAV
+rejection. These are host-native tests, not Android or Chilean quality evidence.
 
-The scaffold, Kotlin tests, lint, APK packaging, and compiled instrumentation
-are local verification targets. Read-only CI includes JVM/build checks and an
-API 33 emulator job; it has not been run remotely in this checkout. Physical
-phone testing and local emulator execution have not been performed.
+The Kotlin suite has thirteen passing tests. Both apps and instrumentation
+APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
+Actual ELF/APK 16 KiB alignment passes for bundled native libraries. Formatting
+and model manifest/artifact validation pass. Instrumentation is compiled
+separately from execution. Read-only CI includes build checks and an API 33 emulator job but
+has not been run remotely in this checkout. No local emulator has executed.
 
-[Gate A](../testing/gate-a.md) is **unverified**. Follow that procedure on the
-reference phone before integrating Whisper. Check Gboard composition and field
-identity, cursor/selection replacement, overlay behavior, the direct/fallback
-recording route, lock/cancel, and service disable. Report editor incompatibility
-honestly and preserve Copy.
-
-## Local verification
-
-The Kotlin suite has nine passing behavioral tests. Both app and fixture debug
-APKs and instrumentation APKs compile; Android lint has no errors. Bundled
-AndroidX graphics libraries are checked for ELF and APK 16 KiB alignment.
-Instrumentation has been compiled but not executed on this host, and physical
-Gate A is unverified. The APK remains a fixed-phrase integration build.
+[Gate A](../testing/gate-a.md) is partially user-reported and remains
+**unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the
+phone. No phone recognition latency, memory, multilingual accuracy, or runtime
+16 KiB compatibility is claimed. A debug APK is not a signed release.
 
 ## Next work
 
-Complete device evidence for [editor authority](android-dictation/issues/02-editor-authority.md)
-and the [overlay/microphone spike](android-dictation/issues/03-overlay-microphone.md).
-Session serialization and bounded temporary PCM/WAV capture from ticket 04 are
-implemented as part of this spike but require lifecycle device evidence.
+Install/import the real model on the phone and execute Gate B in airplane mode,
+including native cancellation and 10/30/120-second English/French/Spanish
+samples. Finish Gate A's composition, changed-target, password, lock, service
+disable, and editor matrix alongside it. Record device/keyboard metadata and
+failures rather than assuming initial insertion proves compatibility.
 
-The inference and network modules are reserved. No model/runtime is bundled,
-no Internet permission exists, and no signed release or provider integration
-has been made. Gate B follows Gate A; later work remains ordered by the
-[canonical specification](android-dictation/spec.md) and [build plan](vertical-slice-build-order.md).
+[Chilean Spanish research](../research/chilean-spanish.md) identifies an
+Apache-declared Whisper small fine-tune. It is not bundled or allowlisted yet;
+conversion, provenance, stock-small comparison, held-out casual speech,
+quality, latency, and memory remain to verify. The current base model is a
+reference candidate, not a proven high-quality Chilean profile.
 
-Pushes, publication, store submission, and credential changes remain operator-owned.
+Optional remote recognition/cleanup and visual polish remain later work.
+Pushes, publication, store submission, and credential changes are operator-owned.

@@ -166,11 +166,19 @@ class DictationOverlay(
             when (session.phase) {
                 Phase.STARTING -> "Starting…"
                 Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
-                Phase.FINALIZING, Phase.TRANSCRIBING -> "Preparing test phrase…"
+                Phase.FINALIZING -> "Finishing recording…"
+                Phase.TRANSCRIBING -> "Recognizing · ${controller.progress.value}%"
                 Phase.AWAITING_USER -> session.message ?: "Text ready"
                 Phase.DISPATCHED_UNCONFIRMED -> "Check insertion"
-                Phase.FAILED -> session.message ?: "Test failed"
-                else -> "Altiro · test mode"
+                Phase.FAILED -> session.message ?: "Recognition failed"
+                else ->
+                    if (controller.recognition.busy.value) {
+                        "Finishing cancellation…"
+                    } else if (!controller.models.ready.value) {
+                        "Import model in Altiro"
+                    } else {
+                        "Altiro · offline"
+                    }
             }
         val recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING)
         val pending = session.text != null && !session.attemptConsumed
@@ -186,11 +194,13 @@ class DictationOverlay(
             if (recording) {
                 "Stop recording"
             } else if (pending) {
-                "Insert test phrase into ${editor.identity?.packageName ?: "selected field"}"
+                "Insert transcript into ${editor.identity?.packageName ?: "selected field"}"
             } else {
                 "Open microphone recording screen"
             }
-        primary.isEnabled = recording || (pending && eligible) || (!session.busy && session.text == null && eligible)
+        primary.isEnabled =
+            recording || (pending && eligible) ||
+            (!session.busy && !controller.recognition.busy.value && controller.models.ready.value && session.text == null && eligible)
         primary.setOnClickListener {
             when {
                 recording -> controller.stop()

@@ -3,6 +3,7 @@ set -eu
 repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 python3 scripts/check-repository.py
+python3 scripts/check-model-manifest.py
 case "${1:-}" in
   --docs-only) exit 0 ;;
   --core-only)

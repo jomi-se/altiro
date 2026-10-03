@@ -26,4 +26,10 @@ Produce a labeled debug APK unless secure signing material is separately supplie
 
 ## Comments
 
+The offline preview implements verified file-picker model import, deletion
+when idle, explicit language selection, progress/cancellation, and browser
+download handoff without an Internet permission. The phone acceptance matrix
+and release gate remain outstanding. These source additions do not mark this
+ticket done.
+
 No execution evidence recorded yet.

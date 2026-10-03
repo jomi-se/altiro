@@ -1,6 +1,10 @@
 # Device validation
 
-No Android device or emulator has been tested for Altiro yet.
+The operator reports that the integration APK records, cancels, and inserts its
+fixed phrase on a phone. The full editor/lifecycle matrix and offline recognition
+are still unverified; OS/build and keyboard metadata have not been supplied.
+No emulator execution has been recorded. See [Gate B](gate-b.md) for the next
+offline recognition experiment.
 
 The [specification](../plan/android-dictation/spec.md), sections 4 and 16, is the
 acceptance authority. Use the separate editor fixture app, the reference

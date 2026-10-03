@@ -7,9 +7,24 @@ The Android implementation specification was supplied as project guidance and
 adopted into docs/plan/android-dictation/spec.md. Its cited platform documentation
 and upstream projects retain their own licenses.
 
-No third-party inference runtime or model weights are bundled at this stage.
-The integration APK uses Kotlin, coroutines, and AndroidX/Compose; their
+The APK bundles whisper.cpp/ggml 1.9.4 from commit
+927cfce34f31707e17f2bff35c349632fb9e2c3a under the MIT License.
+Copyright (c) 2023-2026 The ggml authors.
+Its license is retained in inference-whisper/src/main/assets/licenses/whisper.cpp-MIT.txt.
+The ggml CPU implementation also credits MIT-licensed code by Jeffrey Quesnelle
+and Bowen Peng (2023); its notice is retained in the same assets/licenses directory.
+The statically linked NDK C++/LLVM runtime notices are retained in
+inference-whisper/src/main/assets/licenses/NDK-LLVM-NOTICE.txt from NDK 30.0.16248370.
+
+The supported separately imported multilingual Whisper base weights are
+derived from OpenAI Whisper under the MIT License.
+Copyright (c) 2022 OpenAI.
+The weights license is retained in inference-whisper/src/main/assets/licenses/Whisper-model-MIT.txt.
+The model source, revision, byte size, and SHA-256 are recorded in
+inference-whisper/src/main/assets/whisper-model.json. Model weights are not in Git
+or embedded in the APK. No Chilean fine-tuned weights are distributed by this build.
+
+The APK uses Kotlin, coroutines, and AndroidX/Compose; their
 upstream licenses remain applicable. See docs/dependencies.md for the initial
 metadata review and signed-release inventory requirements.
-Add the exact upstream copyright and license notices when dependencies or model
-artifacts are incorporated. The app license does not relicense those artifacts.
+The app license does not relicense those artifacts.

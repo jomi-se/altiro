@@ -11,6 +11,7 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
@@ -19,6 +20,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -37,6 +39,10 @@ import androidx.compose.ui.unit.dp
 
 class MainActivity : ComponentActivity() {
     private val permissions = registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { render() }
+    private val modelImport =
+        registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+            uri?.let { (application as AltiroApplication).controller.importModel(it) }
+        }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -62,13 +68,14 @@ class MainActivity : ComponentActivity() {
                     Text("Your voice. Your keyboard.", style = MaterialTheme.typography.titleMedium)
                     Card {
                         Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            Text("Android integration preview", style = MaterialTheme.typography.titleMedium)
+                            Text("Offline dictation preview", style = MaterialTheme.typography.titleMedium)
                             Text(
-                                "This build records a microphone test and returns a fixed phrase. Speech recognition is the next milestone after device validation.",
+                                "Speak, stop, and get a transcript from Whisper running on your phone. Accuracy and speed still need phone testing, especially conversational Chilean Spanish.",
                             )
                             Text("No account, network access, transcript history, or word allowance.")
                         }
                     }
+                    ModelControls(controller) { modelImport.launch(arrayOf("*/*")) }
                     Text(if (connected) "Floating mic connected" else "Floating mic is off")
                     Text(
                         "Accessibility access observes the selected editor, cursor and composition, shows a small control, and inserts text. It does not collect screen or clipboard contents. Your keyboard stays selected.",
@@ -87,7 +94,7 @@ class MainActivity : ComponentActivity() {
                     }) { Text("Allow microphone and controls") }
                     Button(onClick = {
                         startActivity(Intent(this@MainActivity, RecordingActivity::class.java))
-                    }, enabled = allowed) { Text("Open recording test") }
+                    }, enabled = allowed) { Text("Open recording screen") }
                     Text("The visible recording screen is the default while the one-tap background recording route remains unverified.")
                     if (BuildConfig.DEBUG) {
                         var probe by remember {
@@ -110,7 +117,7 @@ class MainActivity : ComponentActivity() {
                     OutlinedTextField(value = sample, onValueChange = { sample = it }, label = { Text("Try inserting here") })
                     OutlinedButton(onClick = { controller.clearDisabledApps() }) { Text("Reset disabled apps") }
                     Text(
-                        "Audio is deleted after the test or cancellation. Uninserted results expire after ten minutes and disappear if the process closes.",
+                        "Audio is deleted after recognition or cancellation. Uninserted results expire after ten minutes and disappear if the process closes. The model stays installed until you delete it.",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -131,8 +138,19 @@ internal fun AltiroTheme(content: @Composable () -> Unit) {
 @Composable
 internal fun ResultControls(controller: DictationController) {
     val session by controller.session.collectAsState()
+    val progress by controller.progress.collectAsState()
+    val seconds by controller.processingSeconds.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
+        Text("Recognizing offline · $progress% · ${seconds}s")
+        Text("Loading the model can take a moment. The microphone is released.")
+        LinearProgressIndicator(progress = { progress / 100f })
+        OutlinedButton(onClick = controller::cancel) { Text("Cancel recognition") }
+    } else if (nativeBusy) {
+        Text("Finishing cancellation and releasing the model…")
+    }
     session.text?.let { text ->
-        Text("Fixed test result", style = MaterialTheme.typography.titleMedium)
+        Text("Transcript", style = MaterialTheme.typography.titleMedium)
         Text(text)
         session.message?.let { Text(it) }
         Text("Return to your editor for Insert. Copy changes the clipboard only when you tap it.")
@@ -141,4 +159,37 @@ internal fun ResultControls(controller: DictationController) {
     }
     if (session.text == null) session.message?.let { Text(it) }
     Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun ModelControls(
+    controller: DictationController,
+    importModel: () -> Unit,
+) {
+    val ready by controller.models.ready.collectAsState()
+    val busy by controller.models.busy.collectAsState()
+    val status by controller.models.status.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val language by controller.language.collectAsState()
+    val available = !session.busy && !nativeBusy && !busy
+    Text("Speech model", style = MaterialTheme.typography.titleMedium)
+    Text(status)
+    Text(
+        "Multilingual base · 148 MB private storage. Keep at least 158 MB free for import; the browser's Downloads copy is separate. Native working memory is additional.",
+    )
+    OutlinedButton(onClick = controller::openModelDownload, enabled = available) { Text("Download model in browser") }
+    OutlinedButton(onClick = importModel, enabled = available) { Text(if (ready) "Replace model file" else "Import ggml-base.bin") }
+    if (busy) OutlinedButton(onClick = controller.models::cancelImport) { Text("Cancel import") }
+    OutlinedButton(
+        onClick = controller::deleteModel,
+        enabled = available && controller.models.file.exists(),
+    ) { Text("Delete installed model") }
+    Text("Language: ${if (language == "auto") "Automatic" else language}")
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for ((value, label) in listOf("auto" to "Auto", "en" to "EN", "fr" to "FR", "es" to "ES")) {
+            OutlinedButton(onClick = { controller.selectLanguage(value) }, enabled = available) { Text(label) }
+        }
+    }
+    Text("Use ES for Spanish-only speech. This base model is multilingual; a Chilean Spanish model is being evaluated separately.")
 }

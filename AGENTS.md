@@ -21,10 +21,13 @@ from it. Never silently change the architecture to hide a platform failure.
 
 ## Current scope
 
-The current milestone is an Android integration spike with a deterministic
-fake recognizer and a separate editor fixture app. Prove insertion, composition
-guards, destination invalidation, and microphone lifecycle on a physical phone
-before integrating a model. The spike is not speech recognition.
+The current milestone is an offline recognition preview using a pinned native
+runtime and verified multilingual base model import, with a separate editor
+fixture app. Initial phone recording, cancellation, and insertion are
+user-reported; full Gate A and B remain unverified. Read
+`docs/decisions/0001-offline-preview.md` for this bounded continuation.
+Chilean Spanish is an explicit quality target; evaluate specialized models
+separately rather than assuming their training labels establish quality.
 
 Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only

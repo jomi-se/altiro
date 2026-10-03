@@ -2,6 +2,13 @@
 
 Status: unverified. Building an APK or running JVM tests does not pass this gate.
 
+The operator reports basic microphone capture/cancellation and fixed-phrase
+insertion on the integration APK. Remaining cases and device metadata have not
+been recorded. The deterministic procedure below targets `0.1.0-spike` at
+commit `d77588f`. The newer offline preview returns recognized speech; use
+[Gate B](gate-b.md) and compare the displayed transcript with the editor's
+actual insertion while completing the editor/lifecycle cases below.
+
 ## Preparation
 
 Install Altiro and Altiro editors debug APKs. Record app revision, phone model,

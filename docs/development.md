@@ -14,12 +14,15 @@
 | Compile/target SDK | API 37, Platform 37.0 |
 | Minimum SDK | API 33 |
 | Build Tools | 36.0.0 |
+| NDK | 30.0.16248370 |
+| CMake | 4.1.2 |
+| whisper.cpp | 1.9.4; exact commit/archive SHA-256 pinned in CMake |
 | Spotless / ktlint | 8.0.0 / 1.7.1 |
 
 Pins live in [the version catalog](../gradle/libs.versions.toml). AGP 9 supplies
 built-in Kotlin for Android; root JVM/Compose plugins resolve the matching
 pinned Kotlin version. No legacy Kotlin Android plugin is applied. Native
-NDK/CMake/runtime pins await Gate B.
+source is fetched at an exact revision/hash into external build output.
 
 Compatibility sources: [AGP release notes](https://developer.android.com/build/releases/agp-9-4-0-release-notes)
 and official Google/Maven artifact metadata. Executing this build is the check
@@ -28,7 +31,8 @@ of this particular combination.
 ## Setup
 
 Install JDK 21 and an Android SDK on a supported host. Install
-`platforms;android-37.0` and `build-tools;36.0.0`; platform-tools is needed for
+`platforms;android-37.0`, `build-tools;36.0.0`, `ndk;30.0.16248370`, and
+`cmake;4.1.2`; platform-tools is needed for
 device work. Set `ANDROID_HOME` or an ignored `local.properties` SDK path.
 Use the committed Gradle wrapper.
 
@@ -54,7 +58,21 @@ libraries. Connected tests execute separately.
 They supplement the [physical Gate A procedure](testing/gate-a.md).
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`. Core is pure
-Kotlin. Inference and network modules are reserved until their build gates.
+Kotlin. Inference builds the JNI library; network adapters remain reserved.
+
+For a host smoke test of the actual production JNI bridge, supply the verified
+base model and a canonical mono PCM16/16 kHz copy of upstream's JFK sample:
+
+```sh
+./scripts/quiet-run.sh "native smoke" ./scripts/check-whisper-native.sh /path/to/ggml-base.bin /path/to/jfk-canonical.wav
+```
+
+This tests real recognition, audio beyond 30 seconds, native cancellation,
+stale handles, exact silence, and malformed WAV rejection. It does not execute
+Android, evaluate conversational speech, or establish phone latency. JDK 21,
+CMake, a C++ compiler, and build-network access are needed for this optional
+host check. No model download is required by routine PR checks; manifest
+schema/pins are checked separately.
 
 ## Output and privacy
 
@@ -65,13 +83,16 @@ an isolated cache. `./gradlew clean` removes configured build output. Keep
 retained APKs, recordings, reports, and screenshots outside Git repositories;
 clean disposable task tooling when finished.
 
-The spike has no Internet permission. Its recording worker deletes temporary
-audio after capture resources are released, including Stop, Cancel, and errors.
-Result text is process-memory only. No history is persisted.
+The app has no Internet permission. The browser handles explicit model download;
+file-picker import verifies size/SHA-256 before atomic installation. Inference
+rechecks the model, takes ownership of the completed WAV after microphone
+release, and deletes audio after native work finishes, including cancellation.
+Capture errors discard audio. Result text is process-memory only; no history is
+persisted. Models are durable private files excluded from backup/transfer.
 
 ## Release boundary
 
-The spike is a debug APK. Release signing needs separately supplied secure
+The preview is a debug APK. Release signing needs separately supplied secure
 material and dependency/native packaging review. Maintain signing identity
 continuity. Pushes, signed releases, store uploads, and publication remain
 separate operator actions.

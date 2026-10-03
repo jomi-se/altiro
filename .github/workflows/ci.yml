@@ -32,7 +32,7 @@ jobs:
           java-version: '21'
 
       - name: Install pinned SDK packages
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
 
       - name: Verify apps and compile device tests
         run: ./scripts/quiet-run.sh "verification" ./scripts/verify.sh
@@ -65,7 +65,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - name: Install pinned compile SDK
-        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0'
+        run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
       - name: Enable runner KVM access
         run: sudo chmod 666 /dev/kvm
       - name: Run API 33 fixture and password tests

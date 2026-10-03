@@ -38,7 +38,6 @@ class DictationRecordingService : Service() {
     @Volatile private var requested = START
     private var recorder: AudioRecord? = null
     private var activeId: SessionId? = null
-    private var captureCompleted = false
     private val screenOff =
         object : BroadcastReceiver() {
             override fun onReceive(
@@ -186,26 +185,50 @@ class DictationRecordingService : Service() {
                 }
                 recorder = null
             }
-            // Fake recognition does not need audio. The worker owns deletion after release.
-            file?.delete()
             val stopped = requested == STOP
             main.post {
-                captureCompleted = true
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                if (controller.session.value.id == id) {
+                val audio = file
+                if (controller.session.value.id == id && controller.session.value.phase != Phase.IDLE) {
                     if (error != null) {
                         controller.event(SessionEvent.Fail(id, error!!))
-                    } else if (stopped) {
+                    } else if (stopped && audio != null) {
                         controller.event(SessionEvent.Stop(id))
-                        controller.finishFakeRecognition(id)
+                        try {
+                            // Capture is already released. Continue as local file processing,
+                            // not microphone access, while the native worker owns the WAV.
+                            startForeground(
+                                NOTIFICATION,
+                                notification(id, processing = true),
+                                ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+                            )
+                            controller.transcribe(id, audio, { percent ->
+                                getSystemService(
+                                    NotificationManager::class.java,
+                                ).notify(NOTIFICATION, notification(id, processing = true, percent = percent))
+                            }) {
+                                stopForeground(STOP_FOREGROUND_REMOVE)
+                                stopSelf()
+                            }
+                            return@post
+                        } catch (_: Exception) {
+                            controller.event(
+                                SessionEvent.Fail(id, "Android could not continue local recognition. Try again with Altiro open."),
+                            )
+                        }
                     }
                 }
+                audio?.delete()
+                stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
             }
         }
     }
 
-    private fun notification(id: SessionId): Notification {
+    private fun notification(
+        id: SessionId,
+        processing: Boolean = false,
+        percent: Int = 0,
+    ): Notification {
         fun action(
             command: String,
             offset: Int,
@@ -223,16 +246,22 @@ class DictationRecordingService : Service() {
                 Intent(this, RecordingActivity::class.java),
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
-        return Notification
-            .Builder(this, CHANNEL)
-            .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-            .setContentTitle("Altiro microphone test")
-            .setContentText("Fixed test phrase · maximum 5 minutes")
-            .setContentIntent(open)
-            .setOngoing(true)
-            .addAction(Notification.Action.Builder(null, "Stop", action(STOP, 0)).build())
-            .addAction(Notification.Action.Builder(null, "Cancel", action(CANCEL, 1)).build())
-            .build()
+        val builder =
+            Notification
+                .Builder(this, CHANNEL)
+                .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                .setContentTitle(if (processing) "Altiro · recognizing offline" else "Altiro · recording")
+                .setContentText(
+                    if (processing) "Whisper base · $percent% · microphone released" else "Maximum 5 minutes · audio stays on this device",
+                ).setContentIntent(open)
+                .setOngoing(true)
+                .addAction(Notification.Action.Builder(null, "Cancel", action(CANCEL, 1)).build())
+        if (processing) {
+            builder.setProgress(100, percent, percent == 0)
+        } else {
+            builder.addAction(Notification.Action.Builder(null, "Stop", action(STOP, 0)).build())
+        }
+        return builder.build()
     }
 
     private fun stopCapture(command: String) {
@@ -256,13 +285,21 @@ class DictationRecordingService : Service() {
         unregisterReceiver(screenOff)
         executor.shutdown()
         activeId?.let { id ->
-            if (!captureCompleted && controller.session.value.id == id &&
+            if (controller.session.value.id == id &&
                 controller.session.value.busy
             ) {
-                controller.event(SessionEvent.Cancel(id))
+                controller.cancel()
             }
         }
         super.onDestroy()
+    }
+
+    override fun onTimeout(
+        startId: Int,
+        fgsType: Int,
+    ) {
+        controller.cancel()
+        stopSelf()
     }
 
     companion object {

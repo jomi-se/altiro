@@ -1,6 +1,6 @@
 # 05 — Pinned local Whisper inference
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 04
 
 ## Authority
@@ -25,4 +25,14 @@ native cancellation. No chunk optimization or local cleanup model yet.
 
 ## Comments
 
-No execution evidence recorded yet.
+Pinned runtime/model manifest, CPU JNI wrapper, native cancellation, full-WAV
+processing, explicit language selection, and verified offline file import are
+implemented. Initial Gate A recording/cancel/insertion are user-reported;
+remaining editor/lifecycle evidence is still required. See
+[the continuation decision](../../../decisions/0001-offline-preview.md).
+
+Host JNI recognition and >30-second audio have been exercised with the actual
+base model and upstream public speech sample. Android compilation/native
+packaging, strengthened decoding cancellation, and phone language/quality
+evidence are recorded in [current work](../../current-work.md). Gate B is not
+passed; no phone latency or Chilean Spanish quality score is claimed.

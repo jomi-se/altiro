@@ -49,7 +49,13 @@ class DictationAccessibilityService : AccessibilityService() {
         overlay = DictationOverlay(this, controller, ::openRecording, { dispatch(explicit = true) })
         observer =
             controller.scope.launch {
-                combine(controller.session, controller.editorLabel) { session, _ -> session }.collect {
+                combine(
+                    controller.session,
+                    controller.editorLabel,
+                    controller.progress,
+                    controller.recognition.busy,
+                    controller.models.ready,
+                ) { _, _, _, _, _ -> Unit }.collect {
                     refreshEditor()
                 }
             }

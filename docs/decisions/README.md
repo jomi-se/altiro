@@ -3,6 +3,9 @@
 The [Android specification](../plan/android-dictation/spec.md) establishes the
 initial choices. No additional decision records are needed to restate it.
 
+- [0001 — Offline preview after initial phone smoke](0001-offline-preview.md):
+  bounded local-model continuation with remaining hardware gates explicit.
+
 Record meaningful departures or newly resolved forks as numbered Markdown
 files with title, status, date, context, decision, consequences, and evidence.
 Use `proposed`, `accepted`, or `superseded`; a proposal does not authorize an

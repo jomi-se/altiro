@@ -1,9 +1,10 @@
 # Dependency and license boundary
 
 Direct versions are pinned in [the catalog](../gradle/libs.versions.toml) and
-the Gradle wrapper. Compose versions come from the pinned BOM. No model,
-Whisper runtime, copied proprietary application code, remote SDK, analytics,
-or advertising SDK is included in the integration spike.
+the Gradle wrapper. Compose versions come from the pinned BOM. No copied
+proprietary application code, remote SDK, analytics, or advertising SDK is
+included. The pinned Whisper/ggml CPU runtime is bundled; model weights are
+separately imported.
 
 The current app bundles Kotlin, coroutines, and AndroidX/Compose components.
 The following upstream Maven metadata was inspected for the resolved build:
@@ -20,5 +21,16 @@ retain required notices, and audit the exact inference runtime and model weights
 separately. Test/build tooling is distinct from APK dependencies.
 
 The debug APKs include AndroidX graphics path native libraries for arm64-v8a
-and x86_64. Verification checks their actual ELF segments and uncompressed APK
+and x86_64; Altiro additionally includes its JNI library with statically linked
+Whisper/ggml and NDK C++ support. The native runtime source archive is pinned
+to commit `927cfce34f31707e17f2bff35c349632fb9e2c3a` and SHA-256
+`41b664fee09e79176ac277b5237debec34f8d74af3c7d71f333f1ec67989ecde`.
+Its MIT license, additional ggml CPU attribution, OpenAI weights MIT license,
+and the NDK LLVM/runtime license notices are included in APK assets.
+See [the model manifest](../inference-whisper/src/main/assets/whisper-model.json)
+for exact model source/revision/size/hash; the artifact was downloaded and its
+actual hash verified. No fine-tuned Chilean model is bundled or imported by
+this build.
+
+Verification checks actual ELF segments and uncompressed APK
 entries for 16 KiB alignment; this does not replace a page-size device run.

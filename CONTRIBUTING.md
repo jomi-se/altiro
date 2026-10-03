@@ -40,5 +40,6 @@ or use another credential path to bypass that boundary.
 
 Contributions to new app code use Apache-2.0. Preserve upstream notices for
 permissively licensed code. Check runtime, model, and application licenses
-separately before copying or distributing anything. No model or runtime is
-bundled by the repository foundation.
+separately before copying or distributing anything. The APK now bundles the
+pinned Whisper runtime; its supported model is a separate verified import.
+Read [the dependency boundary](docs/dependencies.md) before adding profiles.

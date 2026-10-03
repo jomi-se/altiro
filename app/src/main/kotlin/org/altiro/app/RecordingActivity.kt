@@ -30,8 +30,11 @@ class RecordingActivity : ComponentActivity() {
         setContent {
             AltiroTheme {
                 val session by controller.session.collectAsState()
+                val ready by controller.models.ready.collectAsState()
+                val modelBusy by controller.models.busy.collectAsState()
+                val nativeBusy by controller.recognition.busy.collectAsState()
                 Column(Modifier.fillMaxSize().padding(24.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-                    Text("Recording test", style = MaterialTheme.typography.headlineMedium)
+                    Text("Dictate offline", style = MaterialTheme.typography.headlineMedium)
                     Text(
                         "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control.",
                     )
@@ -39,16 +42,22 @@ class RecordingActivity : ComponentActivity() {
                         when (session.phase) {
                             Phase.STARTING -> "Starting…"
                             Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
-                            Phase.FINALIZING, Phase.TRANSCRIBING -> "Preparing the fixed test result…"
-                            else -> "Ready for a microphone test"
+                            Phase.FINALIZING -> "Finishing recording…"
+                            Phase.TRANSCRIBING -> "Recognizing your speech…"
+                            else -> if (ready) "Ready to record" else "Open Altiro and import the supported model first."
                         },
                     )
                     if (session.elapsedSeconds >= 270) Text("Recording stops at five minutes to bound memory and storage.")
-                    Button(onClick = ::startRecording, enabled = !session.busy && session.text == null) { Text("Start microphone test") }
+                    Button(
+                        onClick = ::startRecording,
+                        enabled = ready && !modelBusy && !nativeBusy && !session.busy && session.text == null,
+                    ) {
+                        Text("Start recording")
+                    }
                     Button(
                         onClick = controller::stop,
                         enabled = session.phase in setOf(Phase.STARTING, Phase.RECORDING),
-                    ) { Text("Stop and get test phrase") }
+                    ) { Text("Stop and transcribe") }
                     OutlinedButton(onClick = controller::cancel, enabled = session.busy) { Text("Cancel recording") }
                     ResultControls(controller)
                     OutlinedButton(onClick = { finish() }) { Text("Return to editor") }
