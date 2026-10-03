@@ -7,6 +7,7 @@ android {
     namespace = "org.altiro.app"
     compileSdk = 37
     buildToolsVersion = "36.0.0"
+    ndkVersion = "30.0.16248370"
     defaultConfig {
         applicationId = "org.altiro.app"
         minSdk = 33
