@@ -93,5 +93,10 @@ If this path fails, use the existing checkpoint/failure recovery procedure,
 then turn the switch off before recording again. Do not automatically retry an
 uncertain recording or insertion. Test Cancel/manual lock and a new recording
 after failure. Upstream enables Flash Attention by default, but physical Mali
-stability and any benefit remain to be established on the phone. See
+stability and any attention-specific benefit remain to be established on the
+phone. Initial user-reported version 0.4.1 Small FP16 and Base comparisons both
+complete with Flash Attention enabled in the Whisper context; their timings
+and evidence limits are recorded in [current work](../plan/current-work.md).
+These CPU/GPU comparisons change both backend and attention setting, so they
+do not isolate the attention method. See
 [decision 0006](../decisions/0006-flash-attention-experiment.md).

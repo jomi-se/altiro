@@ -88,8 +88,37 @@ experiment. CPU passes keep it off. The setting is frozen before recording and
 reported in checkpoints before native work; initialized context configuration
 and encoder/decoder call counts supplement total compute counters. Operation
 placement is not traced. The off switch restores the previous attention path;
-there is no automatic alternate-method retry. Version 0.4.1 phone behavior,
-performance and quality remain unverified.
+there is no automatic alternate-method retry.
+
+The operator reports two completed version 0.4.1 comparisons on Pixel 7, both
+fixed EN and Vulkan first. GPU requests Flash Attention on; CPU keeps it off.
+Both reports initialize the GPU backend and enable Flash Attention in the
+Whisper context, finish without failures, and report one encoder call per pass:
+
+| Model | Audio | GPU inference | CPU inference | GPU encoder | CPU encoder |
+| --- | --- | --- | --- | --- | --- |
+| Stock Small FP16 | 21.96 s | 13.50 s | 36.59 s | 9.103 s | 31.784 s |
+| Multilingual Base | 21.00 s | 7.09 s | 9.52 s | 3.541 s | 8.046 s |
+
+The Small comparison reports 63 decoder calls in each pass; Base reports 75
+GPU / 76 CPU calls. Base GPU decode takes 2.376 seconds versus CPU 1.306
+seconds, and GPU batch takes 0.971 seconds versus CPU 0.043 seconds; the encoder
+advantage does not carry through every compute phase. These counters are not
+an additive wall-time partition. From Stop through GPU worker shutdown, the
+Small pass takes about 16.8 seconds and Base about 8.6 seconds. Whole-comparison
+post-Stop time includes both sequential passes, not ordinary GPU-only dictation.
+The operator reports imperfect but much faster Base transcription.
+
+These reports establish initial user-reported completion with the Flash
+Attention graph setting on, not operation placement or general Mali stability.
+They compare two backend/attention configurations together and use different
+recordings across models; they do not isolate Flash Attention or model quality.
+The earlier 9.64-second EN Small FP16 GPU encoder counter with attention off
+was 8.518 seconds, versus 9.103 seconds here with it on. Different recordings
+and unmeasured temperature/clocks prevent attributing that difference to the
+attention method; there is no demonstrated encoder speed improvement from
+Flash Attention in these samples. Version 0.4.1 cancellation/manual lock,
+failure recovery, multilingual accuracy and device gates remain unverified.
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
