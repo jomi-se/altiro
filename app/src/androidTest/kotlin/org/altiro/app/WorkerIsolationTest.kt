@@ -63,6 +63,7 @@ class WorkerIsolationTest {
                 "missing-audio",
                 "es",
                 false,
+                true,
                 object : IRecognitionCallback.Stub() {
                     override fun onProgress(percent: Int) {}
 

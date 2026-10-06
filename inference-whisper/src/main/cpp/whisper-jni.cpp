@@ -22,6 +22,7 @@
 
 extern "C" void altiro_whisper_compute_totals(whisper_context *, int64_t *);
 extern "C" bool altiro_whisper_gpu_active(whisper_context *);
+extern "C" bool altiro_whisper_flash_attention(whisper_context *);
 
 namespace {
 struct Operation { std::atomic<bool> cancelled{false}; };
@@ -168,7 +169,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_altiro_inference_NativeWhisper_releas
     operations.erase(id);
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_transcribe(
-    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jobject receiver) {
+    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jboolean flash_attention, jobject receiver) {
     auto operation = lookup(id);
     if (!operation || !model_path || !audio_path || !language || !receiver) {
         error(env, "Invalid native operation"); return nullptr;
@@ -242,7 +243,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         if (operation->cancelled.load()) return nullptr;
         auto context_params = whisper_context_default_params();
         context_params.use_gpu = gpu;
-        context_params.flash_attn = false;
+        context_params.flash_attn = flash_attention;
         phase(2);
         runtime("{\"status\":\"INITIALIZING\"}");
         failure_code = gpu ? "GPU_INIT_FAILED" : "MODEL_LOAD_FAILED";
@@ -258,7 +259,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         if (!context) throw RuntimeError("MODEL_LOAD_FAILED");
         const bool gpu_active = altiro_whisper_gpu_active(context.get());
         if (gpu && !gpu_active) throw RuntimeError("GPU_INIT_FAILED");
-        runtime(std::string("{\"status\":\"READY\",\"gpu_active\":") + (gpu_active ? "true}" : "false}"));
+        runtime(std::string("{\"status\":\"READY\",\"gpu_active\":") + (gpu_active ? "true" : "false") + ",\"flash_attention\":" + (altiro_whisper_flash_attention(context.get()) ? "true}" : "false}"));
         Progress callback{env, receiver, method, operation.get()};
         auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         params.n_threads = 4;
@@ -286,7 +287,7 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         counters << "{\"status\":\"" << (operation->cancelled.load() ? "CANCELLED" : status ? "FAILED" : "FINISHED")
             << "\",\"encode_ms\":" << totals[0] << ",\"decode_ms\":" << totals[1]
             << ",\"batch_ms\":" << totals[2] << ",\"prompt_ms\":" << totals[3]
-            << ",\"sample_ms\":" << totals[4] << '}';
+            << ",\"sample_ms\":" << totals[4] << ",\"encode_calls\":" << totals[5] << ",\"decode_calls\":" << totals[6] << '}';
         runtime(counters.str());
         if (operation->cancelled.load()) return nullptr;
         if (status != 0) throw std::runtime_error("Recognition failed");

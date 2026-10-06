@@ -71,7 +71,9 @@ The trace stays in memory for ten minutes after completion and is replaced by
 the next recording. See [phone diagnostics](docs/testing/recognition-diagnostics.md).
 
 The in-app **Recognition processor** setting adds experimental **Vulkan GPU**;
-CPU remains the default. **Compare CPU and GPU** uses the selected model twice
+CPU remains the default. **Flash Attention for GPU (experimental)** is enabled
+for Vulkan runs, with an off switch to restore the previous method.
+**Compare CPU and GPU** uses the selected model twice
 on one recording and never inserts automatically. GPU initialization/failure
 and compute counters appear in diagnostics. A single content-free checkpoint
 survives restart; **Clear diagnostics** removes it. Visible recording and

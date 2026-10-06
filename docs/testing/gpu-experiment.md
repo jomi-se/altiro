@@ -74,3 +74,24 @@ the phone latency improvement remains to be measured. See the pinned
 [language detection](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L3788-L3814),
 [Auto branch](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L6351-L6371),
 and [transcription loop](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L6532-L6555).
+
+## Flash Attention update
+
+Version 0.4.1 enables Flash Attention for Vulkan runs, with an in-app
+**Flash Attention for GPU (experimental)** switch. CPU runs retain the previous
+method. The setting is fixed when recording starts and applies to ordinary
+GPU dictation and GPU passes in comparisons. No model download is needed.
+
+Choose your already installed model and fixed EN/ES, select Vulkan and record
+normally. Copy diagnostics after completion or failure. Look for requested
+Flash Attention ON, an initialized Whisper context setting of true, total
+encoder timing and encoder-call count. The graph setting does not prove that
+all attention operations execute on GPU. Compare text quality as well as time;
+prior version 0.4.0 reports used Flash Attention off.
+
+If this path fails, use the existing checkpoint/failure recovery procedure,
+then turn the switch off before recording again. Do not automatically retry an
+uncertain recording or insertion. Test Cancel/manual lock and a new recording
+after failure. Upstream enables Flash Attention by default, but physical Mali
+stability and any benefit remain to be established on the phone. See
+[decision 0006](../decisions/0006-flash-attention-experiment.md).

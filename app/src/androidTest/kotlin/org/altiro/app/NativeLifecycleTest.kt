@@ -17,7 +17,15 @@ class NativeLifecycleTest {
             try {
                 runtime.cancel(handle)
                 assertNull(
-                    runtime.transcribe(handle, "unused", "unused", "es", false, NativeProgress {})
+                    runtime.transcribe(
+                        handle,
+                        "unused",
+                        "unused",
+                        "es",
+                        false,
+                        false,
+                        NativeProgress {},
+                    )
                 )
             } finally {
                 runtime.release(handle)

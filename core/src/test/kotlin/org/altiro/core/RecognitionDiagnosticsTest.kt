@@ -141,4 +141,38 @@ class RecognitionDiagnosticsTest {
             RuntimeDetails("model-a", RecognitionBackend.VULKAN, encodeMillis = -1)
         }
     }
+
+    @Test
+    fun flashAttentionSelectionIsFrozenAndReportedBeforeNativeStartup() {
+        val flags = mutableListOf(false, true)
+        val trace = RecognitionDiagnostics()
+        trace.begin(
+            "en",
+            listOf("model-a", "model-a"),
+            true,
+            listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN),
+            flags,
+        )
+        flags[1] = false
+        assertEquals(listOf(false, true), trace.report.value!!.flashAttention)
+        assertTrue(trace.report.value!!.export().contains("Requested Flash Attention: OFF, ON"))
+        trace.runtime(
+            RuntimeDetails(
+                "model-a",
+                RecognitionBackend.VULKAN,
+                status = RuntimeStatus.READY,
+                flashAttention = true,
+                encodeCalls = 1,
+            )
+        )
+        assertTrue(
+            trace.report.value!!
+                .export()
+                .contains("Flash Attention enabled in Whisper context: true")
+        )
+        assertTrue(trace.report.value!!.export().contains("Whisper calls: encoder=1"))
+        assertThrows(IllegalArgumentException::class.java) {
+            trace.begin("en", listOf("model-a"), false, flashAttention = emptyList())
+        }
+    }
 }

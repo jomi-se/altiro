@@ -8,6 +8,7 @@ data class RecognitionInput(
     val spec: ModelSpec,
     val file: File,
     val backend: RecognitionBackend = RecognitionBackend.CPU,
+    val flashAttention: Boolean = false,
 )
 
 data class TimedTranscript(
@@ -15,6 +16,7 @@ data class TimedTranscript(
     val text: String,
     val elapsedMillis: Long,
     val backend: RecognitionBackend = RecognitionBackend.CPU,
+    val flashAttention: Boolean = false,
 )
 
 object RecognitionBatch {
@@ -47,6 +49,7 @@ object RecognitionBatch {
                     text.orEmpty().trim(),
                     (clockNanos() - started) / 1_000_000,
                     input.backend,
+                    input.flashAttention,
                 )
             }
             if (cancelled()) throw CancellationException()

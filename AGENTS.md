@@ -41,6 +41,10 @@ reference path until phone measurements justify an optimization.
 The experimental Vulkan selector and CPU/GPU comparison use a non-exported
 recognition process per pass, structured runtime diagnostics, and one content-free
 restart checkpoint. CPU is the default; GPU failure never retries on CPU.
+Flash Attention is enabled for GPU runs in the next experiment, with an in-app
+off switch and per-recording diagnostic setting. See
+`docs/decisions/0006-flash-attention-experiment.md`; Mali stability remains a
+phone gate.
 Visible recording/diagnostics screens stay awake during work; manual lock still
 cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 

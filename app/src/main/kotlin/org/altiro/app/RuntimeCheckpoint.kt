@@ -87,6 +87,11 @@ internal fun runtimeDetails(
         shaderFloat16 = boolean("float16", previous.shaderFloat16),
         shaderInt8 = boolean("int8", previous.shaderInt8),
         gpuActive = boolean("gpu_active", previous.gpuActive),
+        flashAttention = boolean("flash_attention", previous.flashAttention),
+        encodeCalls =
+            number("encode_calls", previous.encodeCalls?.toLong())?.let { Math.toIntExact(it) },
+        decodeCalls =
+            number("decode_calls", previous.decodeCalls?.toLong())?.let { Math.toIntExact(it) },
         encodeMillis = number("encode_ms", previous.encodeMillis),
         decodeMillis = number("decode_ms", previous.decodeMillis),
         batchMillis = number("batch_ms", previous.batchMillis),

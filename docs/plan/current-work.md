@@ -66,12 +66,30 @@ initialized Mali-G710 GPU backend with Vulkan 1.4.343. These are two different
 recordings, each shared between its own passes; temperature and clock rates
 were not measured. The similar advantage in both orders supports a GPU speed
 improvement in these samples without establishing a controlled benchmark.
-Total encoder counters remain about 20 seconds on Vulkan and 33–34 seconds on
-CPU despite the different audio durations. The pinned runtime uses a full
+The operator also reports two stock Small FP16 comparisons, both with fixed EN
+and Vulkan first: 9.64 seconds of audio took 11.31 seconds GPU / 33.16 seconds
+CPU inference (encoder counters 8.52 / 31.37 seconds); 33.52 seconds of audio
+took 20.59 seconds GPU / 72.71 seconds CPU inference (encoder 14.68 / 65.25
+seconds). Both finish without failures and initialize the GPU backend. These
+reports strengthen the FP16 GPU smoke evidence, but different recordings and
+unmeasured temperatures prevent attributing differences against Q8 solely to
+quantization. All these phone reports have Flash Attention off in version 0.4.0.
+
+In the two Q8 Auto reports, total encoder counters remain about 20 seconds on
+Vulkan and 33–34 seconds on CPU despite the different audio durations. The pinned runtime uses a full
 30-second audio context by default and Auto performs an additional encoder
 pass for language detection before transcription. Fixed EN/ES skips that pass;
 its phone latency benefit is not yet measured. See the
 [latency explanation](../testing/gpu-experiment.md#short-recordings-and-auto-language).
+
+The requested [Flash Attention experiment](../decisions/0006-flash-attention-experiment.md)
+adds an in-app GPU attention switch, enabled for Vulkan by default in this
+experiment. CPU passes keep it off. The setting is frozen before recording and
+reported in checkpoints before native work; initialized context configuration
+and encoder/decoder call counts supplement total compute counters. Operation
+placement is not traced. The off switch restores the previous attention path;
+there is no automatic alternate-method retry. Version 0.4.1 phone behavior,
+performance and quality remain unverified.
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
@@ -105,7 +123,7 @@ rejection. All four Small profiles also passed public-sample recognition through
 production JNI bridge using the app's greedy, four-thread decode path. These
 are host-native tests, not Android or Chilean quality evidence.
 
-The Kotlin suite has twenty-four passing tests, including sequential same-audio
+The Kotlin suite has twenty-five passing tests, including sequential same-audio
 comparison (including the same model with two backends and no silent fallback),
 cancellation before later models, corrupted model rejection, audio
 cleanup on failure, and comparison having no insertion payload. Both apps and instrumentation
@@ -124,7 +142,11 @@ cancellation alongside the existing speech/silence/malformed-audio checks. It
 also checks compute counters and a typed GPU-unavailable failure in a CPU-only
 host build, without model loading or automatic CPU inference. The compiled
 worker-isolation instrumentation checks failure reporting and process death;
-it has not been executed on Android. No host Vulkan compute was executed.
+it has not been executed on Android. The production CPU JNI bridge also passes
+real speech, recordings longer than 30 seconds and cancellation with Flash
+Attention both off and on, including reporting the initialized graph setting.
+An explicit GPU request with Flash Attention enabled also returns the typed
+GPU-unavailable failure on the CPU-only host. No host Vulkan compute was executed.
 
 [Gate A](../testing/gate-a.md) is partially user-reported and remains
 **unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the

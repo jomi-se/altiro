@@ -51,6 +51,7 @@ data class DiagnosticReport(
     val failureStage: RecognitionStage? = null,
     val backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
     val runtimes: List<RuntimeDetails> = emptyList(),
+    val flashAttention: List<Boolean> = modelIds.map { false },
 ) {
     val processingMillis: Long
         get() =
@@ -63,6 +64,12 @@ data class DiagnosticReport(
         appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
         appendLine("Models: ${modelIds.joinToString()}")
         appendLine("Requested backends: ${backends.joinToString { it.name }}")
+        appendLine(
+            "Requested Flash Attention: ${flashAttention.joinToString { if (it) "ON" else "OFF" }}"
+        )
+        appendLine(
+            "Flash Attention settings describe the Whisper graph; individual GPU operation placement is not traced"
+        )
         appendLine(
             "Runtime: whisper.cpp 1.9.4; 4 CPU threads; greedy; temperature 0; no translation"
         )
@@ -130,6 +137,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         modelIds: List<String>,
         comparison: Boolean,
         backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
+        flashAttention: List<Boolean> = modelIds.map { false },
     ) {
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
@@ -137,12 +145,19 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
             backends.size == modelIds.size &&
                 modelIds.zip(backends).distinct().size == modelIds.size
         )
+        require(flashAttention.size == modelIds.size)
         started = clockNanos()
         completed = emptyList()
         active = null
         backend = null
         mutableReport.value =
-            DiagnosticReport(language, modelIds.toList(), comparison, backends = backends.toList())
+            DiagnosticReport(
+                language,
+                modelIds.toList(),
+                comparison,
+                backends = backends.toList(),
+                flashAttention = flashAttention.toList(),
+            )
         phase(RecognitionStage.STARTUP)
     }
 

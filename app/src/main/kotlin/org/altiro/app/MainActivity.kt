@@ -299,7 +299,10 @@ internal fun ResultControls(controller: DictationController) {
                     Text(
                         "${"%.1f".format(java.util.Locale.ROOT, result.elapsedMillis / 1000.0)} seconds"
                     )
-                    Text(result.backend.label)
+                    Text(
+                        result.backend.label +
+                            if (result.flashAttention) " · Flash Attention" else ""
+                    )
                     Text(result.text.ifBlank { "No speech recognized." })
                     OutlinedButton(
                         onClick = { controller.copyText(result.text) },
@@ -341,6 +344,7 @@ private fun GpuControls(
     compare: (Boolean) -> Unit,
 ) {
     val backend by controller.backend.collectAsState()
+    val flashAttention by controller.flashAttention.collectAsState()
     val session by controller.session.collectAsState()
     val busy by controller.recognition.busy.collectAsState()
     val modelBusy by controller.models.busy.collectAsState()
@@ -367,6 +371,22 @@ private fun GpuControls(
             Text(option.label)
         }
     }
+    Row(
+        Modifier.fillMaxWidth().toggleable(
+            flashAttention,
+            enabled = available,
+            role = Role.Checkbox,
+        ) {
+            controller.selectFlashAttention(it)
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = flashAttention, onCheckedChange = null, enabled = available)
+        Text("Flash Attention for GPU (experimental)")
+    }
+    Text(
+        "Applies to GPU runs, including comparison. Turn it off to return to the previous attention method."
+    )
     Text("GPU failures are reported in diagnostics. The app does not silently retry on CPU.")
     Text(
         "CPU/GPU comparison uses ${selected.name} twice with the same recording and language. Nothing is inserted automatically."

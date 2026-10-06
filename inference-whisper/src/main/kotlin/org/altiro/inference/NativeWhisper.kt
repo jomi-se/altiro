@@ -26,6 +26,7 @@ class NativeWhisper {
         wavPath: String,
         language: String,
         gpu: Boolean,
+        flashAttention: Boolean,
         progress: NativeProgress,
     ): String?
 

@@ -57,6 +57,9 @@ adds opt-in Vulkan and same-recording CPU/GPU comparison. Native inference
 runs in a bound, non-exported worker process, one fresh process/context per
 pass. CPU disables Vulkan registration; GPU failure is explicit. Keep one
 small content-free restart checkpoint, with no transcript/audio history.
+The [Flash Attention experiment](../decisions/0006-flash-attention-experiment.md)
+enables GPU Flash Attention with an in-app off switch, frozen per recording
+and exported in diagnostics. CPU passes retain the previous attention method.
 
 Local dictation makes no network calls. Remote STT and cleanup are independently
 configured and opt-in, with exact HTTPS endpoints, bounded responses, safe

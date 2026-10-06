@@ -24,6 +24,7 @@ class RecognitionWorkerService : Service() {
                 audio: String,
                 language: String,
                 gpu: Boolean,
+                flashAttention: Boolean,
                 callback: IRecognitionCallback,
             ) {
                 synchronized(lock) {
@@ -46,6 +47,7 @@ class RecognitionWorkerService : Service() {
                                 audio,
                                 language,
                                 gpu,
+                                flashAttention,
                                 object : NativeProgress {
                                     override fun onProgress(percent: Int) =
                                         callback.onProgress(percent)

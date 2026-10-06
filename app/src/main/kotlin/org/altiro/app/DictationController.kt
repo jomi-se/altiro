@@ -66,6 +66,12 @@ class DictationController(private val context: Context) {
                         .getString("backend", "CPU")
             } ?: RecognitionBackend.CPU
         )
+    val flashAttention =
+        MutableStateFlow(
+            context
+                .getSharedPreferences("preferences", Context.MODE_PRIVATE)
+                .getBoolean("flash-attention", true)
+        )
     var insertion: (() -> Unit)? = null
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
@@ -122,7 +128,12 @@ class DictationController(private val context: Context) {
             } else {
                 profiles.map { models.snapshot(it).copy(backend = backend.value) }
             }
-        runPlan = RunPlan(inputs, language.value)
+        val configuredInputs = inputs.map {
+            it.copy(
+                flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value
+            )
+        }
+        runPlan = RunPlan(configuredInputs, language.value)
         comparing.value = compareIds != null || gpuCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
@@ -133,6 +144,7 @@ class DictationController(private val context: Context) {
             inputs.map { it.spec.id },
             comparing.value,
             inputs.map { it.backend },
+            configuredInputs.map { it.flashAttention },
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
@@ -323,6 +335,12 @@ class DictationController(private val context: Context) {
         if (session.value.busy || recognition.busy.value || models.busy.value) return
         backend.value = value
         preferences.edit().putString("backend", value.name).apply()
+    }
+
+    fun selectFlashAttention(value: Boolean) {
+        if (session.value.busy || recognition.busy.value || models.busy.value) return
+        flashAttention.value = value
+        preferences.edit().putBoolean("flash-attention", value).apply()
     }
 
     fun clearDiagnostics() {

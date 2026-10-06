@@ -19,16 +19,20 @@ public final class NativeWhisper {
     native long create();
     native void cancel(long operation);
     native void release(long operation);
-    native String transcribe(long operation, String model, String wav, String language, boolean gpu, Progress progress);
+    native String transcribe(long operation, String model, String wav, String language, boolean gpu, boolean flashAttention, Progress progress);
 
     private String run(String model, String wav, String language, boolean cancelDuringProgress) {
+        return run(model, wav, language, cancelDuringProgress, false);
+    }
+
+    private String run(String model, String wav, String language, boolean cancelDuringProgress, boolean flashAttention) {
         long handle = create();
         AtomicBoolean requested = new AtomicBoolean();
         Thread[] cancellation = new Thread[1];
         List<Integer> phases = new ArrayList<>();
         List<String> runtimeReports = new ArrayList<>();
         try {
-            String text = transcribe(handle, model, wav, language, false, new Progress() {
+            String text = transcribe(handle, model, wav, language, false, flashAttention, new Progress() {
               @Override public void onPhase(int phase) { phases.add(phase); }
               @Override public void onRuntime(String report) { runtimeReports.add(report); }
               @Override public void onProgress(int percent) {
@@ -41,6 +45,7 @@ public final class NativeWhisper {
                 }
               }
             });
+            if (text != null && !text.isBlank() && runtimeReports.stream().noneMatch(value -> value.contains("\"flash_attention\":" + flashAttention))) throw new AssertionError("Flash Attention context setting missing or wrong");
             if (cancelDuringProgress && (!requested.get() || text != null)) throw new AssertionError("Native cancellation failed");
             if (cancelDuringProgress && !phases.contains(5)) throw new AssertionError("Cancelled context not released");
             if (text != null && !text.isBlank() && !phases.equals(List.of(1, 2, 3, 4, 5))) throw new AssertionError("Missing or unordered phase callbacks");
@@ -74,7 +79,7 @@ public final class NativeWhisper {
             List<Integer> phases = new ArrayList<>();
             List<String> reports = new ArrayList<>();
             try {
-                nativeWhisper.transcribe(handle, model, speech, "en", true, new Progress() {
+                nativeWhisper.transcribe(handle, model, speech, "en", true, true, new Progress() {
                     @Override public void onProgress(int percent) {}
                     @Override public void onPhase(int phase) { phases.add(phase); }
                     @Override public void onRuntime(String report) { reports.add(report); }
@@ -101,11 +106,16 @@ public final class NativeWhisper {
         if (longText == null || longText.length() < shortText.length() * 2) throw new AssertionError("Long recording was truncated");
         nativeWhisper.run(model, longWav.toString(), "en", true);
         nativeWhisper.run(model, speech, "auto", true);
+        String flashText = nativeWhisper.run(model, speech, "en", false, true).toLowerCase();
+        if (!flashText.contains("country")) throw new AssertionError("Flash Attention speech failed");
+        nativeWhisper.run(model, speech, "en", true, true);
+        String flashLong = nativeWhisper.run(model, longWav.toString(), "en", false, true).toLowerCase();
+        if (flashLong.split("country", -1).length < 3) throw new AssertionError("Flash Attention lost an audio window");
         for (int i = 0; i < 20; i++) {
             long handle = nativeWhisper.create();
             try {
                 nativeWhisper.cancel(handle);
-                if (nativeWhisper.transcribe(handle, "unused", "unused", "es", false, percent -> {}) != null) throw new AssertionError();
+                if (nativeWhisper.transcribe(handle, "unused", "unused", "es", false, false, percent -> {}) != null) throw new AssertionError();
             } finally { nativeWhisper.release(handle); }
         }
         Path silent = scratch.resolve("silence.wav");
@@ -121,6 +131,6 @@ public final class NativeWhisper {
         } catch (IllegalStateException expected) {
             if (!"Local recognition failed".equals(expected.getMessage())) throw expected;
         }
-        System.out.println("JNI smoke passed: speech, >30s audio, decode/auto cancellation, stale handles, exact silence, malformed WAV");
+        System.out.println("JNI smoke passed: attention off/on speech and >30s audio, decode/auto/flash cancellation, stale handles, exact silence, malformed WAV");
     }
 }

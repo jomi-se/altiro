@@ -46,6 +46,18 @@ if not (source.count(after) == 1 and source.count(metrics) == 1):
     source = source.replace('#include "whisper.h"', '#include "whisper.h"\n#include <stdexcept>')
     path.write_text(source)
 
+# Expose the actual initialized Whisper graph setting, not GPU kernel placement.
+source = path.read_text()
+flash_helper = """
+extern "C" bool altiro_whisper_flash_attention(whisper_context * ctx) {
+    return ctx && ctx->params.flash_attn;
+}
+"""
+if source.count(flash_helper) != 1:
+    if source.count(metrics_anchor) != 1:
+        sys.exit("Pinned Whisper Flash Attention anchor changed; review before building")
+    path.write_text(source.replace(metrics_anchor, flash_helper + metrics_anchor))
+
 if len(sys.argv) > 2:
     cmake_path = Path(sys.argv[2])
     cmake = cmake_path.read_text()

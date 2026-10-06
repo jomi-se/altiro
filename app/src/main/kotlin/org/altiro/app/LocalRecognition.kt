@@ -238,6 +238,7 @@ class LocalRecognition(
                         audio.absolutePath,
                         language,
                         input.backend == RecognitionBackend.VULKAN,
+                        input.flashAttention,
                         callback,
                     )
                     if (operation.cancelled.get()) remote!!.cancel(1)
