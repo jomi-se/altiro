@@ -31,10 +31,9 @@ after installation. Keep the user's preferred keyboard selected.
 
 - Native Kotlin, coroutines, StateFlow, Compose, and a bounded Android View
   overlay; C++ is limited to inference/JNI.
-- One-tap in-app model downloads are the requested acquisition flow, including
-  the experimental Chilean Spanish fine-tune. Stock converted models have
-  pinned downloadable sources; Chilean converted files need a distribution
-  destination before claiming one-tap availability.
+- Stock models support explicit one-tap in-app acquisition from pinned HTTPS
+  sources. Experimental Chilean variants remain selectable through verified
+  import; direct acquisition needs an audited public distribution destination.
 - Use dynamic audio windows up to the model's normal 30-second context.
 - Automatically insert ordinary dictation when its original destination is
   still valid. A changed destination requires explicit recovery. Dispatch is

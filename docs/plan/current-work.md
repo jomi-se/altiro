@@ -13,9 +13,29 @@ motion, and an in-app diagnostic console. `PRODUCT.md` summarizes confirmed
 product facts for optional design tools. Their installation and harness files
 are ignored; the public product docs are independent of those tools.
 
-The existing app still uses browser download plus import. Chilean converted
-artifacts have no public direct-download destination yet. The new acquisition
-and UI requirements are a plan, not completed implementation evidence.
+Version 0.5.0 adds the owner-approved centered-mic native screen and treats the
+real accessibility overlay over other apps as the highest craft priority. Home,
+Models, Setup and Console separate daily use from experiments. The overlay has
+translucent idle material, one-touch EN/ES, frozen busy language, distinct
+recording/processing motion, separate Cancel, drag handling and recovery actions.
+Owned window events are excluded only with a known matching overlay ID; unknown
+or other windows still invalidate destination authority. Busy app/overlay work
+requests screen-on, and consumed dispatch permits another recording without
+Discard. These mechanics need the [phone checks](../testing/everyday-interface.md).
+
+Explicit stock-model downloads now stream from pinned HTTPS URLs through bounded
+size/hash verification and atomic installation, with connection cancellation,
+progress and sanitized failures. Imports stay available. The upstream Chilean
+training repository has no converted binary; both audited variants remain
+selectable but import-only. No release assets have been published. Network use
+occurs only on explicit acquisition, never recognition. See
+[decision 0009](../decisions/0009-everyday-native-interface.md).
+
+Host verification passes for this interface: 30 core and 8 acquisition tests,
+debug Android assemblies, lint, packaged native 16 KiB alignment, and app/fixture
+instrumentation APK compilation. The update APK retains the previous debug
+signing identity. Instrumentation tests were not executed; source review and
+concept approval do not establish native visual, gesture or device acceptance.
 
 Public-repository preparation adds private-reporting guidance, staged and
 full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency
@@ -25,17 +45,17 @@ first push and first CI execution remain pending. See the
 [publication review](public-repository.md). The owner explicitly retains
 existing public author identities.
 
-The proposed [native UI directions](../ideas/product-ui-directions.md) capture
-the concrete design choices awaiting owner selection. The design workflow
-choice (build directly or first approve a visual concept) is also pending;
-no standing workflow default was inferred or stored. The current APK remains
-unchanged by this documentation/security increment.
+The owner selected concepts before implementation, approved the refined centered
+mic in misty sage/chalk/charcoal, and emphasized the actual floating accessibility
+overlay. The rejected palettes are not product authority. Generated concept
+images and local design tools remain ignored. Native capture-based visual
+acceptance remains separate from code review and successful build checks.
 
 ## Offline recognition preview
 
 The operator reports that the first fixed-phrase APK inserts, shows microphone
-capture, and cancels capture on a phone. UI polish is deferred; actual local
-recognition and Chilean Spanish quality are the next priorities. This is smoke
+capture, and cancels capture on a phone. That report preceded the interface redesign; local
+recognition and Chilean Spanish quality remain device-quality targets. This is smoke
 feedback, not the full Gate A editor/lifecycle matrix. See
 [the continuation decision](../decisions/0001-offline-preview.md).
 
@@ -186,8 +206,8 @@ evidence, not a controlled thermal benchmark; transcript quality and ending
 preservation were not supplied. The full accuracy and lifecycle gates remain
 unverified.
 
-The app has no Internet permission. Explicit browser download and file-picker
-import acquire the model. Import enforces actual byte size/SHA-256, bounded
+Explicit in-app stock-model download or file-picker import acquires the model.
+The app has Internet permission for acquisition only. Both paths enforce byte size/SHA-256, bounded
 copy, cancellation, and atomic installation. Failed imports preserve a valid
 previous model. A model is reverified before native load. Replacement/deletion
 and new inference stay blocked until native work finishes.
@@ -286,5 +306,6 @@ accompany the files. Release provenance, held-out casual Chilean quality,
 controlled phone latency and memory remain unverified. Use the
 [same-recording procedure](../testing/model-comparison.md) for that evidence.
 
-Optional remote recognition/cleanup and visual polish remain later work.
+Optional remote recognition/cleanup remain later work. The everyday interface
+is implemented; native visual and gesture acceptance still need phone evidence.
 Pushes, publication, store submission, and credential changes are operator-owned.

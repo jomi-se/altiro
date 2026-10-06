@@ -8,16 +8,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawing
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.altiro.core.Phase
@@ -36,6 +40,7 @@ class RecordingActivity : ComponentActivity() {
                 val ready by controller.models.ready.collectAsState()
                 val modelBusy by controller.models.busy.collectAsState()
                 val nativeBusy by controller.recognition.busy.collectAsState()
+                KeepAwake(session.busy || nativeBusy)
                 val installed by controller.models.installed.collectAsState()
                 val selected by controller.models.selected.collectAsState()
                 val comparing by controller.comparing.collectAsState()
@@ -45,7 +50,10 @@ class RecordingActivity : ComponentActivity() {
                 val windowCompare = intent.getBooleanExtra("compare-windows", false)
                 val allReady = if (compareIds != null) compareIds.all { it in installed } else ready
                 Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
+                    Modifier.fillMaxSize()
+                        .windowInsetsPadding(WindowInsets.safeDrawing)
+                        .verticalScroll(rememberScrollState())
+                        .padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
@@ -87,25 +95,30 @@ class RecordingActivity : ComponentActivity() {
                     )
                     if (session.elapsedSeconds >= 270)
                         Text("Recording stops at five minutes to bound memory and storage.")
-                    Button(
-                        onClick = ::startRecording,
-                        enabled =
-                            allReady &&
-                                !modelBusy &&
-                                !nativeBusy &&
-                                !session.busy &&
-                                session.text == null,
+                    Column(
+                        Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-                        Text("Start recording")
-                    }
-                    Button(
-                        onClick = controller::stop,
-                        enabled = session.phase in setOf(Phase.STARTING, Phase.RECORDING),
-                    ) {
-                        Text("Stop and transcribe")
-                    }
-                    OutlinedButton(onClick = controller::cancel, enabled = session.busy) {
-                        Text("Cancel recording")
+                        MicrophoneDial(
+                            recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING),
+                            working =
+                                (session.busy || nativeBusy) &&
+                                    session.phase !in setOf(Phase.STARTING, Phase.RECORDING),
+                            enabled =
+                                session.phase in setOf(Phase.STARTING, Phase.RECORDING) ||
+                                    (allReady &&
+                                        !modelBusy &&
+                                        !nativeBusy &&
+                                        !session.busy &&
+                                        (session.text == null || session.attemptConsumed)),
+                            onClick = {
+                                if (session.phase in setOf(Phase.STARTING, Phase.RECORDING))
+                                    controller.stop()
+                                else startRecording()
+                            },
+                        )
+                        if (session.busy || nativeBusy)
+                            OutlinedButton(onClick = controller::cancel) { Text("Cancel") }
                     }
                     ResultControls(controller)
                     OutlinedButton(onClick = { finish() }) { Text("Return to editor") }

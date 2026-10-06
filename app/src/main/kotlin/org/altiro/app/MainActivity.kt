@@ -1,67 +1,203 @@
 package org.altiro.app
 
 import android.Manifest
+import android.app.ForegroundServiceStartNotAllowedException
 import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.selection.toggleable
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.Checkbox
-import androidx.compose.material3.LinearProgressIndicator
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
-import androidx.compose.material3.Text
-import androidx.compose.material3.lightColorScheme
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import org.altiro.core.Phase
+import org.altiro.core.SessionEvent
 
 class MainActivity : ComponentActivity() {
+    private val controller
+        get() = (application as AltiroApplication).controller
+
+    private var microphoneAllowed by mutableStateOf(false)
     private var pendingImportId: String? = null
     private val permissions =
-        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { render() }
+        registerForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+            refreshPermission()
+        }
     private val modelImport =
         registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
             val id = pendingImportId
             pendingImportId = null
-            if (uri != null && id != null)
-                (application as AltiroApplication).controller.importModel(uri, id)
+            if (uri != null && id != null) controller.importModel(uri, id)
         }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         pendingImportId = savedInstanceState?.getString("pending-import-model")
-        render()
+        refreshPermission()
+        setContent {
+            AltiroTheme {
+                var page by rememberSaveable { mutableIntStateOf(0) }
+                var settings by rememberSaveable { mutableStateOf(false) }
+                val session by controller.session.collectAsState()
+                val nativeBusy by controller.recognition.busy.collectAsState()
+                KeepAwake(session.busy || nativeBusy)
+                BackHandler(page != 0 || settings) {
+                    page = 0
+                    settings = false
+                }
+                Scaffold(
+                    containerColor = MaterialTheme.colorScheme.background,
+                    bottomBar = {
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant,
+                            tonalElevation = 0.dp,
+                        ) {
+                            for ((index, item) in
+                                listOf(
+                                        Glyph.HOME to "Home",
+                                        Glyph.MODEL to "Models",
+                                        Glyph.CONSOLE to "Console",
+                                    )
+                                    .withIndex()) {
+                                NavigationBarItem(
+                                    selected = page == index && !settings,
+                                    onClick = {
+                                        page = index
+                                        settings = false
+                                    },
+                                    icon = { AltiroIcon(item.first) },
+                                    label = { Text(item.second) },
+                                    colors =
+                                        NavigationBarItemDefaults.colors(
+                                            indicatorColor =
+                                                MaterialTheme.colorScheme.secondaryContainer
+                                        ),
+                                )
+                            }
+                        }
+                    },
+                ) { insets ->
+                    val pageScroll = key(page, settings) { rememberScrollState() }
+                    Column(
+                        Modifier.fillMaxSize()
+                            .padding(insets)
+                            .verticalScroll(pageScroll)
+                            .padding(horizontal = 24.dp, vertical = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                    ) {
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                if (settings) "Setup"
+                                else listOf("Altiro", "Models", "Console")[page],
+                                style = MaterialTheme.typography.headlineLarge,
+                                fontWeight = FontWeight.SemiBold,
+                                letterSpacing = (-1).sp,
+                            )
+                            IconButton(
+                                onClick = { settings = !settings },
+                                modifier =
+                                    Modifier.semantics {
+                                        contentDescription =
+                                            if (settings) "Close setup" else "Open setup"
+                                    },
+                            ) {
+                                AltiroIcon(if (settings) Glyph.CLOSE else Glyph.SETTINGS)
+                            }
+                        }
+                        when {
+                            settings ->
+                                SetupContent(
+                                    controller,
+                                    microphoneAllowed,
+                                    ::requestPermission,
+                                    ::openAccessibility,
+                                    ::openPermissionSettings,
+                                )
+                            page == 0 ->
+                                HomeContent(
+                                    controller,
+                                    microphoneAllowed,
+                                    ::startRecording,
+                                    { page = 1 },
+                                    { settings = true },
+                                )
+                            page == 1 ->
+                                ModelsContent(controller) { id ->
+                                    pendingImportId = id
+                                    modelImport.launch(arrayOf("*/*"))
+                                }
+                            else -> {
+                                ConsoleContent(controller, microphoneAllowed)
+                                var experiments by rememberSaveable { mutableStateOf(false) }
+                                TextButton(onClick = { experiments = !experiments }) {
+                                    Text(
+                                        if (experiments) "Close experiments"
+                                        else "Runtime & comparisons"
+                                    )
+                                }
+                                if (experiments) {
+                                    LanguageControls(controller)
+                                    GpuControls(controller, microphoneAllowed) { first ->
+                                        launchComparison("compare-backends", "gpu-first", first)
+                                    }
+                                    WindowControls(controller, microphoneAllowed) { first ->
+                                        launchComparison("compare-windows", "dynamic-first", first)
+                                    }
+                                    ComparisonControls(controller, microphoneAllowed) { ids ->
+                                        startActivity(
+                                            Intent(this@MainActivity, RecordingActivity::class.java)
+                                                .putStringArrayListExtra(
+                                                    "compare-models",
+                                                    ArrayList(ids),
+                                                )
+                                        )
+                                    }
+                                    ResultControls(controller)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        refreshPermission()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -69,181 +205,484 @@ class MainActivity : ComponentActivity() {
         super.onSaveInstanceState(outState)
     }
 
-    override fun onResume() {
-        super.onResume()
-        render()
-    }
-
-    private fun render() {
-        val controller = (application as AltiroApplication).controller
-        val allowed =
+    private fun refreshPermission() {
+        microphoneAllowed =
             checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
                 PackageManager.PERMISSION_GRANTED
-        setContent {
-            AltiroTheme {
-                val connected by controller.connected.collectAsState()
-                Column(
-                    Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                ) {
-                    Text("Altiro", style = MaterialTheme.typography.headlineLarge)
-                    Text("Your voice. Your keyboard.", style = MaterialTheme.typography.titleMedium)
-                    Card {
-                        Column(
-                            Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp),
-                        ) {
-                            Text(
-                                "Offline dictation preview",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            Text(
-                                "Speak, stop, and get a transcript from Whisper running on your phone. Accuracy and speed still need phone testing, especially conversational Chilean Spanish."
-                            )
-                            Text(
-                                "No account, network access, transcript history, or word allowance."
-                            )
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            startActivity(
-                                Intent(this@MainActivity, DiagnosticsActivity::class.java)
-                            )
-                        }
-                    ) {
-                        Text("Recognition diagnostics")
-                    }
-                    ModelControls(controller) { id ->
-                        pendingImportId = id
-                        modelImport.launch(arrayOf("*/*"))
-                    }
-                    GpuControls(controller, allowed) { gpuFirst ->
-                        startActivity(
-                            Intent(this@MainActivity, RecordingActivity::class.java)
-                                .putExtra("compare-backends", true)
-                                .putExtra("gpu-first", gpuFirst)
-                        )
-                    }
-                    WindowControls(controller, allowed) { dynamicFirst ->
-                        startActivity(
-                            Intent(this@MainActivity, RecordingActivity::class.java)
-                                .putExtra("compare-windows", true)
-                                .putExtra("dynamic-first", dynamicFirst)
-                        )
-                    }
-                    ComparisonControls(controller, allowed) { ids ->
-                        startActivity(
-                            Intent(
-                                    this@MainActivity,
-                                    RecordingActivity::class.java,
-                                )
-                                .putStringArrayListExtra("compare-models", ArrayList(ids))
-                        )
-                    }
-                    Text(if (connected) "Floating mic connected" else "Floating mic is off")
-                    RecordingModeControls(RecordingPreferences(this@MainActivity))
+    }
+
+    private fun requestPermission() {
+        permissions.launch(
+            arrayOf(Manifest.permission.RECORD_AUDIO, Manifest.permission.POST_NOTIFICATIONS)
+        )
+    }
+
+    private fun openAccessibility() {
+        startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS))
+    }
+
+    private fun openPermissionSettings() {
+        startActivity(
+            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:$packageName"))
+        )
+    }
+
+    private fun launchComparison(key: String, order: String, first: Boolean) {
+        startActivity(
+            Intent(this, RecordingActivity::class.java).putExtra(key, true).putExtra(order, first)
+        )
+    }
+
+    private fun startRecording() {
+        if (!microphoneAllowed) {
+            requestPermission()
+            return
+        }
+        if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
+        val id = controller.begin(explicit = true) ?: return
+        try {
+            startForegroundService(
+                DictationRecordingService.intent(this, DictationRecordingService.START, id)
+            )
+        } catch (_: ForegroundServiceStartNotAllowedException) {
+            controller.event(
+                SessionEvent.Fail(id, "Android blocked recording. Keep Altiro open and try again.")
+            )
+        } catch (_: SecurityException) {
+            controller.event(
+                SessionEvent.Fail(id, "Allow the microphone in Android settings and try again.")
+            )
+        }
+    }
+}
+
+@Composable
+internal fun HomeContent(
+    controller: DictationController,
+    microphoneAllowed: Boolean,
+    record: () -> Unit,
+    models: () -> Unit,
+    setup: () -> Unit,
+) {
+    val selected by controller.models.selected.collectAsState()
+    val ready by controller.models.ready.collectAsState()
+    val modelBusy by controller.models.busy.collectAsState()
+    val modelStatus by controller.models.status.collectAsState()
+    val connected by controller.connected.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val diagnostic by controller.diagnostics.report.collectAsState()
+    val busy = session.busy || nativeBusy
+    val recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING)
+    val pending = session.text != null && !session.attemptConsumed
+    Surface(
+        onClick = models,
+        shape = RoundedCornerShape(32.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant,
+    ) {
+        Row(
+            Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            AltiroIcon(Glyph.MODEL)
+            Text(
+                selected.name,
+                style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.weight(1f, false),
+            )
+            AltiroIcon(
+                if (ready) Glyph.CHECK else Glyph.DOWNLOAD,
+                color = MaterialTheme.colorScheme.primary,
+            )
+            Text(if (ready) "Offline" else "Install", style = MaterialTheme.typography.labelMedium)
+        }
+    }
+    if (!microphoneAllowed || !connected || !ready) {
+        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            if (!microphoneAllowed || !connected)
+                TextButton(onClick = setup) {
                     Text(
-                        "Accessibility access observes the selected editor, cursor and composition, shows a small control, and inserts text. It does not collect screen or clipboard contents. Your keyboard stays selected."
+                        "${if(!microphoneAllowed) "Allow microphone" else "Enable floating mic"} to finish setup"
                     )
-                    OutlinedButton(
-                        onClick = { startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) }
-                    ) {
-                        Text("Open accessibility settings")
-                    }
-                    Text(
-                        if (allowed) "Microphone permission granted"
-                        else "Allow microphone access to record your voice."
-                    )
-                    if (!allowed) {
-                        OutlinedButton(
-                            onClick = {
-                                startActivity(
-                                    Intent(
-                                        Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-                                        Uri.parse("package:$packageName"),
-                                    )
-                                )
-                            }
-                        ) {
-                            Text("Open app permission settings")
-                        }
-                    }
-                    OutlinedButton(
-                        onClick = {
-                            permissions.launch(
-                                arrayOf(
-                                    Manifest.permission.RECORD_AUDIO,
-                                    Manifest.permission.POST_NOTIFICATIONS,
-                                )
-                            )
-                        }
-                    ) {
-                        Text("Allow microphone and notifications")
-                    }
+                }
+            if (!ready) {
+                Text(
+                    if (modelBusy) modelStatus
+                    else "Install ${selected.name} once. Dictate offline after that.",
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                if (modelBusy) {
+                    LinearProgressIndicator(Modifier.fillMaxWidth())
+                    TextButton(onClick = controller.models::cancelImport) { Text("Cancel") }
+                } else if (selected.download != null)
                     Button(
-                        onClick = {
-                            startActivity(Intent(this@MainActivity, RecordingActivity::class.java))
-                        },
-                        enabled = allowed,
+                        onClick = { controller.downloadModel(selected.spec.id) },
+                        enabled = !busy,
                     ) {
-                        Text("Open recording screen")
+                        AltiroIcon(Glyph.DOWNLOAD, color = MaterialTheme.colorScheme.onPrimary)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Download · ${(selected.spec.bytes+500_000)/1_000_000} MB")
                     }
-                    ResultControls(controller)
-                    var sample by remember { mutableStateOf("") }
-                    OutlinedTextField(
-                        value = sample,
-                        onValueChange = { sample = it },
-                        label = { Text("Try inserting here") },
-                    )
-                    OutlinedButton(onClick = { controller.clearDisabledApps() }) {
-                        Text("Reset disabled apps")
-                    }
+                else TextButton(onClick = models) { Text("Import Chilean model") }
+            }
+        }
+    }
+    Column(
+        Modifier.fillMaxWidth().padding(top = 20.dp, bottom = 4.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        MicrophoneDial(
+            recording = recording,
+            working = busy && !recording,
+            enabled = recording || (!busy && !modelBusy && ready && !pending),
+            onClick = { if (recording) controller.stop() else record() },
+        )
+        Text(
+            when {
+                recording -> "Recording · ${session.elapsedSeconds}s"
+                busy ->
+                    if (nativeBusy && !session.busy) "Cancelling…" else controller.processingLabel()
+                pending -> "Text ready"
+                !ready -> "Your voice, on your phone"
+                else -> "Ready when you are"
+            },
+            style = MaterialTheme.typography.titleLarge,
+        )
+        if (busy) {
+            diagnostic
+                ?.takeIf { session.phase == Phase.TRANSCRIBING }
+                ?.let {
                     Text(
-                        "Audio is deleted after recognition or cancellation. Uninserted results expire after ten minutes and disappear if the process closes. The model stays installed until you delete it.",
+                        "${org.altiro.core.DiagnosticReport.seconds(it.processingMillis)} s after Stop",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
+            OutlinedButton(onClick = controller::cancel) {
+                AltiroIcon(Glyph.CLOSE)
+                Spacer(Modifier.width(8.dp))
+                Text("Cancel")
+            }
+        }
+        LanguageControls(controller)
+    }
+    if (session.phase == Phase.FAILED && session.text == null)
+        session.message?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    if (!busy)
+        session.text?.let { text ->
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+            Text(text, style = MaterialTheme.typography.bodyLarge)
+            Text(
+                if (session.attemptConsumed) "Insertion attempted. Check your editor."
+                else "Return to your editor to insert, or copy here.",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedButton(onClick = controller::copy) {
+                    AltiroIcon(Glyph.COPY)
+                    Spacer(Modifier.width(8.dp))
+                    Text("Copy")
+                }
+                TextButton(onClick = controller::discard) { Text("Clear") }
+            }
+        }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = models).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        AltiroIcon(Glyph.MODEL)
+        Text("Chilean Small", modifier = Modifier.weight(1f))
+        Text("Experimental", style = MaterialTheme.typography.labelSmall)
+        AltiroIcon(Glyph.ARROW)
+    }
+    if (connected)
+        Text(
+            "The floating mic follows your editor.",
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+}
+
+@Composable
+internal fun MicrophoneDial(
+    recording: Boolean,
+    working: Boolean,
+    enabled: Boolean,
+    onClick: () -> Unit,
+) {
+    var angle by remember { mutableFloatStateOf(0f) }
+    val animate = android.animation.ValueAnimator.areAnimatorsEnabled()
+    LaunchedEffect(recording, working, animate) {
+        if (animate && (recording || working)) {
+            while (true) {
+                delay(32)
+                angle = (angle + 8f) % 360f
+            }
+        } else angle = 0f
+    }
+    val colors = MaterialTheme.colorScheme
+    val accent = colors.primary
+    val rule = colors.outline.copy(alpha = 0.3f)
+    Box(
+        Modifier.size(248.dp)
+            .shadow(
+                10.dp,
+                CircleShape,
+                ambientColor = Color.Black.copy(alpha = 0.05f),
+                spotColor = Color.Black.copy(alpha = 0.1f),
+            )
+            .clip(CircleShape)
+            .background(colors.surfaceVariant),
+        contentAlignment = Alignment.Center,
+    ) {
+        Canvas(Modifier.fillMaxSize().padding(14.dp)) {
+            val r = size.minDimension / 2
+            drawCircle(rule, r - 2.dp.toPx(), style = Stroke(0.7.dp.toPx()))
+            drawCircle(rule.copy(alpha = 0.14f), r - 9.dp.toPx(), style = Stroke(0.7.dp.toPx()))
+            for (i in 0..7) {
+                val a = i * Math.PI / 4
+                val inner = r - 18.dp.toPx()
+                val outer = r - 26.dp.toPx()
+                drawLine(
+                    rule,
+                    androidx.compose.ui.geometry.Offset(
+                        center.x + (kotlin.math.sin(a) * inner).toFloat(),
+                        center.y + (kotlin.math.cos(a) * inner).toFloat(),
+                    ),
+                    androidx.compose.ui.geometry.Offset(
+                        center.x + (kotlin.math.sin(a) * outer).toFloat(),
+                        center.y + (kotlin.math.cos(a) * outer).toFloat(),
+                    ),
+                    0.8.dp.toPx(),
+                )
+            }
+            if (recording || working)
+                drawArc(
+                    accent,
+                    angle - 90,
+                    if (recording) 28f else 48f,
+                    false,
+                    topLeft = androidx.compose.ui.geometry.Offset(3.dp.toPx(), 3.dp.toPx()),
+                    size =
+                        androidx.compose.ui.geometry.Size(
+                            size.width - 6.dp.toPx(),
+                            size.height - 6.dp.toPx(),
+                        ),
+                    style = Stroke(5.dp.toPx(), cap = StrokeCap.Round),
+                )
+        }
+        Surface(
+            onClick = onClick,
+            enabled = enabled,
+            shape = CircleShape,
+            color = if (recording) accent else colors.onSurface,
+            modifier =
+                Modifier.size(116.dp).semantics {
+                    contentDescription =
+                        when {
+                            recording -> "Stop and transcribe"
+                            working -> "Microphone stopped; recognizing speech"
+                            else -> "Start recording"
+                        }
+                },
+        ) {
+            Box(contentAlignment = Alignment.Center) {
+                AltiroIcon(
+                    if (recording) Glyph.STOP else Glyph.MIC,
+                    Modifier.size(46.dp),
+                    color = colors.surfaceVariant,
+                )
             }
         }
     }
 }
 
 @Composable
-private fun RecordingModeControls(preferences: RecordingPreferences) {
-    var recordInPlace by remember { mutableStateOf(preferences.recordInPlace) }
-    Row(
-        modifier =
-            Modifier.fillMaxWidth().toggleable(value = recordInPlace, role = Role.Switch) {
-                recordInPlace = it
-                preferences.recordInPlace = it
-            },
-        verticalAlignment = Alignment.CenterVertically,
+internal fun LanguageControls(controller: DictationController) {
+    val language by controller.language.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val modelBusy by controller.models.busy.collectAsState()
+    var more by rememberSaveable { mutableStateOf(false) }
+    val available = !session.busy && !nativeBusy && !modelBusy
+    FlowRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        Text("Record without leaving your app", modifier = Modifier.weight(1f))
-        Switch(checked = recordInPlace, onCheckedChange = null)
-    }
-    Text(
-        if (recordInPlace) {
-            "Tap the floating mic, speak, then tap Stop. If recording is blocked, use Open recording screen below."
-        } else {
-            "The floating mic opens a separate recording screen. Return to your text field and tap Insert after recognition."
+        for ((value, label) in
+            listOf("en" to "EN", "es" to "ES") +
+                if (more || language in setOf("auto", "fr")) listOf("auto" to "Auto", "fr" to "FR")
+                else emptyList()) {
+            FilterChip(
+                selected = language == value,
+                onClick = { controller.selectLanguage(value) },
+                label = { Text(label) },
+                enabled = available,
+                modifier =
+                    Modifier.heightIn(min = 48.dp).semantics {
+                        contentDescription = "Dictation language $label"
+                    },
+            )
         }
-    )
+        if (!more && language !in setOf("auto", "fr"))
+            IconButton(
+                onClick = { more = true },
+                modifier = Modifier.semantics { contentDescription = "More languages" },
+            ) {
+                AltiroIcon(Glyph.GLOBE)
+            }
+    }
 }
 
 @Composable
-internal fun AltiroTheme(content: @Composable () -> Unit) {
-    MaterialTheme(
-        colorScheme =
-            lightColorScheme(
-                primary = Color(0xFF006B60),
-                background = Color(0xFFF7F8F2),
-                surface = Color(0xFFF7F8F2),
-            )
+private fun SetupContent(
+    controller: DictationController,
+    microphoneAllowed: Boolean,
+    request: () -> Unit,
+    accessibility: () -> Unit,
+    permissions: () -> Unit,
+) {
+    val connected by controller.connected.collectAsState()
+    Text("Your keyboard stays yours.", style = MaterialTheme.typography.titleLarge)
+    Text(
+        "Microphone access records only when you start. Accessibility adds the floating mic and inserts at the selected cursor; it does not collect screen or clipboard contents."
+    )
+    SetupStep(
+        "Microphone",
+        microphoneAllowed,
+        if (microphoneAllowed) "Allowed" else "Record when you tap the mic",
+        request,
+    )
+    if (!microphoneAllowed)
+        TextButton(onClick = permissions) { Text("Android permission settings") }
+    SetupStep(
+        "Floating mic",
+        connected,
+        if (connected) "Connected" else "Enable Altiro in Accessibility settings",
+        accessibility,
+    )
+    Text(
+        "Model downloads contact the listed host only when you choose Download. Recording and recognition stay on this phone. Audio is deleted after recognition or cancellation; results are temporary.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    val context = LocalContext.current
+    val preferences = remember { RecordingPreferences(context) }
+    var inPlace by remember { mutableStateOf(preferences.recordInPlace) }
+    Row(
+        Modifier.fillMaxWidth().toggleable(inPlace, role = Role.Switch) {
+            inPlace = it
+            preferences.recordInPlace = it
+        },
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Surface(Modifier.fillMaxSize(), content = content)
+        Text("Record in place", Modifier.weight(1f))
+        Switch(inPlace, onCheckedChange = null)
+    }
+    Text(
+        "If Android blocks recording from the overlay, start from Altiro, then return to your editor.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    TextButton(onClick = controller::clearDisabledApps) { Text("Restore mic in hidden apps") }
+}
+
+@Composable
+private fun SetupStep(title: String, done: Boolean, detail: String, action: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().clickable(onClick = action).padding(vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+    ) {
+        AltiroIcon(
+            if (done) Glyph.CHECK else Glyph.ARROW,
+            color = MaterialTheme.colorScheme.primary,
+        )
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(detail, style = MaterialTheme.typography.bodySmall)
+        }
+    }
+    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+}
+
+@Composable
+private fun ModelsContent(controller: DictationController, importModel: (String) -> Unit) {
+    val selected by controller.models.selected.collectAsState()
+    val installed by controller.models.installed.collectAsState()
+    val busy by controller.models.busy.collectAsState()
+    val status by controller.models.status.collectAsState()
+    val linkNotice by controller.modelLinkNotice.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val available = !busy && !session.busy && !nativeBusy
+    Text(
+        "One model runs at a time. Keep several installed to switch instantly.",
+        style = MaterialTheme.typography.bodyMedium,
+    )
+    for (profile in controller.models.profiles) {
+        Row(
+            Modifier.fillMaxWidth()
+                .selectable(
+                    profile.spec.id == selected.spec.id,
+                    enabled = available,
+                    role = Role.RadioButton,
+                ) {
+                    controller.selectModel(profile.spec.id)
+                }
+                .padding(vertical = 12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            RadioButton(profile.spec.id == selected.spec.id, onClick = null, enabled = available)
+            Column(Modifier.weight(1f)) {
+                Text(profile.name, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "${(profile.spec.bytes+500_000)/1_000_000} MB · ${if(profile.spec.id in installed) "Verified offline" else "Not installed"}${if(profile.experimental) " · Experimental" else ""}",
+                    style = MaterialTheme.typography.bodySmall,
+                )
+            }
+        }
+        HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+    }
+    Text(selected.description)
+    Text(selected.attribution, style = MaterialTheme.typography.bodySmall)
+    Text(
+        "Needs ${(selected.spec.bytes+10_999_999)/1_000_000} MB free. Source: ${Uri.parse(selected.sourceUrl).host}",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    if (selected.experimental)
+        Text(
+            "Chilean fine-tune by Roberto Castro-Vexler. Import the audited converted file; a direct download is not published yet. Its training label does not establish better accuracy.",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+    if (selected.download != null && selected.spec.id !in installed)
+        Button(onClick = { controller.downloadModel(selected.spec.id) }, enabled = available) {
+            AltiroIcon(Glyph.DOWNLOAD, color = MaterialTheme.colorScheme.onPrimary)
+            Spacer(Modifier.width(8.dp))
+            Text("Download model")
+        }
+    OutlinedButton(onClick = { importModel(selected.spec.id) }, enabled = available) {
+        Text("Import file")
+    }
+    if (busy) {
+        LinearProgressIndicator(Modifier.fillMaxWidth())
+        OutlinedButton(onClick = controller.models::cancelImport) { Text("Cancel transfer") }
+    }
+    Text(status, style = MaterialTheme.typography.bodySmall)
+    linkNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
+    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick = controller::openModelSource, enabled = available) {
+            Text("Source")
+        }
+        TextButton(onClick = controller::openModelLicense, enabled = available) { Text("License") }
+        TextButton(
+            onClick = controller::deleteModel,
+            enabled = available && selected.spec.id in installed,
+        ) {
+            Text("Delete model")
+        }
     }
 }
 
@@ -257,7 +696,6 @@ internal fun ResultControls(controller: DictationController) {
     val comparing by controller.comparing.collectAsState()
     val diagnostic by controller.diagnostics.report.collectAsState()
     val context = LocalContext.current
-    KeepAwake(session.busy || nativeBusy)
     if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
         Text("$modelName · ${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop")
         Text(controller.processingLabel())
@@ -346,7 +784,7 @@ internal fun ResultControls(controller: DictationController) {
 }
 
 @Composable
-private fun GpuControls(
+internal fun GpuControls(
     controller: DictationController,
     microphoneAllowed: Boolean,
     compare: (Boolean) -> Unit,
@@ -417,7 +855,7 @@ private fun GpuControls(
 }
 
 @Composable
-private fun WindowControls(
+internal fun WindowControls(
     controller: DictationController,
     microphoneAllowed: Boolean,
     compare: (Boolean) -> Unit,
@@ -467,86 +905,7 @@ private fun WindowControls(
 }
 
 @Composable
-private fun ModelControls(
-    controller: DictationController,
-    importModel: (String) -> Unit,
-) {
-    val selected by controller.models.selected.collectAsState()
-    val installed by controller.models.installed.collectAsState()
-    val busy by controller.models.busy.collectAsState()
-    val status by controller.models.status.collectAsState()
-    val session by controller.session.collectAsState()
-    val nativeBusy by controller.recognition.busy.collectAsState()
-    val language by controller.language.collectAsState()
-    val available = !session.busy && !nativeBusy && !busy
-    Text("Speech model", style = MaterialTheme.typography.titleMedium)
-    Text(
-        "Everyday dictation runs only the selected model. App startup checks all installed files; other models are not loaded for recognition. Switching needs no download."
-    )
-    for (profile in controller.models.profiles) {
-        val chosen = selected.spec.id == profile.spec.id
-        val sizeMb = (profile.spec.bytes + 500_000) / 1_000_000
-        Row(
-            Modifier.fillMaxWidth().selectable(
-                chosen,
-                enabled = available,
-                role = Role.RadioButton,
-            ) {
-                controller.selectModel(profile.spec.id)
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(selected = chosen, onClick = null, enabled = available)
-            Column(Modifier.weight(1f)) {
-                Text(profile.name)
-                Text(
-                    "$sizeMb MB · ${if (profile.spec.id in installed) "Installed" else "Not installed"}",
-                    style = MaterialTheme.typography.bodySmall,
-                )
-            }
-        }
-    }
-    Text(selected.description)
-    if (selected.experimental) {
-        Text(
-            "Experimental Chilean Spanish fine-tune by Roberto Castro-Vexler. Better recognition of your speech is not yet established. Use ES when comparing Spanish recordings."
-        )
-        Text(
-            "Download the converted file from the Altiro installation page, then import it here. The source link contains the original model and its declared Apache-2.0 license."
-        )
-    }
-    Text(status)
-    Text(
-        "Import needs ${(selected.spec.bytes + 10_000_000 + 999_999) / 1_000_000} MB free. Keep each model installed to switch quickly; browser downloads use additional storage."
-    )
-    OutlinedButton(onClick = controller::openModelDownload, enabled = available) {
-        Text(if (selected.experimental) "Open Chilean model source" else "Download selected model")
-    }
-    OutlinedButton(onClick = { importModel(selected.spec.id) }, enabled = available) {
-        Text("Import ${selected.filename}")
-    }
-    if (busy) OutlinedButton(onClick = controller.models::cancelImport) { Text("Cancel import") }
-    OutlinedButton(
-        onClick = controller::deleteModel,
-        enabled = available && selected.spec.id in installed,
-    ) {
-        Text("Delete selected model")
-    }
-    Text("Language: ${if (language == "auto") "Automatic" else language}")
-    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-        for ((value, label) in listOf("auto" to "Auto", "en" to "EN", "fr" to "FR", "es" to "ES")) {
-            OutlinedButton(onClick = { controller.selectLanguage(value) }, enabled = available) {
-                Text(label)
-            }
-        }
-    }
-    Text(
-        "Use ES for Spanish-only speech. Use the same language setting for fair model comparisons."
-    )
-}
-
-@Composable
-private fun ComparisonControls(
+internal fun ComparisonControls(
     controller: DictationController,
     microphoneAllowed: Boolean,
     open: (List<String>) -> Unit,

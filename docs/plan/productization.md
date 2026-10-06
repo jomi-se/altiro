@@ -23,7 +23,7 @@ screen. Preserve the input-authority protections from the specification.
 | Dynamic audio windows, capped at 30 seconds | Short clips should not pay for encoding a full padded window. | Record selected native window and encoder calls; compare identical audio; preserve all audio for longer recordings and evaluate clipped endings/accuracy. |
 | A small, unmistakable working animation | Long inference currently looks stalled. The user needs to know whether recording, verification, model loading or recognition is happening. | Distinct recording/processing states, elapsed time and accessible phase text; Cancel always available; animation stops when work ends and respects system animation settings. |
 | Console inside the app | Phase timings made the performance bottleneck obvious. Advanced diagnostics must remain easy to extract as the product becomes simpler. | Live and final per-pass timings, backend/window/attention details, saved crash checkpoint, Copy/Share/Clear. No speech, audio, editor names or private paths. |
-| Bold, expressive app; quiet overlay | The user chose a playful visual direction. The main app can have personality while the overlay respects the host app. | A coherent native Material 3 theme in light/dark; setup, models, daily controls and console separated by purpose. |
+| Refined native app; quiet overlay | After concept review the owner approved sage/chalk/charcoal centered-mic geometry and subtle depth. The real cross-app overlay has the highest craft priority. | A coherent native Material 3 theme in light/dark; setup, models, daily controls and console separated by purpose. |
 
 ## Installation and model distribution
 
@@ -77,8 +77,12 @@ does not prove its CI has run or that an APK is released.
 1. Record this direction, acquisition policy, and public repository protections.
 2. Establish the visual direction with native Android affordances.
 3. Add verified, cancellable model acquisition and a concise setup flow.
-4. Replace the experiment-heavy home, then make the overlay compact with
-   language control and state-specific motion.
+4. Polish the real cross-app accessibility overlay first, with compact language
+   control and state-specific motion; focus Home on the centered microphone.
 5. Preserve comparisons and diagnostic exports in the console.
 6. Build, inspect actual phone/emulator captures, and test the editor/resource
    gates before claiming daily-use or general-device readiness.
+
+The accepted [interface decision](../decisions/0009-everyday-native-interface.md)
+records the approved concept and overlay-first priority. Native visual acceptance
+requires real captures; generated concepts are not app screenshots.

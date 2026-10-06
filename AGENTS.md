@@ -51,6 +51,13 @@ short-window accuracy and GPU behavior remain phone gates.
 Visible recording/diagnostics screens stay awake during work; manual lock still
 cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 
+The everyday interface now separates Home, Models, Setup and Console. The owner
+approved sage/chalk/charcoal centered-mic geometry and prioritizes the actual
+non-focusable cross-app overlay above the app screen. See decision 0009. Explicit
+stock model acquisition adds Internet permission per decision 0008; recognition
+remains local. Chilean conversions remain import-only until audited binaries
+have a public distribution location. Physical-device UI acceptance is pending.
+
 Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only
 for the inference/JNI boundary. Start with `app`, `core`, `inference-whisper`,

@@ -20,6 +20,7 @@ data class Session(
     val destination: DestinationToken? = null,
     val text: String? = null,
     val attemptConsumed: Boolean = false,
+    val dispatchFailed: Boolean = false,
     val message: String? = null,
     val elapsedSeconds: Int = 0,
 ) {
@@ -133,7 +134,10 @@ fun reduce(
             }
         is SessionEvent.Fail ->
             if (session.attemptConsumed) {
-                session.copy(message = "Insertion outcome unknown. Check the field before copying.")
+                session.copy(
+                    message = "Insertion outcome unknown. Check the field before copying.",
+                    dispatchFailed = true,
+                )
             } else {
                 session.copy(phase = Phase.FAILED, message = event.reason)
             }

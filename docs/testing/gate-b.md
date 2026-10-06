@@ -6,14 +6,14 @@ accuracy or latency recommendation.
 ## Install and import
 
 Update the debug APK without uninstalling to preserve accessibility settings.
-Open Altiro, select Small Q8 or FP16, download the selected model in your browser,
-then use its Import button and select the matching file. Existing Base remains
+Open Altiro's Models tab, select Small Q8 or FP16, and download the selected model
+with its Download action. Browser download followed by Import also works. Existing Base remains
 supported. The app verifies the catalog's exact byte count and SHA-256 before
 installation and before every native load. Import requires a private copy and temporary
 space; the browser's Downloads copy is separate. Unknown or truncated files
 must fail without replacing an existing valid model.
 
-The app itself has no Internet permission. After import, enable airplane mode
+Internet permission is used only for explicit model acquisition. After installation, enable airplane mode
 and disable Wi-Fi as well. **Record without leaving your app** is on by default;
 keep your keyboard selected and record from the floating mic. Verify insertion
 in an unchanged eligible field and explicit Insert after a destination change.

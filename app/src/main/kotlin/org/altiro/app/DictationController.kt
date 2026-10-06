@@ -33,6 +33,8 @@ class DictationController(private val context: Context) {
     private val mutableSession = MutableStateFlow(Session())
     val session = mutableSession.asStateFlow()
     val connected = MutableStateFlow(false)
+    val overlayWindowEvents = MutableStateFlow(0)
+    val otherWindowEvents = MutableStateFlow(0)
     val editorLabel = MutableStateFlow("No eligible field")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
@@ -331,15 +333,36 @@ class DictationController(private val context: Context) {
         if (!session.value.busy && !recognition.busy.value) models.importModel(uri, id)
     }
 
+    fun downloadModel(id: String) {
+        if (!session.value.busy && !recognition.busy.value) models.download(id)
+    }
+
     fun deleteModel() {
         if (!session.value.busy && !recognition.busy.value) models.delete()
     }
 
-    fun openModelDownload() {
-        context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(models.selected.value.sourceUrl))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        )
+    val modelLinkNotice = MutableStateFlow<String?>(null)
+
+    fun openModelSource() {
+        val profile = models.selected.value
+        val url =
+            if (profile.download != null)
+                profile.sourceUrl.replace("/resolve/", "/tree/").substringBeforeLast("/")
+            else profile.sourceUrl
+        openModelLink(url)
+    }
+
+    fun openModelLicense() = openModelLink(models.selected.value.licenseUrl)
+
+    private fun openModelLink(url: String) {
+        modelLinkNotice.value = null
+        try {
+            context.startActivity(
+                Intent(Intent.ACTION_VIEW, Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: android.content.ActivityNotFoundException) {
+            modelLinkNotice.value = "Install or enable a browser to open the source and license."
+        }
     }
 
     fun selectModel(id: String) {

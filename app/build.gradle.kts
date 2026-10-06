@@ -12,8 +12,8 @@ android {
         applicationId = "org.altiro.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 8
-        versionName = "0.4.2-dynamic-window"
+        versionCode = 9
+        versionName = "0.5.0-everyday-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += setOf("arm64-v8a", "x86_64")
@@ -33,6 +33,7 @@ android {
 dependencies {
     implementation(project(":core"))
     implementation(project(":inference-whisper"))
+    implementation(project(":network"))
     implementation(platform(libs.compose.bom))
     implementation(libs.compose.ui)
     implementation(libs.compose.material3)

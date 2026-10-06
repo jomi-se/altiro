@@ -18,6 +18,7 @@ import org.altiro.core.EditorIdentity
 import org.altiro.core.EditorState
 import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
+import org.altiro.core.windowChangeInvalidatesDestination
 
 class DictationAccessibilityService : AccessibilityService() {
     private val controller
@@ -26,6 +27,7 @@ class DictationAccessibilityService : AccessibilityService() {
     private lateinit var method: DictationInputMethod
     private var overlay: DictationOverlay? = null
     private var observer: Job? = null
+    private var languageObserver: Job? = null
 
     private data class EditorMetadata(
         val packageName: String?,
@@ -65,6 +67,11 @@ class DictationAccessibilityService : AccessibilityService() {
                         refreshEditor()
                     }
             }
+        languageObserver =
+            controller.scope.launch {
+                combine(controller.language, controller.models.busy) { _, _ -> Unit }
+                    .collect { refreshEditor() }
+            }
         refreshEditor()
     }
 
@@ -76,11 +83,27 @@ class DictationAccessibilityService : AccessibilityService() {
                 if (event.packageName?.toString() == info?.packageName)
                     controller.editor.invalidate()
             }
+            AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
+                if (windowChangeInvalidatesDestination(event.windowId, overlay?.windowId)) {
+                    controller.otherWindowEvents.value++
+                    controller.editor.invalidate()
+                } else {
+                    controller.overlayWindowEvents.value++
+                }
+            }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
-            AccessibilityEvent.TYPE_WINDOWS_CHANGED,
-            AccessibilityEvent.TYPE_VIEW_FOCUSED -> controller.editor.invalidate()
+            AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
+                if (windowChangeInvalidatesDestination(event.windowId, overlay?.windowId))
+                    controller.editor.invalidate()
+            }
             else -> Unit
         }
+        refreshEditor()
+    }
+
+    override fun onConfigurationChanged(newConfig: android.content.res.Configuration) {
+        super.onConfigurationChanged(newConfig)
+        overlay?.reposition()
         refreshEditor()
     }
 
@@ -103,7 +126,9 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun disconnect() {
         observer?.cancel()
         observer = null
-        overlay?.close()
+        languageObserver?.cancel()
+        languageObserver = null
+        overlay?.dispose()
         overlay = null
         controller.insertion = null
         controller.refreshSettings = null

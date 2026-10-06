@@ -7,12 +7,12 @@ insert the result into the active text field while continuing to use Gboard or
 another keyboard. On-device transcription is the default. No account,
 subscription, trial expiry, or business word quota.
 
-**Status:** offline recognition preview. Import the supported multilingual
-Whisper Small Q8 or FP16 model, then record and transcribe on the phone without network
-access. The floating control, conservative insertion, and editor fixture remain.
-Initial recording/cancellation/insertion are user-reported on a phone; full
-Gate A and B remain unverified. See the
-[bounded continuation decision](docs/decisions/0001-offline-preview.md).
+**Status:** everyday-use preview. A focused native home screen, compact floating
+mic/language overlay, model library and diagnostic console wrap the pinned local
+Whisper runtime. Stock models support explicit in-app download and verified
+file import; the two experimental Chilean conversions currently use import.
+Phone smoke results exist, but full editor/resource gates and the redesigned
+interface's physical-device acceptance remain open.
 
 ## Start here
 
@@ -41,57 +41,56 @@ Physical-device gates cover microphone startup, Gboard composition, real
 editors, recognition quality, and resource behavior. Keep the visible
 recording-screen fallback while the remaining evidence is collected.
 
-## Try offline recognition
+## Install and use
 
-Install a debug APK, open Altiro, select **Small · Q8** (264 MB) or **Small ·
-FP16** (488 MB), and choose **Download selected model**. Use the corresponding
-Import button to copy it into private storage and verify its size/SHA-256.
-Both remain installed, so switching needs no new download. Existing Base
-installs remain available. Two experimental Chilean Small variants are also
-supported; their converted files come from the installation page or the
-[preparation command](docs/development.md).
+Install a debug APK built from this repository. Open **Setup** (the settings
+icon), allow the microphone and enable Altiro in Android Accessibility settings.
+This adds the floating control without replacing your keyboard. Accessibility
+is used for the selected editor, cursor/composition and one insertion attempt;
+Altiro does not collect screen or clipboard contents.
 
-**Record a comparison** processes one recording with both stock Small models,
-optionally adding either Chilean variant, and shows each transcript and elapsed
-time with a separate Copy button. See the
-[comparison procedure](docs/testing/model-comparison.md). No account or network permission
-is required by Altiro. The browser performs the explicit download.
+On **Home**, tap **Download** to install the selected stock model once. **Models**
+shows each model's size, installation state and source, with file import retained
+for offline transfer. Small Q8 is 264 MB; Small FP16 is 488 MB; multilingual Base
+is 148 MB. Downloads use pinned HTTPS sources and exact size/SHA-256 checks before
+atomic installation. Downloading is explicit; recording and recognition never
+make network requests. Test airplane mode after installation.
 
-Enable Altiro's accessibility service and microphone permission, keep your
-keyboard selected, and tap the floating mic in your text field. **Record without
-leaving your app** is on by default. Stop releases the microphone before
-recognition. An unchanged eligible field allows one automatic insertion attempt;
-otherwise focus a destination and tap Insert, or Copy. If recording is blocked,
-use **Open recording screen** in Altiro. Turn the setting off to always use that
-separate screen, then return to your editor for explicit Insert.
-Use ES for Spanish-only speech. Test airplane mode after installing the model.
-See [Gate B](docs/testing/gate-b.md) for the quality/lifecycle procedure.
+The experimental Chilean Small Q8/FP16 variants are visible in Models. Prepare
+or obtain the exact converted file, select its profile and choose **Import file**.
+The original training repository has no compatible downloadable binary, so the
+app does not offer a misleading one-tap download. See
+[model preparation](docs/development.md#prepare-and-compare-small-models).
 
-Open **Recognition diagnostics** to see where each run spends its time:
-verification, cold model loading, inference and cleanup have separate rows.
-Copy/Share exports a content-free timing report, including failed/cancelled runs.
-The trace stays in memory for ten minutes after completion and is replaced by
-the next recording. See [phone diagnostics](docs/testing/recognition-diagnostics.md).
+Keep your keyboard and tap the floating mic in your text field. Tap its language
+control to switch EN/ES before recording; Auto and French are available in the
+app. Speak and tap the square Stop action. The microphone is released before
+recognition; a separate Cancel discards the session. Drag a control to move the
+bubble; hold the language control to reveal an explicit Hide action for the current app. Setup can restore
+hidden apps. The idle control is translucent, with legible backed glyphs.
 
-The in-app **Recognition processor** setting adds experimental **Vulkan GPU**;
-CPU remains the default. **Flash Attention for GPU (experimental)** is enabled
-for Vulkan runs, with an off switch to restore the previous method.
-**Compare CPU and GPU** uses the selected model twice
-on one recording and never inserts automatically. GPU initialization/failure
-and compute counters appear in diagnostics. A single content-free checkpoint
-survives restart; **Clear diagnostics** removes it. Visible recording and
-diagnostics screens stay awake during work; manual lock still cancels. See
-[GPU testing](docs/testing/gpu-experiment.md). Phone speed/compatibility remain
-unverified, and a failed GPU run is never silently retried on CPU.
+An unchanged eligible destination receives one automatic insertion attempt.
+Changed field/cursor/composition, lock or a password field blocks insertion.
+Recovery exposes Insert/Copy/Discard; uncertain delivery never triggers a retry
+or whole-field replacement. After dispatch, another dictation can start directly.
+If Android blocks overlay microphone startup, record from Home and return to
+your editor for explicit insertion. Setup retains the separate-screen fallback.
 
-**Dynamic window for short recordings (experimental)** is enabled by default.
-Recordings under 30 seconds get a smaller padded encoder window; longer recordings
-keep the full-window path. Turn the switch off to restore the normal context.
-**Compare full and dynamic windows** uses the same recording and selected
-model/processor/attention setting twice, with separate results and no automatic
-insertion. Diagnostics show the native-selected window and Auto's separate
-language-detection window. Accuracy and phone speed remain experimental. See
-[dynamic-window testing](docs/testing/dynamic-window.md).
+The padded dynamic encoder window is enabled and capped at 30 seconds; longer
+recordings retain the normal full-window path. Language stays fixed during
+recording. Visible app and overlay work request screen-on; manual lock still
+cancels. Overlay behavior and visual fit need physical-device confirmation.
+
+**Console** provides live/final phase timings, runtime details, aggregate window
+event counts, model-acquisition state and a saved content-free checkpoint.
+Copy/Share exports diagnostics; Clear removes them. **Runtime & comparisons**
+contains the reversible CPU/Vulkan, Flash Attention and full/dynamic experiments,
+plus same-recording model comparison. Comparisons never insert automatically.
+CPU remains the default; Vulkan compatibility and performance are device-specific.
+
+See the [product interface checks](docs/testing/everyday-interface.md),
+[Gate A](docs/testing/gate-a.md), [Gate B](docs/testing/gate-b.md), and
+[recognition diagnostics](docs/testing/recognition-diagnostics.md).
 
 ## Development checks
 

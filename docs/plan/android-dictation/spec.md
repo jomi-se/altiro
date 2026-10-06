@@ -163,7 +163,7 @@ sealed interface DispatchOutcome {
 
 ## 6. Android declarations and onboarding
 
-The following manifest outline establishes required components. Implement resources and choose the real package/application ID in the repository. SDK versions belong in Gradle. Include `INTERNET` only in the connected flavor, if an offline-only flavor is built.
+The following manifest outline establishes required components. Implement resources and choose the real package/application ID in the repository. SDK versions belong in Gradle. The local recognition preview also includes `INTERNET` for explicit, verified model acquisition, as accepted in [decision 0008](../../decisions/0008-explicit-model-acquisition.md); inference remains offline. An optional fully offline flavor can omit acquisition and this permission.
 
 ```xml
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">

@@ -86,7 +86,7 @@ libraries. Connected tests execute separately.
 They supplement the [physical Gate A procedure](testing/gate-a.md).
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`. Core is pure
-Kotlin. Inference builds the JNI library; network adapters remain reserved.
+Kotlin. Inference builds the JNI library; the network module implements only explicit model acquisition; remote recognition remains reserved.
 
 For a host smoke test of the actual production JNI bridge, supply the verified
 base model and a canonical mono PCM16/16 kHz copy of upstream's JFK sample:
@@ -113,14 +113,14 @@ an isolated cache. `./gradlew clean` removes configured build output. Keep
 retained APKs, recordings, reports, and screenshots outside Git repositories;
 clean disposable task tooling when finished.
 
-The app has no Internet permission. The browser handles explicit model download;
-file-picker import verifies size/SHA-256 before atomic installation. Inference
+The app has Internet permission only for explicit model acquisition. Downloads
+and file-picker imports verify size/SHA-256 before atomic installation. Inference
 rechecks the model, takes ownership of the completed WAV after microphone
 release, and deletes audio after native work finishes, including cancellation.
 Capture errors discard audio. Result text is process-memory only; no history is
 persisted. Models are durable private files excluded from backup/transfer.
 
-**Recognition diagnostics** displays the latest session's monotonic timings
+The in-app **Console** displays the latest session's monotonic timings
 without text/audio/editor data. It updates during native work, survives result
 discard and expires ten minutes after completion. Explicit Copy/Share includes
 app/OS versions, permission state and runtime/decode settings. One bounded
@@ -174,7 +174,7 @@ must load and recognize the public upstream JFK sample; converted output must
 match the app catalog before replacing an existing file. Keep `preparation.json`,
 source model card, and license notices with the generated files. No model weights
 are bundled in Git or the APK. Source download/preparation makes explicit network
-requests; installed app inference has no Internet permission.
+requests; installed app inference remains local and makes no network requests.
 
 For a production-JNI host compatibility smoke of all four prepared Small files,
 use JDK 21 and a canonical mono PCM16/16 kHz public sample with a 44-byte WAV

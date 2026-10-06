@@ -39,7 +39,21 @@ class SessionTest {
         assertTrue(attempted.attemptConsumed)
         assertEquals(attempted, reduce(attempted, SessionEvent.Dispatch(id)))
         assertEquals(attempted, reduce(attempted, SessionEvent.Cancel(id)))
-        assertTrue(reduce(attempted, SessionEvent.Fail(id, "exception")).attemptConsumed)
+        val failed = reduce(attempted, SessionEvent.Fail(id, "exception"))
+        assertTrue(failed.attemptConsumed)
+        assertTrue(failed.dispatchFailed)
+    }
+
+    @Test
+    fun `consumed insertion permits a fresh recording without reviving old text`() {
+        val dispatched = reduce(ready(), SessionEvent.Dispatch(id))
+        val nextId = SessionId(2)
+        val next = reduce(dispatched, SessionEvent.Start(nextId, null))
+        assertEquals(Phase.STARTING, next.phase)
+        assertEquals(null, next.text)
+        assertFalse(next.attemptConsumed)
+        assertEquals(next, reduce(next, SessionEvent.Dispatch(id)))
+        assertEquals(next, reduce(next, SessionEvent.Result(id, "old payload")))
     }
 
     @Test
