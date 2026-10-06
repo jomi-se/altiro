@@ -14,6 +14,9 @@ enum class RecognitionStage(
     RUNTIME_START("Starting recognition runtime"),
     VERIFYING("Checking model file"),
     AUDIO_READ("Reading recorded audio"),
+    WORKER_START("Connecting recognition process"),
+    WORKER_STOP("Stopping recognition process"),
+    GPU_PROBE("Checking Vulkan GPU"),
     MODEL_LOAD("Loading model into memory"),
     INFERENCE("Recognizing speech"),
     TEXT_ASSEMBLY("Preparing result"),
@@ -30,6 +33,7 @@ data class DiagnosticStep(
     val startMillis: Long,
     val durationMillis: Long,
     val running: Boolean,
+    val backend: RecognitionBackend? = null,
 )
 
 /** An allowlisted, content-free trace of the latest session, kept only in memory. */
@@ -43,6 +47,8 @@ data class DiagnosticReport(
     val outcome: DiagnosticOutcome? = null,
     val cancellationRequested: Boolean = false,
     val failureStage: RecognitionStage? = null,
+    val backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
+    val runtimes: List<RuntimeDetails> = emptyList(),
 ) {
     val processingMillis: Long
         get() = steps.filter { it.stage !in setOf(RecognitionStage.STARTUP, RecognitionStage.RECORDING) }.sumOf { it.durationMillis }
@@ -52,7 +58,9 @@ data class DiagnosticReport(
             appendLine("Altiro recognition diagnostics · content-free")
             appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
             appendLine("Models: ${modelIds.joinToString()}")
-            appendLine("Runtime: whisper.cpp 1.9.4; CPU; 4 threads; greedy; temperature 0; no translation")
+            appendLine("Requested backends: ${backends.joinToString { it.name }}")
+            appendLine("Runtime: whisper.cpp 1.9.4; 4 CPU threads; greedy; temperature 0; no translation")
+            appendLine("GPU mode uses Vulkan with CPU operations as scheduled by Whisper; no automatic CPU retry")
             appendLine("Model lifecycle: verify, cold load, release on every run; no resident model")
             appendLine("Audio: ${audioMillis?.let { seconds(it) + " s" } ?: "not finalized"}")
             appendLine("Outcome: ${outcome?.name ?: "RUNNING"}; cancellation requested: $cancellationRequested")
@@ -69,10 +77,14 @@ data class DiagnosticReport(
             }
             for (step in steps) {
                 appendLine(
-                    "+${seconds(step.startMillis)} s · ${step.modelId ?: "session"} · ${step.stage.label}: " +
+                    "+${seconds(
+                        step.startMillis,
+                    )} s · ${step.modelId ?: "session"}${step.backend?.let { " · ${it.name}" } ?: ""} · ${step.stage.label}: " +
                         "${seconds(step.durationMillis)} s${if (step.running) " (running)" else ""}",
                 )
             }
+            for (runtime in runtimes) append(runtime.export())
+            appendLine("Whisper counters are upstream compute counters, not an additive breakdown of wall time.")
             appendLine("Inference includes audio features, language detection when Auto, encoder and decoder.")
             appendLine("No dictated text, audio, editor identity, file paths or exception messages included.")
         }
@@ -91,19 +103,36 @@ class RecognitionDiagnostics(
     private var activeStarted = 0L
     private var completed = emptyList<DiagnosticStep>()
     private var active: Pair<RecognitionStage, String?>? = null
+    private var backend: RecognitionBackend? = null
+    private var activeBackend: RecognitionBackend? = null
 
     @Synchronized fun begin(
         language: String,
         modelIds: List<String>,
         comparison: Boolean,
+        backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
     ) {
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
+        require(backends.size == modelIds.size && modelIds.zip(backends).distinct().size == modelIds.size)
         started = clockNanos()
         completed = emptyList()
         active = null
-        mutableReport.value = DiagnosticReport(language, modelIds.toList(), comparison)
+        backend = null
+        mutableReport.value = DiagnosticReport(language, modelIds.toList(), comparison, backends = backends.toList())
         phase(RecognitionStage.STARTUP)
+    }
+
+    @Synchronized fun selectBackend(value: RecognitionBackend?) {
+        backend = value
+    }
+
+    @Synchronized fun runtime(value: RuntimeDetails) {
+        val report = mutableReport.value ?: return
+        if (report.outcome != null) return
+        require((value.modelId to value.backend) in report.modelIds.zip(report.backends))
+        mutableReport.value =
+            report.copy(runtimes = report.runtimes.filterNot { it.modelId == value.modelId && it.backend == value.backend } + value)
     }
 
     @Synchronized fun phase(
@@ -111,12 +140,13 @@ class RecognitionDiagnostics(
         modelId: String? = null,
     ) {
         val report = mutableReport.value ?: return
-        if (report.outcome != null || active == (stage to modelId)) return
+        if (report.outcome != null || (active == (stage to modelId) && activeBackend == if (modelId == null) null else backend)) return
         require(modelId == null || modelId in report.modelIds)
         check(completed.size < 64)
         val now = clockNanos()
         closeStep(now)
         active = stage to modelId
+        activeBackend = if (modelId == null) null else backend
         activeStarted = now
         refreshAt(now)
     }
@@ -159,7 +189,15 @@ class RecognitionDiagnostics(
     private fun closeStep(now: Long) {
         active?.let { (stage, model) ->
             completed =
-                completed + DiagnosticStep(stage, model, (activeStarted - started) / 1_000_000, (now - activeStarted) / 1_000_000, false)
+                completed +
+                DiagnosticStep(
+                    stage,
+                    model,
+                    (activeStarted - started) / 1_000_000,
+                    (now - activeStarted) / 1_000_000,
+                    false,
+                    activeBackend,
+                )
         }
     }
 
@@ -172,6 +210,7 @@ class RecognitionDiagnostics(
                     (activeStarted - started) / 1_000_000,
                     (now - activeStarted) / 1_000_000,
                     true,
+                    activeBackend,
                 )
             }
         mutableReport.value =

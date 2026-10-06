@@ -29,14 +29,32 @@ explicit per result. Comparison produces no floating insertion payload. Cold-loa
 memory before completion; warm residency is deferred. Rechecking the model,
 context ownership, and audio deletion share one serialized native worker.
 
-The operator reports roughly 40 seconds or more per dictation and unclear
-loading feedback; no captured benchmark yet. A dedicated diagnostics screen
+The operator's diagnostics now show inference dominates: on one 36.96-second
+recording, stock Small Q8 took 23.55 seconds and Chilean Small Q8 took 37.54
+seconds for inference. FP16 passes took 58.75 and 73.49 seconds respectively.
+The comparison order was fixed; heat/scheduling were not controlled. Reported
+text quality is promising, including Chilean Q8; this English sample does not
+establish casual Chilean Spanish accuracy. A dedicated diagnostics screen
 now traces phases without text/audio/editor data and offers Copy/Share. It
 separately times verification of all installed files on process startup. Each
 comparison model has separate verification/load/inference/release rows, with
 native failure/cancellation cleanup retained. Cold loading and decode settings
 remain unchanged. See [the decision](../decisions/0004-recognition-diagnostics.md)
 and [phone procedure](../testing/recognition-diagnostics.md).
+
+The requested GPU experiment adds a CPU/Vulkan setting in the app (CPU default),
+plus **Compare CPU and GPU** for the selected model, with reversible order.
+Model/language/backend choices are fixed at recording start. Native work runs
+in a bound non-exported process, freshly started for each pass. CPU disables
+Vulkan registration; requested GPU initialization must succeed explicitly.
+Driver process death discards partial text, with no automatic CPU rerun.
+Structured capabilities/status/failure codes and total Whisper compute counters
+join phase timing exports. One bounded content-free checkpoint survives restart
+outside backup until cleared or replaced; transcript/audio history remains absent.
+Visible recording and diagnostics screens stay awake during active work;
+manual lock still cancels. See [decision 0005](../decisions/0005-vulkan-device-experiment.md)
+and [phone experiment](../testing/gpu-experiment.md). GPU/device IPC execution
+and any speedup remain unverified until phone testing.
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
@@ -70,8 +88,9 @@ rejection. All four Small profiles also passed public-sample recognition through
 production JNI bridge using the app's greedy, four-thread decode path. These
 are host-native tests, not Android or Chilean quality evidence.
 
-The Kotlin suite has twenty-two passing tests, including sequential same-audio
-comparison, cancellation before later models, corrupted model rejection, audio
+The Kotlin suite has twenty-four passing tests, including sequential same-audio
+comparison (including the same model with two backends and no silent fallback),
+cancellation before later models, corrupted model rejection, audio
 cleanup on failure, and comparison having no insertion payload. Both apps and instrumentation
 APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
 Actual ELF/APK 16 KiB alignment passes for bundled native libraries. Formatting
@@ -83,18 +102,26 @@ Diagnostics tests cover running/final monotonic durations, processing time
 excluding capture, native cleanup after cancellation, failure-phase preservation,
 trace replacement/clearing, and no paths in exports. The production JNI host
 smoke verifies ordered phase callbacks and context-release callbacks after
-cancellation alongside the existing speech/silence/malformed-audio checks.
+cancellation alongside the existing speech/silence/malformed-audio checks. It
+also checks compute counters and a typed GPU-unavailable failure in a CPU-only
+host build, without model loading or automatic CPU inference. The compiled
+worker-isolation instrumentation checks failure reporting and process death;
+it has not been executed on Android. No host Vulkan compute was executed.
 
 [Gate A](../testing/gate-a.md) is partially user-reported and remains
 **unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the
-phone. No phone recognition latency, memory, multilingual accuracy, or runtime
-16 KiB compatibility is claimed. A debug APK is not a signed release.
+phone. User-supplied CPU latency traces are recorded above; controlled phone
+benchmarks, GPU behavior, memory, multilingual accuracy and runtime 16 KiB
+compatibility remain unverified. A debug APK is not a signed release.
 
 ## Next work
 
-Collect ordinary one-model phase diagnostics and a repeated run, then Q8/FP16
-at fixed language/duration. Identify whether verification, loading or inference
-dominates before changing residency or native compute settings.
+Test CPU/GPU comparison on the reference phone with one installed Small Q8
+model and a short fixed-language recording. Export diagnostics on both success
+and failure, then reverse order and test cancellation/manual lock. Use FP16
+only after GPU initialization succeeds. Collect memory/thermal/quality evidence
+before choosing a GPU default or enabling other compute optimizations. Inference
+dominates the supplied CPU traces; warm residency is not the main latency target.
 
 Execute Gate B in airplane mode using the installed real model,
 including native cancellation and 10/30/120-second English/French/Spanish
@@ -110,7 +137,7 @@ load and recognize public upstream speech on the host. No weights are bundled
 in Git or the APK. The preparation command also reproduces stock Q8 from FP16
 with the published hash. Retained conversion input metadata and notices
 accompany the files. Release provenance, held-out casual Chilean quality,
-phone latency and memory remain unverified. Use the
+controlled phone latency and memory remain unverified. Use the
 [same-recording procedure](../testing/model-comparison.md) for that evidence.
 
 Optional remote recognition/cleanup and visual polish remain later work.

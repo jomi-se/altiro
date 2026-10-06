@@ -36,6 +36,30 @@ Install JDK 21 and an Android SDK on a supported host. Install
 device work. Set `ANDROID_HOME` or an ignored `local.properties` SDK path.
 Use the committed Gradle wrapper.
 
+Android builds now include the experimental Vulkan backend. Install a host
+`glslc` shader compiler (pinned shaderc 2023.8; tested glslang 14.0.0),
+on PATH or set `ALTIRO_GLSLC` to its executable. It runs on the build host, not
+Android. Vulkan-Headers/Hpp 1.4.321 and SPIRV-Headers Vulkan SDK 1.4.321.0 are
+fetched with exact revisions/archive hashes in CMake; Android's Vulkan loader
+comes from the NDK/system. Host JNI smoke builds default to CPU-only; use
+`-DALTIRO_VULKAN=ON` only with a configured host Vulkan SDK/compiler.
+The pinned runtime receives audited changes from
+[`patch-whisper-gpu.py`](../scripts/patch-whisper-gpu.py): reject failed requested
+GPU initialization, expose total compute counters/active backend, and propagate
+Ninja into the host shader-generator build. It also applies a Clang Android
+Release `optnone` attribute only to shader-pipeline registration, avoiding an
+enormous inlined function during compilation. Numerical CPU compute, other
+Vulkan dispatch functions and GPU shaders keep their optimization settings;
+phone timings include the registration cost. Anchor
+checks fail on source drift; runtime source and upstream licenses remain pinned.
+CI uses Ubuntu 24.04 and `glslc=2023.8-1build1`; CMake rejects a different
+shaderc release until its shaders have been reviewed/tested. Tool upgrades
+require rebuilding and repeating the phone experiment. Android Release builds
+omit DWARF debug metadata only for the large Vulkan dispatcher translation unit
+(`-g0`); CPU code and GPU shader optimization settings are unchanged. Installed
+APKs strip native debug information. Use a Debug native configuration when
+source-level dispatcher debugging is needed.
+
 Check host architecture first. Official Linux Android resource tools and
 emulators may require x86-64. Host emulation and machine setup are operator
 concerns, not portable product instructions. Source/JVM work does not require
@@ -93,8 +117,11 @@ persisted. Models are durable private files excluded from backup/transfer.
 **Recognition diagnostics** displays the latest session's monotonic timings
 without text/audio/editor data. It updates during native work, survives result
 discard and expires ten minutes after completion. Explicit Copy/Share includes
-app/OS versions, permission state and runtime/decode settings. No diagnostics
-are persisted or emitted to logcat. See [phone diagnostics](testing/recognition-diagnostics.md).
+app/OS versions, permission state and runtime/decode settings. One bounded
+content-free checkpoint is stored privately outside backup for restart recovery,
+replaced by the next run and deleted by Clear diagnostics. No raw native logs
+or transcripts are persisted/exported. See [phone diagnostics](testing/recognition-diagnostics.md)
+and [GPU testing](testing/gpu-experiment.md).
 
 ## Release boundary
 

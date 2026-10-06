@@ -6,6 +6,12 @@ proprietary application code, remote SDK, analytics, or advertising SDK is
 included. The pinned Whisper/ggml CPU runtime is bundled; model weights are
 separately imported.
 
+The experimental Vulkan backend also uses pinned Khronos Vulkan-Headers/Hpp
+1.4.321 and SPIRV-Headers Vulkan SDK 1.4.321.0, with archive hashes in CMake.
+Required Apache-2.0/MIT notices are bundled in APK assets; see NOTICE. The host
+shader compiler generates Whisper's shaders and is not an APK executable.
+Android supplies the Vulkan loader/driver; this does not prove GPU compatibility.
+
 The current app bundles Kotlin, coroutines, and AndroidX/Compose components.
 The following upstream Maven metadata was inspected for the resolved build:
 

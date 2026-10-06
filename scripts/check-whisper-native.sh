@@ -17,3 +17,7 @@ cmake --build "$scratch/native" --parallel 2
 javac -d "$scratch/classes" scripts/native-smoke/NativeWhisper.java
 java -cp "$scratch/classes" org.altiro.inference.NativeWhisper \
   "$scratch/native/libaltiro-whisper.so" "$model" "$speech" "$scratch"
+if [ "${ALTIRO_TEST_GPU_UNAVAILABLE:-0}" = 1 ]; then
+  java -cp "$scratch/classes" org.altiro.inference.NativeWhisper \
+    "$scratch/native/libaltiro-whisper.so" "$model" "$speech" "$scratch" --gpu-unavailable
+fi

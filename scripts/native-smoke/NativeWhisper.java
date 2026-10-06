@@ -14,20 +14,23 @@ public final class NativeWhisper {
     interface Progress {
         void onProgress(int percent);
         default void onPhase(int phase) {}
+        default void onRuntime(String report) {}
     }
     native long create();
     native void cancel(long operation);
     native void release(long operation);
-    native String transcribe(long operation, String model, String wav, String language, Progress progress);
+    native String transcribe(long operation, String model, String wav, String language, boolean gpu, Progress progress);
 
     private String run(String model, String wav, String language, boolean cancelDuringProgress) {
         long handle = create();
         AtomicBoolean requested = new AtomicBoolean();
         Thread[] cancellation = new Thread[1];
         List<Integer> phases = new ArrayList<>();
+        List<String> runtimeReports = new ArrayList<>();
         try {
-            String text = transcribe(handle, model, wav, language, new Progress() {
+            String text = transcribe(handle, model, wav, language, false, new Progress() {
               @Override public void onPhase(int phase) { phases.add(phase); }
+              @Override public void onRuntime(String report) { runtimeReports.add(report); }
               @Override public void onProgress(int percent) {
                 if (cancelDuringProgress && requested.compareAndSet(false, true)) {
                     cancellation[0] = new Thread(() -> {
@@ -41,6 +44,8 @@ public final class NativeWhisper {
             if (cancelDuringProgress && (!requested.get() || text != null)) throw new AssertionError("Native cancellation failed");
             if (cancelDuringProgress && !phases.contains(5)) throw new AssertionError("Cancelled context not released");
             if (text != null && !text.isBlank() && !phases.equals(List.of(1, 2, 3, 4, 5))) throw new AssertionError("Missing or unordered phase callbacks");
+            if (text != null && !text.isBlank() && runtimeReports.stream().noneMatch(value -> value.contains("\"encode_ms\""))) throw new AssertionError("Missing compute counters");
+            if (runtimeReports.stream().anyMatch(value -> value.contains(model) || value.contains(wav))) throw new AssertionError("Runtime report disclosed paths");
             return text;
         } finally {
             if (cancellation[0] != null) {
@@ -64,6 +69,24 @@ public final class NativeWhisper {
         var nativeWhisper = new NativeWhisper();
         String model = args[1], speech = args[2];
         Path scratch = Path.of(args[3]);
+        if (args.length > 4 && "--gpu-unavailable".equals(args[4])) {
+            long handle = nativeWhisper.create();
+            List<Integer> phases = new ArrayList<>();
+            List<String> reports = new ArrayList<>();
+            try {
+                nativeWhisper.transcribe(handle, model, speech, "en", true, new Progress() {
+                    @Override public void onProgress(int percent) {}
+                    @Override public void onPhase(int phase) { phases.add(phase); }
+                    @Override public void onRuntime(String report) { reports.add(report); }
+                });
+                throw new AssertionError("Unavailable GPU silently succeeded");
+            } catch (IllegalStateException expected) {
+                if (!reports.stream().anyMatch(value -> value.contains("VULKAN_UNAVAILABLE"))) throw new AssertionError("Missing GPU failure code");
+                if (phases.contains(2) || phases.contains(3)) throw new AssertionError("Unavailable GPU fell back to loading/inference");
+            } finally { nativeWhisper.release(handle); }
+            System.out.println("GPU-unavailable JNI smoke passed; no automatic CPU inference");
+            return;
+        }
         String shortText = nativeWhisper.run(model, speech, "en", false);
         if (shortText == null || !shortText.toLowerCase().contains("country")) throw new AssertionError("Speech recognition failed");
         byte[] source = Files.readAllBytes(Path.of(speech));
@@ -82,7 +105,7 @@ public final class NativeWhisper {
             long handle = nativeWhisper.create();
             try {
                 nativeWhisper.cancel(handle);
-                if (nativeWhisper.transcribe(handle, "unused", "unused", "es", percent -> {}) != null) throw new AssertionError();
+                if (nativeWhisper.transcribe(handle, "unused", "unused", "es", false, percent -> {}) != null) throw new AssertionError();
             } finally { nativeWhisper.release(handle); }
         }
         Path silent = scratch.resolve("silence.wav");

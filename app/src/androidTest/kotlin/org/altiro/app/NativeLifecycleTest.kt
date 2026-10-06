@@ -15,7 +15,7 @@ class NativeLifecycleTest {
             val handle = runtime.create()
             try {
                 runtime.cancel(handle)
-                assertNull(runtime.transcribe(handle, "unused", "unused", "es", NativeProgress {}))
+                assertNull(runtime.transcribe(handle, "unused", "unused", "es", false, NativeProgress {}))
             } finally {
                 runtime.release(handle)
             }

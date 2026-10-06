@@ -54,6 +54,33 @@ class RecognitionBatchTest {
         assertFalse(audio.exists())
     }
 
+    @Test fun sameModelRunsOnEachBackendWithoutAnImplicitRetry() {
+        val model = input("q8")
+        val audio = folder.newFile("recording.wav")
+        val inputs = listOf(model, model.copy(backend = RecognitionBackend.VULKAN))
+        val seen = mutableListOf<RecognitionBackend>()
+        val results =
+            RecognitionBatch.run(audio, inputs, { false }, {
+                seen += it.backend
+                "speech"
+            })
+        assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), seen)
+        assertEquals(seen, results.map { it.backend })
+        assertFalse(audio.exists())
+
+        val failedAudio = folder.newFile("gpu-failure.wav")
+        seen.clear()
+        assertThrows(IllegalStateException::class.java) {
+            RecognitionBatch.run(failedAudio, inputs, { false }, {
+                seen += it.backend
+                if (it.backend == RecognitionBackend.VULKAN) throw IllegalStateException("driver failed")
+                "unpublished CPU result"
+            })
+        }
+        assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), seen)
+        assertFalse(failedAudio.exists())
+    }
+
     @Test fun corruptedSecondModelPreventsItsNativeLoadAndDeletesAudio() {
         val audio = folder.newFile("recording.wav")
         val inputs = listOf(input("q8"), input("fp16"))

@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     env:
       ALTIRO_BUILD_ROOT: ${{ runner.temp }}/altiro-build
@@ -33,6 +33,9 @@ jobs:
 
       - name: Install pinned SDK packages
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
+
+      - name: Install host Vulkan shader compiler
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y glslc=2023.8-1build1
 
       - name: Verify apps and compile device tests
         run: ./scripts/quiet-run.sh "verification" ./scripts/verify.sh
@@ -52,7 +55,7 @@ jobs:
           retention-days: 7
 
   emulator:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     env:
       ALTIRO_BUILD_ROOT: ${{ runner.temp }}/altiro-build
@@ -66,6 +69,8 @@ jobs:
           java-version: '21'
       - name: Install pinned compile SDK
         run: sdkmanager 'platforms;android-37.0' 'build-tools;36.0.0' 'ndk;30.0.16248370' 'cmake;4.1.2'
+      - name: Install host Vulkan shader compiler
+        run: sudo apt-get update && sudo apt-get install --no-install-recommends -y glslc=2023.8-1build1
       - name: Enable runner KVM access
         run: sudo chmod 666 /dev/kvm
       - name: Run API 33 fixture and password tests

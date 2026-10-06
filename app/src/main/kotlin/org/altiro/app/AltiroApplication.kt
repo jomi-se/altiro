@@ -8,6 +8,9 @@ class AltiroApplication : Application() {
 
     override fun onCreate() {
         super.onCreate()
+        // The recognition process must not create a controller, verify every model,
+        // or sweep audio still owned by the parent process.
+        if (getProcessName() != packageName) return
         controller = DictationController(this)
         // The process never replays sessions. This dedicated cache holds only our audio.
         cacheDir

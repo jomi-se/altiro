@@ -7,12 +7,14 @@ import java.util.concurrent.CancellationException
 data class RecognitionInput(
     val spec: ModelSpec,
     val file: File,
+    val backend: RecognitionBackend = RecognitionBackend.CPU,
 )
 
 data class TimedTranscript(
     val modelId: String,
     val text: String,
     val elapsedMillis: Long,
+    val backend: RecognitionBackend = RecognitionBackend.CPU,
 )
 
 object RecognitionBatch {
@@ -27,7 +29,7 @@ object RecognitionBatch {
         failed: () -> Unit = {},
     ): List<TimedTranscript> {
         try {
-            require(inputs.size in 1..4 && inputs.map { it.spec.id }.distinct().size == inputs.size)
+            require(inputs.size in 1..4 && inputs.map { it.spec.id to it.backend }.distinct().size == inputs.size)
             val results =
                 inputs.map { input ->
                     if (cancelled()) throw CancellationException()
@@ -36,7 +38,7 @@ object RecognitionBatch {
                     check(VerifiedModel.matches(input.file, input.spec, cancelled)) { "Model verification failed" }
                     val text = transcribe(input)
                     if (cancelled()) throw CancellationException()
-                    TimedTranscript(input.spec.id, text.orEmpty().trim(), (clockNanos() - started) / 1_000_000)
+                    TimedTranscript(input.spec.id, text.orEmpty().trim(), (clockNanos() - started) / 1_000_000, input.backend)
                 }
             if (cancelled()) throw CancellationException()
             return results

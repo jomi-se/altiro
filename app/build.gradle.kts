@@ -12,14 +12,15 @@ android {
         applicationId = "org.altiro.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 5
-        versionName = "0.3.1-diagnostics"
+        versionCode = 6
+        versionName = "0.4.0-gpu-experiment"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += setOf("arm64-v8a", "x86_64")
         }
     }
     buildFeatures {
+        aidl = true
         compose = true
         buildConfig = true
     }

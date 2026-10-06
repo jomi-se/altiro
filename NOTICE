@@ -16,6 +16,16 @@ and Bowen Peng (2023); its notice is retained in the same assets/licenses direct
 The statically linked NDK C++/LLVM runtime notices are retained in
 inference-whisper/src/main/assets/licenses/NDK-LLVM-NOTICE.txt from NDK 30.0.16248370.
 
+Experimental Vulkan support builds against pinned Khronos Vulkan-Headers and
+Vulkan-Hpp 1.4.321 and SPIRV-Headers Vulkan SDK 1.4.321.0. Copyright 2014-2025
+The Khronos Group Inc. Vulkan-Headers use Apache-2.0; Vulkan-Hpp declares
+Apache-2.0 OR MIT; included SPIR-V headers use MIT. Their notices/licenses are
+retained in assets/licenses/Vulkan-Headers-Apache-2.0.txt,
+Vulkan-Hpp-license.txt and SPIRV-Headers-MIT.txt. Shader compilation tools are
+host build dependencies and are not bundled as executables in the APK.
+The runtime's total-counter and strict GPU-init changes are identified in
+scripts/patch-whisper-gpu.py; upstream code retains its MIT license.
+
 The supported separately imported stock multilingual Whisper Base and Small weights are
 derived from OpenAI Whisper under the MIT License.
 Copyright (c) 2022 OpenAI.

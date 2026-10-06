@@ -33,6 +33,8 @@ class DiagnosticsActivity : ComponentActivity() {
                 val report by controller.diagnostics.report.collectAsState()
                 val session by controller.session.collectAsState()
                 val nativeBusy by controller.recognition.busy.collectAsState()
+                val checkpoint by controller.checkpoint.saved.collectAsState()
+                KeepAwake(session.busy || nativeBusy)
                 val startupChecks by controller.models.startupChecks.collectAsState()
                 val startupMillis by controller.models.startupMillis.collectAsState()
                 val modelStatus by controller.models.status.collectAsState()
@@ -43,11 +45,11 @@ class DiagnosticsActivity : ComponentActivity() {
                     Text("Recognition diagnostics", style = MaterialTheme.typography.headlineMedium)
                     Text("The latest recording, phase by phase. Updates while recognition runs.")
                     Text(
-                        "Timings stay in memory for ten minutes after completion, or until the next recording or process exit. No audio or dictated text is included.",
+                        "Live timings stay in memory for ten minutes. One content-free checkpoint survives restart until you clear it or start another recording. No audio or dictated text is included.",
                     )
                     Text("App startup checks", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Every process start checks all installed model files. These times are separate from dictation and stay available until the process closes.",
+                        "App startup checks all installed model files. These times are separate from dictation and stay available until the process closes.",
                     )
                     Text(startupMillis?.let { "Ready in ${DiagnosticReport.seconds(it)} s" } ?: modelStatus)
                     for (check in startupChecks) {
@@ -62,10 +64,20 @@ class DiagnosticsActivity : ComponentActivity() {
                     if (current == null) {
                         Text("No trace yet. Record and stop a dictation, then return here.")
                         OutlinedButton(onClick = { controller.copyText(export(null)) }) { Text("Copy startup diagnostics") }
+                        checkpoint?.let { saved ->
+                            Text("Saved runtime checkpoint", style = MaterialTheme.typography.titleMedium)
+                            Text("A RUNNING checkpoint after restart means work was interrupted; it is not resumed.")
+                            Text(saved)
+                            OutlinedButton(onClick = { controller.copyText(saved) }) { Text("Copy saved checkpoint") }
+                            OutlinedButton(
+                                onClick = controller::clearDiagnostics,
+                                enabled = !session.busy && !nativeBusy,
+                            ) { Text("Clear diagnostics") }
+                        }
                     } else {
                         Text(
                             if (current.comparison) {
-                                "Comparison · ${current.modelIds.size} models, one after another"
+                                "Comparison · ${current.modelIds.size} passes, one after another"
                             } else {
                                 "Everyday dictation · one model"
                             },
@@ -89,7 +101,9 @@ class DiagnosticsActivity : ComponentActivity() {
                         }
                         current.audioMillis?.let { Text("Recorded audio: ${DiagnosticReport.seconds(it)} s") }
                         if (current.cancellationRequested) {
-                            Text("Cancellation requested. Native model loading cannot be interrupted; cleanup follows when it returns.")
+                            Text(
+                                "Cancellation requested. If native cleanup stalls for ten seconds, the recognition worker is terminated before temporary audio is deleted.",
+                            )
                         }
                         current.failureStage?.let { Text("Failure during: ${it.label}") }
                         for (step in current.steps) {
@@ -104,6 +118,7 @@ class DiagnosticsActivity : ComponentActivity() {
                                         )
                                     }
                                     Text(step.stage.label, style = MaterialTheme.typography.titleSmall)
+                                    step.backend?.let { Text(it.label) }
                                     Text("${DiagnosticReport.seconds(step.durationMillis)} s${if (step.running) " · running" else ""}")
                                     Text(
                                         "Started +${DiagnosticReport.seconds(step.startMillis)} s after tapping Record",
@@ -111,6 +126,9 @@ class DiagnosticsActivity : ComponentActivity() {
                                     )
                                 }
                             }
+                        }
+                        for (runtime in current.runtimes) {
+                            Card(Modifier.fillMaxWidth()) { Text(runtime.export(), Modifier.padding(12.dp)) }
                         }
                         Text(
                             "Recognition includes audio features, language detection in Auto, encoder and decoder. Its percentage is an upstream progress estimate, not a countdown. Timings measure wall time, including scheduling delays.",
@@ -124,7 +142,7 @@ class DiagnosticsActivity : ComponentActivity() {
                                 ),
                             )
                         }) { Text("Share diagnostics") }
-                        OutlinedButton(onClick = controller.diagnostics::clear, enabled = !session.busy && !nativeBusy) {
+                        OutlinedButton(onClick = controller::clearDiagnostics, enabled = !session.busy && !nativeBusy) {
                             Text("Clear diagnostics")
                         }
                     }
@@ -150,6 +168,7 @@ class DiagnosticsActivity : ComponentActivity() {
             }
         return "App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}); " +
             "Android: ${Build.VERSION.RELEASE}; API: ${Build.VERSION.SDK_INT}\n" +
+            "Hardware: ${Build.MANUFACTURER} ${Build.MODEL}; ABIs: ${Build.SUPPORTED_ABIS.joinToString()}\n" +
             "Microphone permission: $microphone; floating mic connected: ${controller.connected.value}\n" +
             startup + (report?.export() ?: "No recording trace yet. No text, audio or file paths included.\n")
     }

@@ -52,6 +52,12 @@ adds a pinned multi-profile catalog and explicit sequential comparison without
 making phone accuracy or latency claims. CPU/arm64 is the reference phone path. Measure tiny/base/small rather
 than promising latency or Pixel accelerator support.
 
+The accepted [GPU experiment](../decisions/0005-vulkan-device-experiment.md)
+adds opt-in Vulkan and same-recording CPU/GPU comparison. Native inference
+runs in a bound, non-exported worker process, one fresh process/context per
+pass. CPU disables Vulkan registration; GPU failure is explicit. Keep one
+small content-free restart checkpoint, with no transcript/audio history.
+
 Local dictation makes no network calls. Remote STT and cleanup are independently
 configured and opt-in, with exact HTTPS endpoints, bounded responses, safe
 secret storage, no cross-origin credential forwarding, and no automatic POST

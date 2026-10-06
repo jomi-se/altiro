@@ -16,6 +16,7 @@ import kotlinx.coroutines.launch
 import org.altiro.core.DiagnosticOutcome
 import org.altiro.core.EditorAuthority
 import org.altiro.core.Phase
+import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
@@ -36,7 +37,8 @@ class DictationController(
     val editorLabel = MutableStateFlow("No eligible field")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
-    val recognition = LocalRecognition()
+    val checkpoint = RuntimeCheckpoint(context)
+    val recognition = LocalRecognition(context, checkpoint)
     val progress = MutableStateFlow(0)
     val activeModelName = MutableStateFlow("")
     val lastRun = MutableStateFlow<List<TimedTranscript>>(emptyList())
@@ -53,6 +55,12 @@ class DictationController(
     val processingSeconds = MutableStateFlow(0)
     val language =
         MutableStateFlow(context.getSharedPreferences("preferences", Context.MODE_PRIVATE).getString("language", "auto") ?: "auto")
+    val backend =
+        MutableStateFlow(
+            RecognitionBackend.entries.firstOrNull {
+                it.name == context.getSharedPreferences("preferences", Context.MODE_PRIVATE).getString("backend", "CPU")
+            } ?: RecognitionBackend.CPU,
+        )
     var insertion: (() -> Unit)? = null
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
@@ -78,24 +86,35 @@ class DictationController(
     fun begin(
         explicit: Boolean,
         compareIds: List<String>? = null,
+        gpuCompare: Boolean = false,
+        gpuFirst: Boolean = false,
     ): SessionId? {
         checkMain()
         val state = session.value
         if (state.busy || state.phase in setOf(Phase.READY, Phase.AWAITING_USER)) return null
         if (models.busy.value || recognition.busy.value) return null
         if (compareIds != null && (!explicit || compareIds.size !in 2..4 || compareIds.distinct().size != compareIds.size)) return null
+        if (gpuCompare && (!explicit || compareIds != null)) return null
         val profiles =
             (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
                 models.profiles.firstOrNull { it.spec.id == id } ?: return null
             }
         if (profiles.any { it.spec.id !in models.installed.value }) return null
-        runPlan = RunPlan(profiles.map(models::snapshot), language.value)
-        comparing.value = compareIds != null
+        val inputs =
+            if (gpuCompare) {
+                val order = listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let { if (gpuFirst) it.reversed() else it }
+                order.map { models.snapshot(profiles.single()).copy(backend = it) }
+            } else {
+                profiles.map { models.snapshot(it).copy(backend = backend.value) }
+            }
+        runPlan = RunPlan(inputs, language.value)
+        comparing.value = compareIds != null || gpuCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
         diagnosticGeneration = id.value
-        diagnostics.begin(runPlan!!.language, profiles.map { it.spec.id }, compareIds != null)
+        diagnostics.begin(runPlan!!.language, inputs.map { it.spec.id }, comparing.value, inputs.map { it.backend })
+        checkpoint.save(diagnostics.report.value)
         scope.launch {
             while (diagnosticGeneration == id.value && diagnostics.report.value?.let { it.outcome == null } == true) {
                 delay(1000)
@@ -184,7 +203,13 @@ class DictationController(
                     }
                     when {
                         comparing.value && result.isSuccess && transcripts.isNotEmpty() -> event(SessionEvent.ComparisonComplete(id))
-                        result.isFailure -> event(SessionEvent.Fail(id, "Local recognition failed. Check the model and try again."))
+                        result.isFailure ->
+                            event(
+                                SessionEvent.Fail(
+                                    id,
+                                    "Recognition failed. Open diagnostics for the backend and failure code. Try CPU if testing GPU.",
+                                ),
+                            )
                         text.isNullOrBlank() -> event(SessionEvent.Fail(id, "No speech was recognized. Try again or choose a language."))
                         else -> {
                             event(SessionEvent.Result(id, text))
@@ -237,6 +262,18 @@ class DictationController(
         if (session.value.busy || recognition.busy.value || models.busy.value) return
         language.value = value
         preferences.edit().putString("language", value).apply()
+    }
+
+    fun selectBackend(value: RecognitionBackend) {
+        if (session.value.busy || recognition.busy.value || models.busy.value) return
+        backend.value = value
+        preferences.edit().putString("backend", value.name).apply()
+    }
+
+    fun clearDiagnostics() {
+        if (session.value.busy || recognition.busy.value) return
+        diagnostics.clear()
+        checkpoint.clear()
     }
 
     fun stop() {

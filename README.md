@@ -70,6 +70,15 @@ Copy/Share exports a content-free timing report, including failed/cancelled runs
 The trace stays in memory for ten minutes after completion and is replaced by
 the next recording. See [phone diagnostics](docs/testing/recognition-diagnostics.md).
 
+The in-app **Recognition processor** setting adds experimental **Vulkan GPU**;
+CPU remains the default. **Compare CPU and GPU** uses the selected model twice
+on one recording and never inserts automatically. GPU initialization/failure
+and compute counters appear in diagnostics. A single content-free checkpoint
+survives restart; **Clear diagnostics** removes it. Visible recording and
+diagnostics screens stay awake during work; manual lock still cancels. See
+[GPU testing](docs/testing/gpu-experiment.md). Phone speed/compatibility remain
+unverified, and a failed GPU run is never silently retried on CPU.
+
 ## Development checks
 
 Use JDK 21, the pinned wrapper, Android SDK Platform 37.0, Build Tools 36.0.0,

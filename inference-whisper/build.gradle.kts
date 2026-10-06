@@ -16,6 +16,9 @@ android {
         externalNativeBuild {
             cmake {
                 arguments += listOf("-DANDROID_STL=c++_static", "-DCMAKE_BUILD_TYPE=Release")
+                providers.environmentVariable("ALTIRO_GLSLC").orNull?.let {
+                    arguments += "-DVulkan_GLSLC_EXECUTABLE=$it"
+                }
             }
         }
     }

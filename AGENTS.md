@@ -38,6 +38,11 @@ separately rather than assuming their training labels establish quality.
 Recognition diagnostics provides content-free phase timings and Copy/Share;
 see `docs/decisions/0004-recognition-diagnostics.md`. Cold loading remains the
 reference path until phone measurements justify an optimization.
+The experimental Vulkan selector and CPU/GPU comparison use a non-exported
+recognition process per pass, structured runtime diagnostics, and one content-free
+restart checkpoint. CPU is the default; GPU failure never retries on CPU.
+Visible recording/diagnostics screens stay awake during work; manual lock still
+cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 
 Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only

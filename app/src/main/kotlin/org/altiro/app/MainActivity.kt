@@ -100,6 +100,13 @@ class MainActivity : ComponentActivity() {
                         pendingImportId = id
                         modelImport.launch(arrayOf("*/*"))
                     }
+                    GpuControls(controller, allowed) { gpuFirst ->
+                        startActivity(
+                            Intent(this@MainActivity, RecordingActivity::class.java)
+                                .putExtra("compare-backends", true)
+                                .putExtra("gpu-first", gpuFirst),
+                        )
+                    }
                     ComparisonControls(controller, allowed) { ids ->
                         startActivity(
                             Intent(
@@ -185,13 +192,20 @@ internal fun ResultControls(controller: DictationController) {
     val comparing by controller.comparing.collectAsState()
     val diagnostic by controller.diagnostics.report.collectAsState()
     val context = LocalContext.current
+    KeepAwake(session.busy || nativeBusy)
     if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
         Text("$modelName · ${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop")
         Text(controller.processingLabel())
+        diagnostic
+            ?.steps
+            ?.lastOrNull { it.running }
+            ?.backend
+            ?.let { Text(it.label) }
         val trace = diagnostic
         if (trace?.comparison == true) {
-            val index = trace.modelIds.indexOf(trace.steps.lastOrNull { it.modelId != null }?.modelId) + 1
-            Text("Comparison · model ${index.coerceAtLeast(1)} of ${trace.modelIds.size}, running sequentially")
+            val step = trace.steps.lastOrNull { it.modelId != null }
+            val index = trace.modelIds.zip(trace.backends).indexOf(step?.modelId to step?.backend) + 1
+            Text("Comparison · pass ${index.coerceAtLeast(1)} of ${trace.modelIds.size}, running sequentially")
         }
         Text("The microphone is released.")
         if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE) {
@@ -207,7 +221,7 @@ internal fun ResultControls(controller: DictationController) {
         OutlinedButton(onClick = { context.startActivity(Intent(context, DiagnosticsActivity::class.java)) }) { Text("View phase timings") }
     }
     if (comparing && results.isNotEmpty()) {
-        Text("Same recording · ${results.size} models", style = MaterialTheme.typography.titleMedium)
+        Text("Same recording · ${results.size} passes", style = MaterialTheme.typography.titleMedium)
         Text("Times include verification, cold model loading and recognition. Models run one after another; these are not accuracy scores.")
         for (result in results) {
             Card(Modifier.fillMaxWidth()) {
@@ -219,6 +233,7 @@ internal fun ResultControls(controller: DictationController) {
                         style = MaterialTheme.typography.titleMedium,
                     )
                     Text("${"%.1f".format(java.util.Locale.ROOT, result.elapsedMillis / 1000.0)} seconds")
+                    Text(result.backend.label)
                     Text(result.text.ifBlank { "No speech recognized." })
                     OutlinedButton(
                         onClick = { controller.copyText(result.text) },
@@ -244,6 +259,47 @@ internal fun ResultControls(controller: DictationController) {
     }
     if (session.text == null && !(comparing && results.isNotEmpty())) session.message?.let { Text(it) }
     Spacer(Modifier.height(4.dp))
+}
+
+@Composable
+private fun GpuControls(
+    controller: DictationController,
+    microphoneAllowed: Boolean,
+    compare: (Boolean) -> Unit,
+) {
+    val backend by controller.backend.collectAsState()
+    val session by controller.session.collectAsState()
+    val busy by controller.recognition.busy.collectAsState()
+    val modelBusy by controller.models.busy.collectAsState()
+    val ready by controller.models.ready.collectAsState()
+    val selected by controller.models.selected.collectAsState()
+    val available = !session.busy && !busy && !modelBusy
+    var gpuFirst by remember { mutableStateOf(false) }
+    Text("Recognition processor", style = MaterialTheme.typography.titleMedium)
+    Text("Selected: ${backend.label}. CPU is the reference; GPU speed and compatibility need testing on your phone.")
+    for (option in org.altiro.core.RecognitionBackend.entries) {
+        Row(
+            Modifier.fillMaxWidth().selectable(backend == option, enabled = available, role = Role.RadioButton) {
+                controller.selectBackend(option)
+            },
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            RadioButton(selected = backend == option, onClick = null, enabled = available)
+            Text(option.label)
+        }
+    }
+    Text("GPU failures are reported in diagnostics. The app does not silently retry on CPU.")
+    Text("CPU/GPU comparison uses ${selected.name} twice with the same recording and language. Nothing is inserted automatically.")
+    Row(
+        Modifier.fillMaxWidth().toggleable(gpuFirst, enabled = available, role = Role.Checkbox) { gpuFirst = it },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = gpuFirst, onCheckedChange = null, enabled = available)
+        Text("Run GPU first (reverse the comparison order)")
+    }
+    Button(onClick = { compare(gpuFirst) }, enabled = available && ready && microphoneAllowed && session.text == null) {
+        Text("Compare CPU and GPU")
+    }
 }
 
 @Composable

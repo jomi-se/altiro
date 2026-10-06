@@ -2,6 +2,7 @@ package org.altiro.core
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertThrows
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -83,5 +84,41 @@ class RecognitionDiagnosticsTest {
         assertEquals(null, trace.report.value!!.failureStage)
         trace.clear()
         assertEquals(null, trace.report.value)
+    }
+
+    @Test fun sameModelBackendPhasesAndFailureStayDistinctAndExcludeContent() {
+        var clock = 0L
+        val trace = RecognitionDiagnostics { clock }
+        trace.begin("es", listOf("model-a", "model-a"), true, listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN))
+        trace.selectBackend(RecognitionBackend.CPU)
+        trace.phase(RecognitionStage.INFERENCE, "model-a")
+        clock += 1_000_000_000
+        trace.selectBackend(RecognitionBackend.VULKAN)
+        trace.phase(RecognitionStage.INFERENCE, "model-a")
+        clock += 2_000_000_000
+        trace.runtime(
+            RuntimeDetails(
+                "model-a",
+                RecognitionBackend.VULKAN,
+                RuntimeStatus.WORKER_DIED,
+                RuntimeFailure.WORKER_DIED,
+                gpuName = "Mali-G710",
+                vulkanVersion = "1.3.0",
+                storage16 = true,
+            ),
+        )
+        trace.markFailure()
+        trace.phase(RecognitionStage.AUDIO_DELETE)
+        trace.finish(DiagnosticOutcome.FAILED)
+        val report = trace.report.value!!
+        val phases = report.steps.filter { it.stage == RecognitionStage.INFERENCE }
+        assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), phases.map { it.backend })
+        assertEquals(listOf(1000L, 2000L), phases.map { it.durationMillis })
+        assertTrue(report.export().contains("WORKER_DIED"))
+        assertTrue(report.export().contains("Mali-G710"))
+        assertThrows(
+            IllegalArgumentException::class.java,
+        ) { RuntimeDetails("model-a", RecognitionBackend.VULKAN, gpuName = "/private/file") }
+        assertThrows(IllegalArgumentException::class.java) { RuntimeDetails("model-a", RecognitionBackend.VULKAN, encodeMillis = -1) }
     }
 }

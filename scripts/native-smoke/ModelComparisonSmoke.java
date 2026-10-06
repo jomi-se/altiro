@@ -10,7 +10,7 @@ public final class ModelComparisonSmoke {
         for (int i = 2; i < args.length; i++) {
             long handle = runtime.create();
             try {
-                String text = runtime.transcribe(handle, args[i], args[1], "en", percent -> {});
+                String text = runtime.transcribe(handle, args[i], args[1], "en", false, percent -> {});
                 if (text == null || !text.toLowerCase(java.util.Locale.ROOT).contains("country")) {
                     throw new AssertionError("Public sample recognition failed for model index " + i);
                 }
