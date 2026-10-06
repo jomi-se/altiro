@@ -25,6 +25,12 @@ first push and first CI execution remain pending. See the
 [publication review](public-repository.md). The owner explicitly retains
 existing public author identities.
 
+The proposed [native UI directions](../ideas/product-ui-directions.md) capture
+the concrete design choices awaiting owner selection. The design workflow
+choice (build directly or first approve a visual concept) is also pending;
+no standing workflow default was inferred or stored. The current APK remains
+unchanged by this documentation/security increment.
+
 ## Offline recognition preview
 
 The operator reports that the first fixed-phrase APK inserts, shows microphone
