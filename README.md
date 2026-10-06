@@ -17,6 +17,8 @@ Gate A and B remain unverified. See the
 ## Start here
 
 - [Product North Star](docs/product-north-star.md): the purpose and boundaries.
+- [Productization brief](docs/plan/productization.md): the daily-use direction
+  and the reasons behind setup, model, overlay and console choices.
 - [Android dictation specification](docs/plan/android-dictation/spec.md): the
   supplied implementation guidance, including exact APIs and milestone gates.
 - [Implementation defaults](docs/architecture/implementation-defaults.md): how
@@ -24,6 +26,7 @@ Gate A and B remain unverified. See the
 - [Current work](docs/plan/current-work.md): what exists and what comes next.
 - [Build order](docs/plan/vertical-slice-build-order.md): ordered increments.
 - [Contributing](CONTRIBUTING.md): setup and repository workflow.
+- [Security policy](SECURITY.md): private reporting and local secret checks.
 
 ## Product direction
 

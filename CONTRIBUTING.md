@@ -33,6 +33,11 @@ emulator and physical-device results distinct. Private recordings and
 machine-specific evidence do not belong in a pull request or Git history.
 
 Use explicit staging paths, review the staged diff, and commit completed work.
+Install the checksum-pinned secret scanner with `./scripts/install-gitleaks.sh`.
+Run `./scripts/scan-secrets.sh staged` before committing and
+`./scripts/scan-secrets.sh history` before publication. Never commit model/audio
+artifacts, signing keys or local design-tool installations. See
+[the security policy](SECURITY.md).
 The operator performs pushes and publication. Do not change credential setup
 or use another credential path to bypass that boundary.
 

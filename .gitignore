@@ -48,7 +48,9 @@ signing.properties
 # Locally materialized skills and harness state
 .agents/skills/
 .agents/bundles/
+.agent/skills/
 .claude/skills/
+.claude/agents/impeccable-*.md
 skills-lock.json
 .impeccable/
 

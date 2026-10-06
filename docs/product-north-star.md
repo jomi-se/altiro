@@ -8,6 +8,11 @@ allowance, account, or company-operated service.
 
 ## The daily interaction
 
+The maintainer's daily Pixel 7 use is the initial product reference: technical
+English and Chilean Spanish, with French also supported. See the accepted
+[productization brief](plan/productization.md) for setup, model acquisition,
+overlay, motion and console requirements and their rationale.
+
 Keep using your preferred keyboard in another app. Tap a floating microphone,
 speak naturally, stop, and receive useful text at the intended cursor or
 selection. English, French, and Spanish technical conversation are the initial

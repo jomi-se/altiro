@@ -2,6 +2,29 @@
 
 Updated: 2026-10-06.
 
+## Productization direction
+
+The owner now prioritizes everyday product use over adding recognition models.
+The accepted [productization brief](productization.md) captures the maintainer
+as primary user, one-tap model downloads including the Chilean fine-tune, a
+bold native app with a quiet translucent overlay, bubble language access,
+automatic insertion for valid destinations, dynamic windows, visible working
+motion, and an in-app diagnostic console. `PRODUCT.md` summarizes confirmed
+product facts for optional design tools. Their installation and harness files
+are ignored; the public product docs are independent of those tools.
+
+The existing app still uses browser download plus import. Chilean converted
+artifacts have no public direct-download destination yet. The new acquisition
+and UI requirements are a plan, not completed implementation evidence.
+
+Public-repository preparation adds private-reporting guidance, staged and
+full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency
+update configuration alongside existing GitHub Actions updates. Remote security
+settings have been verified on the new public repository. It is still empty;
+first push and first CI execution remain pending. See the
+[publication review](public-repository.md). The owner explicitly retains
+existing public author identities.
+
 ## Offline recognition preview
 
 The operator reports that the first fixed-phrase APK inserts, shows microphone
@@ -147,7 +170,15 @@ or more retain normal full-window processing. Model files stay unchanged.
 backend and attention setting held fixed, with reversible order and no insertion
 payload. Modes are frozen before capture and included in result/trace identity.
 Native-selected context frames and Auto's separate full-window detection are
-exported. Version 0.4.2 accuracy, performance and phone lifecycle remain unverified.
+exported. The operator reports a completed 0.4.2 same-recording comparison on
+Pixel 7: 6.84 seconds of audio, fixed EN, stock Small FP16, Vulkan and Flash
+Attention on for both passes. Dynamic selected 10 seconds and took 5.40 seconds
+inference / 3.131 seconds encoder; full selected 30 seconds and took 11.67
+seconds inference / 9.266 seconds encoder. Both report one encoder call and 24
+decoder calls, without typed failures. This is promising short-clip latency
+evidence, not a controlled thermal benchmark; transcript quality and ending
+preservation were not supplied. The full accuracy and lifecycle gates remain
+unverified.
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded

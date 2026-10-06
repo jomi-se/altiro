@@ -10,6 +10,8 @@ initial choices. No additional decision records are needed to restate it.
   explicit preview default with visible recording fallback.
 - [0003 — Small model comparison](0003-small-model-comparison.md):
   separate imports, in-app selection, and ephemeral same-recording comparison.
+- [0008 — Explicit model acquisition](0008-explicit-model-acquisition.md):
+  one-tap verified downloads, separate from offline recognition.
 
 Record meaningful departures or newly resolved forks as numbered Markdown
 files with title, status, date, context, decision, consequences, and evidence.
