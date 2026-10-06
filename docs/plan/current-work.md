@@ -120,6 +120,24 @@ attention method; there is no demonstrated encoder speed improvement from
 Flash Attention in these samples. Version 0.4.1 cancellation/manual lock,
 failure recovery, multilingual accuracy and device gates remain unverified.
 
+The operator then reports two single-model Small FP16 Vulkan runs with fixed
+EN, Flash Attention on first and off second. Both finish without failures,
+initialize the GPU backend, and report a context attention setting matching
+the requested switch. Each makes one encoder call:
+
+| Flash Attention | Audio | Encoder counter | Decoder calls | Inference | After Stop |
+| --- | --- | --- | --- | --- | --- |
+| On | 11.48 s | 9.222 s | 27 | 11.82 s | 14.43 s |
+| Off | 10.96 s | 8.746 s | 41 | 12.24 s | 15.02 s |
+
+The on run has a 5.4% higher encoder counter and a 0.59-second shorter
+post-Stop wait. It also makes fewer decoder calls and spends 0.26 seconds
+stopping its worker versus 0.74 seconds in the off run. The recordings differ,
+and temperature/clocks were not measured; these results neither establish an
+attention-specific speedup nor prove a regression. They show comparable
+ordinary-dictation latency and successful use of both switch settings. The
+remaining roughly nine-second encoder cost persists in both configurations.
+
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
 copy, cancellation, and atomic installation. Failed imports preserve a valid

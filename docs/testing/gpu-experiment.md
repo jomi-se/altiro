@@ -98,5 +98,8 @@ phone. Initial user-reported version 0.4.1 Small FP16 and Base comparisons both
 complete with Flash Attention enabled in the Whisper context; their timings
 and evidence limits are recorded in [current work](../plan/current-work.md).
 These CPU/GPU comparisons change both backend and attention setting, so they
-do not isolate the attention method. See
+do not isolate the attention method. Later single-model Small FP16 Vulkan
+reports complete with the switch on and off, with comparable latency; those
+recordings and decoder-call counts differ, so they also do not establish an
+attention-specific speed improvement. See
 [decision 0006](../decisions/0006-flash-attention-experiment.md).
