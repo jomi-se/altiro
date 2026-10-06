@@ -9,13 +9,16 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class NativeLifecycleTest {
-    @Test fun preCancelledOperationDoesNotLoadMissingFiles() {
+    @Test
+    fun preCancelledOperationDoesNotLoadMissingFiles() {
         val runtime = NativeWhisper()
         repeat(20) {
             val handle = runtime.create()
             try {
                 runtime.cancel(handle)
-                assertNull(runtime.transcribe(handle, "unused", "unused", "es", false, NativeProgress {}))
+                assertNull(
+                    runtime.transcribe(handle, "unused", "unused", "es", false, NativeProgress {})
+                )
             } finally {
                 runtime.release(handle)
             }

@@ -51,9 +51,16 @@ object VerifiedModel {
                 }
                 output.flush()
             }
-            require(count == spec.bytes && hex(digest.digest()) == spec.sha256) { "Model verification failed" }
+            require(count == spec.bytes && hex(digest.digest()) == spec.sha256) {
+                "Model verification failed"
+            }
             if (cancelled()) throw CancellationException()
-            Files.move(partial.toPath(), destination.toPath(), StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
+            Files.move(
+                partial.toPath(),
+                destination.toPath(),
+                StandardCopyOption.ATOMIC_MOVE,
+                StandardCopyOption.REPLACE_EXISTING,
+            )
         } finally {
             partial.delete()
         }
@@ -78,5 +85,6 @@ object VerifiedModel {
         return hex(digest.digest()) == spec.sha256
     }
 
-    private fun hex(bytes: ByteArray): String = bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
+    private fun hex(bytes: ByteArray): String =
+        bytes.joinToString("") { "%02x".format(it.toInt() and 0xff) }
 }

@@ -24,7 +24,8 @@ import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
 
 class RecordingActivity : ComponentActivity() {
-    private val controller get() = (application as AltiroApplication).controller
+    private val controller
+        get() = (application as AltiroApplication).controller
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -49,9 +50,7 @@ class RecordingActivity : ComponentActivity() {
                     Text(
                         if (gpuCompare) {
                             "Compare CPU and GPU"
-                        } else if (compareIds != null ||
-                            comparing
-                        ) {
+                        } else if (compareIds != null || comparing) {
                             "Compare speech models"
                         } else {
                             "Dictate offline"
@@ -61,16 +60,14 @@ class RecordingActivity : ComponentActivity() {
                     Text(
                         if (gpuCompare) {
                             "The same ${selected.name} model processes one recording on CPU and Vulkan GPU, sequentially. Nothing is inserted automatically. Keep this screen open while testing."
-                        } else if (compareIds != null ||
-                            comparing
-                        ) {
+                        } else if (compareIds != null || comparing) {
                             "One recording is processed by each model sequentially. Nothing is inserted automatically. Copy the result you prefer. Starting another recording clears these results."
                         } else {
                             "Using ${selected.name} · ${backend.label}. Change settings in Altiro."
-                        },
+                        }
                     )
                     Text(
-                        "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control.",
+                        "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control."
                     )
                     Text(
                         when (session.phase) {
@@ -78,21 +75,33 @@ class RecordingActivity : ComponentActivity() {
                             Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
                             Phase.FINALIZING -> "Finishing recording…"
                             Phase.TRANSCRIBING -> "Recognizing your speech…"
-                            else -> if (allReady) "Ready to record" else "Open Altiro and import the supported model first."
-                        },
+                            else ->
+                                if (allReady) "Ready to record"
+                                else "Open Altiro and import the supported model first."
+                        }
                     )
-                    if (session.elapsedSeconds >= 270) Text("Recording stops at five minutes to bound memory and storage.")
+                    if (session.elapsedSeconds >= 270)
+                        Text("Recording stops at five minutes to bound memory and storage.")
                     Button(
                         onClick = ::startRecording,
-                        enabled = allReady && !modelBusy && !nativeBusy && !session.busy && session.text == null,
+                        enabled =
+                            allReady &&
+                                !modelBusy &&
+                                !nativeBusy &&
+                                !session.busy &&
+                                session.text == null,
                     ) {
                         Text("Start recording")
                     }
                     Button(
                         onClick = controller::stop,
                         enabled = session.phase in setOf(Phase.STARTING, Phase.RECORDING),
-                    ) { Text("Stop and transcribe") }
-                    OutlinedButton(onClick = controller::cancel, enabled = session.busy) { Text("Cancel recording") }
+                    ) {
+                        Text("Stop and transcribe")
+                    }
+                    OutlinedButton(onClick = controller::cancel, enabled = session.busy) {
+                        Text("Cancel recording")
+                    }
                     ResultControls(controller)
                     OutlinedButton(onClick = { finish() }) { Text("Return to editor") }
                 }
@@ -102,7 +111,11 @@ class RecordingActivity : ComponentActivity() {
 
     private fun startRecording() {
         if (!lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) return
-        if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED) return
+        if (
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+                PackageManager.PERMISSION_GRANTED
+        )
+            return
         val id =
             controller.begin(
                 explicit = true,
@@ -111,11 +124,23 @@ class RecordingActivity : ComponentActivity() {
                 gpuFirst = intent.getBooleanExtra("gpu-first", false),
             ) ?: return
         try {
-            startForegroundService(DictationRecordingService.intent(this, DictationRecordingService.START, id))
+            startForegroundService(
+                DictationRecordingService.intent(this, DictationRecordingService.START, id)
+            )
         } catch (_: ForegroundServiceStartNotAllowedException) {
-            controller.event(SessionEvent.Fail(id, "Android blocked recording startup. Keep this screen visible and try again."))
+            controller.event(
+                SessionEvent.Fail(
+                    id,
+                    "Android blocked recording startup. Keep this screen visible and try again.",
+                )
+            )
         } catch (_: SecurityException) {
-            controller.event(SessionEvent.Fail(id, "Microphone access was denied. Check system permissions and microphone privacy."))
+            controller.event(
+                SessionEvent.Fail(
+                    id,
+                    "Microphone access was denied. Check system permissions and microphone privacy.",
+                )
+            )
         }
     }
 }

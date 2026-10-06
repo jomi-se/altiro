@@ -4,16 +4,16 @@ import android.content.Context
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
+import java.io.IOException
+import java.util.concurrent.CancellationException
+import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.altiro.core.ModelSpec
 import org.altiro.core.RecognitionInput
 import org.altiro.core.VerifiedModel
 import org.json.JSONObject
-import java.io.IOException
-import java.util.concurrent.CancellationException
-import java.util.concurrent.Executors
-import java.util.concurrent.atomic.AtomicBoolean
 
 data class ModelProfile(
     val spec: ModelSpec,
@@ -30,21 +30,21 @@ data class ModelCheckTiming(
     val verified: Boolean,
 )
 
-class ModelStore(
-    private val context: Context,
-) {
+class ModelStore(private val context: Context) {
     val profiles: List<ModelProfile> =
         JSONObject(
-            context.assets
-                .open("whisper-models.json")
-                .bufferedReader()
-                .use { it.readText() },
-        ).getJSONArray("models")
+                context.assets.open("whisper-models.json").bufferedReader().use { it.readText() }
+            )
+            .getJSONArray("models")
             .let { models ->
                 List(models.length()) { index ->
                     val item = models.getJSONObject(index)
                     ModelProfile(
-                        ModelSpec(item.getString("id"), item.getLong("bytes"), item.getString("sha256")),
+                        ModelSpec(
+                            item.getString("id"),
+                            item.getLong("bytes"),
+                            item.getString("sha256"),
+                        ),
                         item.getString("displayName"),
                         item.getString("filename"),
                         item.getString("sourceUrl"),
@@ -56,9 +56,14 @@ class ModelStore(
     private val preferences = context.getSharedPreferences("preferences", Context.MODE_PRIVATE)
     private val initialId =
         preferences.getString("model", null)
-            ?: if (context.filesDir.resolve("models/ggml-base.bin").isFile) "whisper-base-multilingual" else SMALL_Q8
+            ?: if (context.filesDir.resolve("models/ggml-base.bin").isFile)
+                "whisper-base-multilingual"
+            else SMALL_Q8
     private val mutableSelected =
-        MutableStateFlow(profiles.firstOrNull { it.spec.id == initialId } ?: profiles.first { it.spec.id == SMALL_Q8 })
+        MutableStateFlow(
+            profiles.firstOrNull { it.spec.id == initialId }
+                ?: profiles.first { it.spec.id == SMALL_Q8 }
+        )
     val selected = mutableSelected.asStateFlow()
     private val mutableInstalled = MutableStateFlow<Set<String>>(emptySet())
     val installed = mutableInstalled.asStateFlow()
@@ -92,18 +97,26 @@ class ModelStore(
                         if (exists) main.post { mutableStatus.value = "Checking ${it.name}…" }
                         val verified =
                             runCatching {
-                                VerifiedModel.matches(
-                                    file(it),
-                                    it.spec,
-                                )
-                            }.getOrDefault(false)
+                                    VerifiedModel.matches(
+                                        file(it),
+                                        it.spec,
+                                    )
+                                }
+                                .getOrDefault(false)
                         if (exists) {
-                            timings = timings + ModelCheckTiming(it.spec.id, (System.nanoTime() - started) / 1_000_000, verified)
+                            timings =
+                                timings +
+                                    ModelCheckTiming(
+                                        it.spec.id,
+                                        (System.nanoTime() - started) / 1_000_000,
+                                        verified,
+                                    )
                             val snapshot = timings
                             main.post { startupChecks.value = snapshot }
                         }
                         verified
-                    }.map { it.spec.id }
+                    }
+                    .map { it.spec.id }
                     .toSet()
             main.post {
                 startupMillis.value = (System.nanoTime() - startupStarted) / 1_000_000
@@ -115,9 +128,11 @@ class ModelStore(
         }
     }
 
-    fun file(profile: ModelProfile): java.io.File = context.filesDir.resolve("models/${profile.filename}")
+    fun file(profile: ModelProfile): java.io.File =
+        context.filesDir.resolve("models/${profile.filename}")
 
-    fun snapshot(profile: ModelProfile): RecognitionInput = RecognitionInput(profile.spec, file(profile))
+    fun snapshot(profile: ModelProfile): RecognitionInput =
+        RecognitionInput(profile.spec, file(profile))
 
     fun select(id: String) {
         checkMain()
@@ -141,10 +156,13 @@ class ModelStore(
             var result = "Import failed. Choose ${profile.filename} and check free storage."
             var imported = false
             try {
-                check(context.filesDir.usableSpace >= profile.spec.bytes + 10_000_000) { "Insufficient storage" }
+                check(context.filesDir.usableSpace >= profile.spec.bytes + 10_000_000) {
+                    "Insufficient storage"
+                }
                 val source = context.contentResolver.openInputStream(uri) ?: throw IOException()
                 source.use {
-                    VerifiedModel.install(it, file(profile), profile.spec, cancelled::get) { percent ->
+                    VerifiedModel.install(it, file(profile), profile.spec, cancelled::get) { percent
+                        ->
                         main.post { mutableStatus.value = "Importing ${profile.name} · $percent%" }
                     }
                 }
@@ -179,7 +197,9 @@ class ModelStore(
             main.post {
                 if (deleted) mutableInstalled.value = installed.value - profile.spec.id
                 updateReady()
-                mutableStatus.value = if (deleted) "${profile.name} deleted." else "Could not delete the model. Try again."
+                mutableStatus.value =
+                    if (deleted) "${profile.name} deleted."
+                    else "Could not delete the model. Try again."
                 mutableBusy.value = false
             }
         }

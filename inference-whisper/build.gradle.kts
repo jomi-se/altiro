@@ -26,11 +26,7 @@ android {
         cmake {
             path = file("src/main/cpp/CMakeLists.txt")
             version = "4.1.2"
-            buildStagingDirectory =
-                layout.buildDirectory
-                    .dir("native")
-                    .get()
-                    .asFile
+            buildStagingDirectory = layout.buildDirectory.dir("native").get().asFile
         }
     }
     compileOptions {

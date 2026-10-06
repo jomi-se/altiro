@@ -6,6 +6,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.os.Looper
+import java.io.File
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -25,11 +26,8 @@ import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
 import org.altiro.core.TimedTranscript
 import org.altiro.core.reduce
-import java.io.File
 
-class DictationController(
-    private val context: Context,
-) {
+class DictationController(private val context: Context) {
     val editor = EditorAuthority()
     private val mutableSession = MutableStateFlow(Session())
     val session = mutableSession.asStateFlow()
@@ -54,19 +52,27 @@ class DictationController(
     private var runPlan: RunPlan? = null
     val processingSeconds = MutableStateFlow(0)
     val language =
-        MutableStateFlow(context.getSharedPreferences("preferences", Context.MODE_PRIVATE).getString("language", "auto") ?: "auto")
+        MutableStateFlow(
+            context
+                .getSharedPreferences("preferences", Context.MODE_PRIVATE)
+                .getString("language", "auto") ?: "auto"
+        )
     val backend =
         MutableStateFlow(
             RecognitionBackend.entries.firstOrNull {
-                it.name == context.getSharedPreferences("preferences", Context.MODE_PRIVATE).getString("backend", "CPU")
-            } ?: RecognitionBackend.CPU,
+                it.name ==
+                    context
+                        .getSharedPreferences("preferences", Context.MODE_PRIVATE)
+                        .getString("backend", "CPU")
+            } ?: RecognitionBackend.CPU
         )
     var insertion: (() -> Unit)? = null
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
     private val preferences = context.getSharedPreferences("preferences", Context.MODE_PRIVATE)
 
-    fun isDisabled(packageName: String): Boolean = packageName in preferences.getStringSet("disabled", emptySet()).orEmpty()
+    fun isDisabled(packageName: String): Boolean =
+        packageName in preferences.getStringSet("disabled", emptySet()).orEmpty()
 
     fun disableCurrentApp() {
         val packageName = editor.current.identity?.packageName ?: return
@@ -93,7 +99,13 @@ class DictationController(
         val state = session.value
         if (state.busy || state.phase in setOf(Phase.READY, Phase.AWAITING_USER)) return null
         if (models.busy.value || recognition.busy.value) return null
-        if (compareIds != null && (!explicit || compareIds.size !in 2..4 || compareIds.distinct().size != compareIds.size)) return null
+        if (
+            compareIds != null &&
+                (!explicit ||
+                    compareIds.size !in 2..4 ||
+                    compareIds.distinct().size != compareIds.size)
+        )
+            return null
         if (gpuCompare && (!explicit || compareIds != null)) return null
         val profiles =
             (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
@@ -102,7 +114,10 @@ class DictationController(
         if (profiles.any { it.spec.id !in models.installed.value }) return null
         val inputs =
             if (gpuCompare) {
-                val order = listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let { if (gpuFirst) it.reversed() else it }
+                val order =
+                    listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let {
+                        if (gpuFirst) it.reversed() else it
+                    }
                 order.map { models.snapshot(profiles.single()).copy(backend = it) }
             } else {
                 profiles.map { models.snapshot(it).copy(backend = backend.value) }
@@ -113,10 +128,18 @@ class DictationController(
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
         diagnosticGeneration = id.value
-        diagnostics.begin(runPlan!!.language, inputs.map { it.spec.id }, comparing.value, inputs.map { it.backend })
+        diagnostics.begin(
+            runPlan!!.language,
+            inputs.map { it.spec.id },
+            comparing.value,
+            inputs.map { it.backend },
+        )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
-            while (diagnosticGeneration == id.value && diagnostics.report.value?.let { it.outcome == null } == true) {
+            while (
+                diagnosticGeneration == id.value &&
+                    diagnostics.report.value?.let { it.outcome == null } == true
+            ) {
                 delay(1000)
                 if (diagnosticGeneration == id.value) diagnostics.refresh()
             }
@@ -168,7 +191,12 @@ class DictationController(
                 processingSeconds.value += 1
                 if (processingSeconds.value >= 600) {
                     recognition.cancel()
-                    event(SessionEvent.Fail(id, "Recognition exceeded ten minutes. Try a shorter recording."))
+                    event(
+                        SessionEvent.Fail(
+                            id,
+                            "Recognition exceeded ten minutes. Try a shorter recording.",
+                        )
+                    )
                     context.stopService(Intent(context, DictationRecordingService::class.java))
                     break
                 }
@@ -176,21 +204,31 @@ class DictationController(
         }
         try {
             val plan = checkNotNull(runPlan)
-            diagnostics.audioDuration(((audio.length() - 44).coerceAtLeast(0) / 32).coerceAtMost(300_000))
-            recognition.transcribe(audio, plan.inputs, plan.language, diagnostics, { percent, modelId ->
-                if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
-                    activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
-                    progress.value = percent
-                    onProgress(percent)
-                }
-            }) { result ->
+            diagnostics.audioDuration(
+                ((audio.length() - 44).coerceAtLeast(0) / 32).coerceAtMost(300_000)
+            )
+            recognition.transcribe(
+                audio,
+                plan.inputs,
+                plan.language,
+                diagnostics,
+                { percent, modelId ->
+                    if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                        activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
+                        progress.value = percent
+                        onProgress(percent)
+                    }
+                },
+            ) { result ->
                 if (diagnosticGeneration == id.value) {
                     diagnostics.finish(
                         when {
-                            session.value.phase == Phase.FAILED || result.isFailure -> DiagnosticOutcome.FAILED
-                            diagnostics.report.value?.cancellationRequested == true -> DiagnosticOutcome.CANCELLED
+                            session.value.phase == Phase.FAILED || result.isFailure ->
+                                DiagnosticOutcome.FAILED
+                            diagnostics.report.value?.cancellationRequested == true ->
+                                DiagnosticOutcome.CANCELLED
                             else -> DiagnosticOutcome.COMPLETED
-                        },
+                        }
                     )
                 }
                 if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
@@ -202,22 +240,38 @@ class DictationController(
                         if (session.value.id == id && !session.value.busy) discard()
                     }
                     when {
-                        comparing.value && result.isSuccess && transcripts.isNotEmpty() -> event(SessionEvent.ComparisonComplete(id))
+                        comparing.value && result.isSuccess && transcripts.isNotEmpty() ->
+                            event(SessionEvent.ComparisonComplete(id))
                         result.isFailure ->
                             event(
                                 SessionEvent.Fail(
                                     id,
                                     "Recognition failed. Open diagnostics for the backend and failure code. Try CPU if testing GPU.",
-                                ),
+                                )
                             )
-                        text.isNullOrBlank() -> event(SessionEvent.Fail(id, "No speech was recognized. Try again or choose a language."))
+                        text.isNullOrBlank() ->
+                            event(
+                                SessionEvent.Fail(
+                                    id,
+                                    "No speech was recognized. Try again or choose a language.",
+                                )
+                            )
                         else -> {
                             event(SessionEvent.Result(id, text))
                             val target = session.value.destination
-                            if (target != null && editor.blockReason(target) == null && insertion != null) {
+                            if (
+                                target != null &&
+                                    editor.blockReason(target) == null &&
+                                    insertion != null
+                            ) {
                                 insertion?.invoke()
                             } else {
-                                event(SessionEvent.AwaitUser(id, "Text ready. Focus a field and tap Insert."))
+                                event(
+                                    SessionEvent.AwaitUser(
+                                        id,
+                                        "Text ready. Focus a field and tap Insert.",
+                                    )
+                                )
                             }
                         }
                     }
@@ -248,7 +302,8 @@ class DictationController(
 
     fun openModelDownload() {
         context.startActivity(
-            Intent(Intent.ACTION_VIEW, Uri.parse(models.selected.value.sourceUrl)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(Intent.ACTION_VIEW, Uri.parse(models.selected.value.sourceUrl))
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         )
     }
 
@@ -280,7 +335,9 @@ class DictationController(
         val id = session.value.id ?: return
         if (session.value.phase !in setOf(Phase.STARTING, Phase.RECORDING)) return
         event(SessionEvent.Stop(id))
-        context.startService(DictationRecordingService.intent(context, DictationRecordingService.STOP, id))
+        context.startService(
+            DictationRecordingService.intent(context, DictationRecordingService.STOP, id)
+        )
     }
 
     fun cancel() {
@@ -308,20 +365,23 @@ class DictationController(
     }
 
     fun copyText(text: String) {
-        context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Altiro dictation", text))
+        context
+            .getSystemService(ClipboardManager::class.java)
+            .setPrimaryClip(ClipData.newPlainText("Altiro dictation", text))
     }
 
     fun processingLabel(): String {
-        val step =
-            diagnostics.report.value
-                ?.steps
-                ?.lastOrNull { it.running }
+        val step = diagnostics.report.value?.steps?.lastOrNull { it.running }
         val label = step?.stage?.label ?: "Preparing recognition"
         val seconds = (step?.durationMillis ?: 0) / 1000
-        return if (step?.stage == RecognitionStage.INFERENCE) "$label · ${progress.value}% · ${seconds}s" else "$label · ${seconds}s"
+        return if (step?.stage == RecognitionStage.INFERENCE)
+            "$label · ${progress.value}% · ${seconds}s"
+        else "$label · ${seconds}s"
     }
 
     private fun checkMain() {
-        check(Looper.myLooper() == Looper.getMainLooper()) { "Session events must be serialized on main." }
+        check(Looper.myLooper() == Looper.getMainLooper()) {
+            "Session events must be serialized on main."
+        }
     }
 }

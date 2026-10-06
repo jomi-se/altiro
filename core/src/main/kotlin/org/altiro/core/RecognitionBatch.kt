@@ -29,17 +29,26 @@ object RecognitionBatch {
         failed: () -> Unit = {},
     ): List<TimedTranscript> {
         try {
-            require(inputs.size in 1..4 && inputs.map { it.spec.id to it.backend }.distinct().size == inputs.size)
-            val results =
-                inputs.map { input ->
-                    if (cancelled()) throw CancellationException()
-                    val started = clockNanos()
-                    phase(RecognitionStage.VERIFYING, input.spec.id)
-                    check(VerifiedModel.matches(input.file, input.spec, cancelled)) { "Model verification failed" }
-                    val text = transcribe(input)
-                    if (cancelled()) throw CancellationException()
-                    TimedTranscript(input.spec.id, text.orEmpty().trim(), (clockNanos() - started) / 1_000_000, input.backend)
+            require(
+                inputs.size in 1..4 &&
+                    inputs.map { it.spec.id to it.backend }.distinct().size == inputs.size
+            )
+            val results = inputs.map { input ->
+                if (cancelled()) throw CancellationException()
+                val started = clockNanos()
+                phase(RecognitionStage.VERIFYING, input.spec.id)
+                check(VerifiedModel.matches(input.file, input.spec, cancelled)) {
+                    "Model verification failed"
                 }
+                val text = transcribe(input)
+                if (cancelled()) throw CancellationException()
+                TimedTranscript(
+                    input.spec.id,
+                    text.orEmpty().trim(),
+                    (clockNanos() - started) / 1_000_000,
+                    input.backend,
+                )
+            }
             if (cancelled()) throw CancellationException()
             return results
         } catch (failure: Throwable) {

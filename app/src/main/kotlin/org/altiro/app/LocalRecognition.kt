@@ -9,6 +9,11 @@ import android.content.ServiceConnection
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import java.io.File
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.Executors
+import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.altiro.core.RecognitionBackend
@@ -21,11 +26,6 @@ import org.altiro.core.RuntimeFailure
 import org.altiro.core.RuntimeStatus
 import org.altiro.core.TimedTranscript
 import org.altiro.core.WorkerExitReason
-import java.io.File
-import java.util.concurrent.CountDownLatch
-import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
-import java.util.concurrent.atomic.AtomicBoolean
 
 /** One parent-owned batch; each native pass gets a fresh crash-contained worker process. */
 class LocalRecognition(
@@ -38,9 +38,7 @@ class LocalRecognition(
     val busy = mutableBusy.asStateFlow()
     private var active: Operation? = null
 
-    private class Operation(
-        val cancelled: AtomicBoolean = AtomicBoolean(),
-    ) {
+    private class Operation(val cancelled: AtomicBoolean = AtomicBoolean()) {
         @Volatile var call: NativeCall? = null
     }
 
@@ -66,28 +64,27 @@ class LocalRecognition(
         private var details = RuntimeDetails(input.spec.id, input.backend)
         private val text = StringBuilder()
         private val startedWall = System.currentTimeMillis()
-        private val death =
-            IBinder.DeathRecipient {
-                synchronized(guard) {
-                    if (finished.count != 0L) {
-                        details =
-                            if (operation.cancelled.get()) {
-                                details.copy(status = RuntimeStatus.CANCELLED)
-                            } else {
-                                details.copy(
-                                    status = RuntimeStatus.WORKER_DIED,
-                                    failure = RuntimeFailure.WORKER_DIED,
-                                    workerExit = exitReason(),
-                                )
-                            }
-                        publish()
-                        if (!operation.cancelled.get()) diagnostics.markFailure()
-                    }
+        private val death = IBinder.DeathRecipient {
+            synchronized(guard) {
+                if (finished.count != 0L) {
+                    details =
+                        if (operation.cancelled.get()) {
+                            details.copy(status = RuntimeStatus.CANCELLED)
+                        } else {
+                            details.copy(
+                                status = RuntimeStatus.WORKER_DIED,
+                                failure = RuntimeFailure.WORKER_DIED,
+                                workerExit = exitReason(),
+                            )
+                        }
+                    publish()
+                    if (!operation.cancelled.get()) diagnostics.markFailure()
                 }
-                died.countDown()
-                finished.countDown()
-                connected.countDown()
             }
+            died.countDown()
+            finished.countDown()
+            connected.countDown()
+        }
 
         private fun publish() {
             diagnostics.runtime(details)
@@ -100,7 +97,10 @@ class LocalRecognition(
                     context
                         .getSystemService(ActivityManager::class.java)
                         .getHistoricalProcessExitReasons(null, 0, 8)
-                        .firstOrNull { it.processName == "${context.packageName}:recognition" && it.timestamp >= startedWall }
+                        .firstOrNull {
+                            it.processName == "${context.packageName}:recognition" &&
+                                it.timestamp >= startedWall
+                        }
                 when (record?.reason) {
                     ApplicationExitInfo.REASON_LOW_MEMORY -> WorkerExitReason.LOW_MEMORY
                     ApplicationExitInfo.REASON_CRASH -> WorkerExitReason.CRASH
@@ -149,7 +149,10 @@ class LocalRecognition(
                             try {
                                 runtimeDetails(details, report)
                             } catch (_: Exception) {
-                                details.copy(status = RuntimeStatus.FAILED, failure = RuntimeFailure.INVALID_REPORT)
+                                details.copy(
+                                    status = RuntimeStatus.FAILED,
+                                    failure = RuntimeFailure.INVALID_REPORT,
+                                )
                             }
                         publish()
                     }
@@ -170,8 +173,12 @@ class LocalRecognition(
                         if (value != 0 && details.failure == RuntimeFailure.NONE) {
                             details =
                                 details.copy(
-                                    status = if (value == 1) RuntimeStatus.CANCELLED else RuntimeStatus.FAILED,
-                                    failure = if (value == 1) RuntimeFailure.NONE else RuntimeFailure.INFERENCE_FAILED,
+                                    status =
+                                        if (value == 1) RuntimeStatus.CANCELLED
+                                        else RuntimeStatus.FAILED,
+                                    failure =
+                                        if (value == 1) RuntimeFailure.NONE
+                                        else RuntimeFailure.INFERENCE_FAILED,
                                 )
                             publish()
                         }
@@ -211,7 +218,12 @@ class LocalRecognition(
             publish()
             main.post {
                 try {
-                    bound = context.bindService(Intent(context, RecognitionWorkerService::class.java), this, Context.BIND_AUTO_CREATE)
+                    bound =
+                        context.bindService(
+                            Intent(context, RecognitionWorkerService::class.java),
+                            this,
+                            Context.BIND_AUTO_CREATE,
+                        )
                 } catch (_: Exception) {
                     bound = false
                 }
@@ -230,7 +242,11 @@ class LocalRecognition(
                     )
                     if (operation.cancelled.get()) remote!!.cancel(1)
                     finished.await()
-                    check((status == 0 && synchronized(guard) { details.failure == RuntimeFailure.NONE }) || operation.cancelled.get())
+                    check(
+                        (status == 0 &&
+                            synchronized(guard) { details.failure == RuntimeFailure.NONE }) ||
+                            operation.cancelled.get()
+                    )
                 } else {
                     synchronized(guard) {
                         details = details.copy(status = RuntimeStatus.CANCELLED)
@@ -275,34 +291,38 @@ class LocalRecognition(
         fun cancel() {
             try {
                 remote?.cancel(1)
-            } catch (_: Exception) {
-            }
-            main.postDelayed({
-                if (finished.count != 0L && operation.call === this) {
-                    synchronized(guard) {
-                        details = details.copy(status = RuntimeStatus.CANCELLED, failure = RuntimeFailure.CANCEL_TIMEOUT)
-                        publish()
+            } catch (_: Exception) {}
+            main.postDelayed(
+                {
+                    if (finished.count != 0L && operation.call === this) {
+                        synchronized(guard) {
+                            details =
+                                details.copy(
+                                    status = RuntimeStatus.CANCELLED,
+                                    failure = RuntimeFailure.CANCEL_TIMEOUT,
+                                )
+                            publish()
+                        }
+                        unbindOnMain()
+                        terminate()
                     }
-                    unbindOnMain()
-                    terminate()
-                }
-            }, 10_000)
+                },
+                10_000,
+            )
         }
 
         private fun unbindOnMain() {
             if (!bound) return
             try {
                 context.unbindService(this)
-            } catch (_: IllegalArgumentException) {
-            }
+            } catch (_: IllegalArgumentException) {}
             bound = false
         }
 
         private fun terminate() {
             try {
                 remote?.shutdown()
-            } catch (_: Exception) {
-            }
+            } catch (_: Exception) {}
         }
     }
 
@@ -322,17 +342,21 @@ class LocalRecognition(
         diagnostics.phase(RecognitionStage.QUEUED)
         executor.execute {
             var index = 0
-            val result =
-                runCatching {
-                    RecognitionBatch.run(audio, inputs, operation.cancelled::get, { input ->
+            val result = runCatching {
+                RecognitionBatch.run(
+                    audio,
+                    inputs,
+                    operation.cancelled::get,
+                    { input ->
                         val current = index++
                         val call =
                             NativeCall(input, audio, language, operation, diagnostics) { percent ->
                                 main.post {
-                                    if (active === operation &&
-                                        !operation.cancelled.get()
-                                    ) {
-                                        progress((current * 100 + percent) / inputs.size, input.spec.id)
+                                    if (active === operation && !operation.cancelled.get()) {
+                                        progress(
+                                            (current * 100 + percent) / inputs.size,
+                                            input.spec.id,
+                                        )
                                     }
                                 }
                             }
@@ -342,17 +366,23 @@ class LocalRecognition(
                         } finally {
                             operation.call = null
                         }
-                    }, phase = { stage, modelId ->
-                        diagnostics.selectBackend(if (modelId == null) null else inputs[index].backend)
+                    },
+                    phase = { stage, modelId ->
+                        diagnostics.selectBackend(
+                            if (modelId == null) null else inputs[index].backend
+                        )
                         diagnostics.phase(stage, modelId)
                         checkpoint.save(diagnostics.report.value)
                         if (modelId != null) {
                             main.post {
-                                if (active === operation && !operation.cancelled.get()) progress(index * 100 / inputs.size, modelId)
+                                if (active === operation && !operation.cancelled.get())
+                                    progress(index * 100 / inputs.size, modelId)
                             }
                         }
-                    }, failed = diagnostics::markFailure)
-                }
+                    },
+                    failed = diagnostics::markFailure,
+                )
+            }
             diagnostics.phase(RecognitionStage.WORKER_RELEASE)
             main.post {
                 if (active === operation) active = null

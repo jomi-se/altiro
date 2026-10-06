@@ -93,8 +93,9 @@ comparison (including the same model with two backends and no silent fallback),
 cancellation before later models, corrupted model rejection, audio
 cleanup on failure, and comparison having no insertion payload. Both apps and instrumentation
 APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
-Actual ELF/APK 16 KiB alignment passes for bundled native libraries. Formatting
-and model manifest/artifact validation pass. Instrumentation is compiled
+Actual ELF/APK 16 KiB alignment passes for bundled native libraries. Kotlin formatting is applied automatically with ktfmt before verification;
+ktlint style/line-length rules have been removed. Model manifest/artifact validation
+passes. Instrumentation is compiled
 separately from execution. Read-only CI includes build checks and an API 33 emulator job but
 has not been run remotely in this checkout. No local emulator has executed.
 

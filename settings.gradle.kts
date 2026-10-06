@@ -15,7 +15,9 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Altiro"
+
 include(":core", ":network")
+
 if (!providers.gradleProperty("coreOnly").map(String::toBoolean).getOrElse(false)) {
     include(":app", ":inference-whisper", ":editor-fixture")
 }

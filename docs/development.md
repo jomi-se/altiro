@@ -17,7 +17,7 @@
 | NDK | 30.0.16248370 |
 | CMake | 4.1.2 |
 | whisper.cpp | 1.9.4; exact commit/archive SHA-256 pinned in CMake |
-| Spotless / ktlint | 8.0.0 / 1.7.1 |
+| Spotless / ktfmt | 8.0.0 / 0.63 |
 
 Pins live in [the version catalog](../gradle/libs.versions.toml). AGP 9 supplies
 built-in Kotlin for Android; root JVM/Compose plugins resolve the matching
@@ -76,7 +76,11 @@ an emulator or physical device.
 ./gradlew :app:connectedDebugAndroidTest :editor-fixture:connectedDebugAndroidTest
 ```
 
-Full verification checks formatting, core tests, debug builds, Android lint,
+Verification automatically formats Kotlin and Gradle scripts with ktfmt before
+compilation. There are no ktlint style or line-length rules; formatting is owned
+by the formatter. The same command runs locally and in CI.
+
+Full verification runs core tests, debug builds, Android lint,
 instrumentation APK compilation, and 16 KiB alignment of bundled native
 libraries. Connected tests execute separately.
 They supplement the [physical Gate A procedure](testing/gate-a.md).

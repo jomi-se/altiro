@@ -45,34 +45,48 @@ class DiagnosticsActivity : ComponentActivity() {
                     Text("Recognition diagnostics", style = MaterialTheme.typography.headlineMedium)
                     Text("The latest recording, phase by phase. Updates while recognition runs.")
                     Text(
-                        "Live timings stay in memory for ten minutes. One content-free checkpoint survives restart until you clear it or start another recording. No audio or dictated text is included.",
+                        "Live timings stay in memory for ten minutes. One content-free checkpoint survives restart until you clear it or start another recording. No audio or dictated text is included."
                     )
                     Text("App startup checks", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "App startup checks all installed model files. These times are separate from dictation and stay available until the process closes.",
+                        "App startup checks all installed model files. These times are separate from dictation and stay available until the process closes."
                     )
-                    Text(startupMillis?.let { "Ready in ${DiagnosticReport.seconds(it)} s" } ?: modelStatus)
+                    Text(
+                        startupMillis?.let { "Ready in ${DiagnosticReport.seconds(it)} s" }
+                            ?: modelStatus
+                    )
                     for (check in startupChecks) {
                         Text(
                             "${controller.models.profiles.first { it.spec.id == check.modelId }.name}: " +
                                 "${DiagnosticReport.seconds(
-                                    check.elapsedMillis,
-                                )} s · ${if (check.verified) "verified" else "verification failed"}",
+                                    check.elapsedMillis
+                                )} s · ${if (check.verified) "verified" else "verification failed"}"
                         )
                     }
                     val current = report
                     if (current == null) {
                         Text("No trace yet. Record and stop a dictation, then return here.")
-                        OutlinedButton(onClick = { controller.copyText(export(null)) }) { Text("Copy startup diagnostics") }
+                        OutlinedButton(onClick = { controller.copyText(export(null)) }) {
+                            Text("Copy startup diagnostics")
+                        }
                         checkpoint?.let { saved ->
-                            Text("Saved runtime checkpoint", style = MaterialTheme.typography.titleMedium)
-                            Text("A RUNNING checkpoint after restart means work was interrupted; it is not resumed.")
+                            Text(
+                                "Saved runtime checkpoint",
+                                style = MaterialTheme.typography.titleMedium,
+                            )
+                            Text(
+                                "A RUNNING checkpoint after restart means work was interrupted; it is not resumed."
+                            )
                             Text(saved)
-                            OutlinedButton(onClick = { controller.copyText(saved) }) { Text("Copy saved checkpoint") }
+                            OutlinedButton(onClick = { controller.copyText(saved) }) {
+                                Text("Copy saved checkpoint")
+                            }
                             OutlinedButton(
                                 onClick = controller::clearDiagnostics,
                                 enabled = !session.busy && !nativeBusy,
-                            ) { Text("Clear diagnostics") }
+                            ) {
+                                Text("Clear diagnostics")
+                            }
                         }
                     } else {
                         Text(
@@ -80,35 +94,40 @@ class DiagnosticsActivity : ComponentActivity() {
                                 "Comparison · ${current.modelIds.size} passes, one after another"
                             } else {
                                 "Everyday dictation · one model"
-                            },
+                            }
                         )
                         Text(
-                            "Installed models stay on disk. Each run verifies, loads and releases only the model being used. No model is kept in memory between recordings.",
+                            "Installed models stay on disk. Each run verifies, loads and releases only the model being used. No model is kept in memory between recordings."
                         )
-                        Text("${current.outcome?.name ?: "RUNNING"} · after Stop: ${DiagnosticReport.seconds(current.processingMillis)} s")
-                        current.steps.lastOrNull { it.running }?.let { step ->
-                            Text(
-                                "${step.stage.label} · ${DiagnosticReport.seconds(step.durationMillis)} s",
-                                style = MaterialTheme.typography.titleMedium,
-                            )
-                            step.modelId?.let { id ->
+                        Text(
+                            "${current.outcome?.name ?: "RUNNING"} · after Stop: ${DiagnosticReport.seconds(current.processingMillis)} s"
+                        )
+                        current.steps
+                            .lastOrNull { it.running }
+                            ?.let { step ->
                                 Text(
-                                    controller.models.profiles
-                                        .first { it.spec.id == id }
-                                        .name,
+                                    "${step.stage.label} · ${DiagnosticReport.seconds(step.durationMillis)} s",
+                                    style = MaterialTheme.typography.titleMedium,
                                 )
+                                step.modelId?.let { id ->
+                                    Text(controller.models.profiles.first { it.spec.id == id }.name)
+                                }
                             }
+                        current.audioMillis?.let {
+                            Text("Recorded audio: ${DiagnosticReport.seconds(it)} s")
                         }
-                        current.audioMillis?.let { Text("Recorded audio: ${DiagnosticReport.seconds(it)} s") }
                         if (current.cancellationRequested) {
                             Text(
-                                "Cancellation requested. If native cleanup stalls for ten seconds, the recognition worker is terminated before temporary audio is deleted.",
+                                "Cancellation requested. If native cleanup stalls for ten seconds, the recognition worker is terminated before temporary audio is deleted."
                             )
                         }
                         current.failureStage?.let { Text("Failure during: ${it.label}") }
                         for (step in current.steps) {
                             Card(Modifier.fillMaxWidth()) {
-                                Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                                Column(
+                                    Modifier.padding(12.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp),
+                                ) {
                                     step.modelId?.let { id ->
                                         Text(
                                             controller.models.profiles
@@ -117,9 +136,14 @@ class DiagnosticsActivity : ComponentActivity() {
                                             style = MaterialTheme.typography.labelLarge,
                                         )
                                     }
-                                    Text(step.stage.label, style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        step.stage.label,
+                                        style = MaterialTheme.typography.titleSmall,
+                                    )
                                     step.backend?.let { Text(it.label) }
-                                    Text("${DiagnosticReport.seconds(step.durationMillis)} s${if (step.running) " · running" else ""}")
+                                    Text(
+                                        "${DiagnosticReport.seconds(step.durationMillis)} s${if (step.running) " · running" else ""}"
+                                    )
                                     Text(
                                         "Started +${DiagnosticReport.seconds(step.startMillis)} s after tapping Record",
                                         style = MaterialTheme.typography.bodySmall,
@@ -128,21 +152,34 @@ class DiagnosticsActivity : ComponentActivity() {
                             }
                         }
                         for (runtime in current.runtimes) {
-                            Card(Modifier.fillMaxWidth()) { Text(runtime.export(), Modifier.padding(12.dp)) }
+                            Card(Modifier.fillMaxWidth()) {
+                                Text(runtime.export(), Modifier.padding(12.dp))
+                            }
                         }
                         Text(
-                            "Recognition includes audio features, language detection in Auto, encoder and decoder. Its percentage is an upstream progress estimate, not a countdown. Timings measure wall time, including scheduling delays.",
+                            "Recognition includes audio features, language detection in Auto, encoder and decoder. Its percentage is an upstream progress estimate, not a countdown. Timings measure wall time, including scheduling delays."
                         )
-                        OutlinedButton(onClick = { controller.copyText(export(current)) }) { Text("Copy diagnostics") }
-                        OutlinedButton(onClick = {
-                            startActivity(
-                                Intent.createChooser(
-                                    Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, export(current)),
-                                    "Share diagnostics",
-                                ),
-                            )
-                        }) { Text("Share diagnostics") }
-                        OutlinedButton(onClick = controller::clearDiagnostics, enabled = !session.busy && !nativeBusy) {
+                        OutlinedButton(onClick = { controller.copyText(export(current)) }) {
+                            Text("Copy diagnostics")
+                        }
+                        OutlinedButton(
+                            onClick = {
+                                startActivity(
+                                    Intent.createChooser(
+                                        Intent(Intent.ACTION_SEND)
+                                            .setType("text/plain")
+                                            .putExtra(Intent.EXTRA_TEXT, export(current)),
+                                        "Share diagnostics",
+                                    )
+                                )
+                            }
+                        ) {
+                            Text("Share diagnostics")
+                        }
+                        OutlinedButton(
+                            onClick = controller::clearDiagnostics,
+                            enabled = !session.busy && !nativeBusy,
+                        ) {
                             Text("Clear diagnostics")
                         }
                     }
@@ -154,22 +191,26 @@ class DiagnosticsActivity : ComponentActivity() {
 
     private fun export(report: DiagnosticReport?): String {
         val controller = (application as AltiroApplication).controller
-        val microphone = checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
-        val startup =
-            buildString {
-                appendLine("App startup checks (separate from dictation):")
+        val microphone =
+            checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                PackageManager.PERMISSION_GRANTED
+        val startup = buildString {
+            appendLine("App startup checks (separate from dictation):")
+            appendLine(
+                "Total: ${controller.models.startupMillis.value
+                        ?.let { DiagnosticReport.seconds(it) + " s" } ?: "RUNNING"}"
+            )
+            for (check in controller.models.startupChecks.value) {
                 appendLine(
-                    "Total: ${controller.models.startupMillis.value
-                        ?.let { DiagnosticReport.seconds(it) + " s" } ?: "RUNNING"}",
+                    "${check.modelId}: ${DiagnosticReport.seconds(check.elapsedMillis)} s; verified: ${check.verified}"
                 )
-                for (check in controller.models.startupChecks.value) {
-                    appendLine("${check.modelId}: ${DiagnosticReport.seconds(check.elapsedMillis)} s; verified: ${check.verified}")
-                }
             }
+        }
         return "App: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}); " +
             "Android: ${Build.VERSION.RELEASE}; API: ${Build.VERSION.SDK_INT}\n" +
             "Hardware: ${Build.MANUFACTURER} ${Build.MODEL}; ABIs: ${Build.SUPPORTED_ABIS.joinToString()}\n" +
             "Microphone permission: $microphone; floating mic connected: ${controller.connected.value}\n" +
-            startup + (report?.export() ?: "No recording trace yet. No text, audio or file paths included.\n")
+            startup +
+            (report?.export() ?: "No recording trace yet. No text, audio or file paths included.\n")
     }
 }

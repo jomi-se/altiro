@@ -13,10 +13,6 @@ class AltiroApplication : Application() {
         if (getProcessName() != packageName) return
         controller = DictationController(this)
         // The process never replays sessions. This dedicated cache holds only our audio.
-        cacheDir
-            .resolve("dictation")
-            .apply { mkdirs() }
-            .listFiles()
-            ?.forEach { it.delete() }
+        cacheDir.resolve("dictation").apply { mkdirs() }.listFiles()?.forEach { it.delete() }
     }
 }

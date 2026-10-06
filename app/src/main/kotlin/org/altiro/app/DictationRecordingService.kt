@@ -18,6 +18,10 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import java.io.RandomAccessFile
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
+import java.util.concurrent.Executors
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.takeWhile
@@ -26,13 +30,11 @@ import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
 import org.altiro.core.Wav
-import java.io.RandomAccessFile
-import java.nio.ByteBuffer
-import java.nio.ByteOrder
-import java.util.concurrent.Executors
 
 class DictationRecordingService : Service() {
-    private val controller get() = (application as AltiroApplication).controller
+    private val controller
+        get() = (application as AltiroApplication).controller
+
     private val main = Handler(Looper.getMainLooper())
     private val executor = Executors.newSingleThreadExecutor()
     private val captureLock = Any()
@@ -54,9 +56,14 @@ class DictationRecordingService : Service() {
     override fun onCreate() {
         super.onCreate()
         registerReceiver(screenOff, IntentFilter(Intent.ACTION_SCREEN_OFF), RECEIVER_NOT_EXPORTED)
-        getSystemService(NotificationManager::class.java).createNotificationChannel(
-            NotificationChannel(CHANNEL, "Recording controls", NotificationManager.IMPORTANCE_LOW),
-        )
+        getSystemService(NotificationManager::class.java)
+            .createNotificationChannel(
+                NotificationChannel(
+                    CHANNEL,
+                    "Recording controls",
+                    NotificationManager.IMPORTANCE_LOW,
+                )
+            )
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -95,10 +102,20 @@ class DictationRecordingService : Service() {
         activeId = id
         requested = START
         try {
-            check(checkSelfPermission(Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED)
-            startForeground(NOTIFICATION, notification(id), ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE)
+            check(
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) ==
+                    PackageManager.PERMISSION_GRANTED
+            )
+            startForeground(
+                NOTIFICATION,
+                notification(id),
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
+            )
         } catch (_: SecurityException) {
-            fail(id, "Microphone startup was denied. Open the recording screen and check permissions.")
+            fail(
+                id,
+                "Microphone startup was denied. Open the recording screen and check permissions.",
+            )
             return
         } catch (_: IllegalStateException) {
             fail(id, "The microphone is not available. Check permissions and try again.")
@@ -106,7 +123,10 @@ class DictationRecordingService : Service() {
         }
         controller.scope.launch {
             delay(10_000)
-            if (controller.session.value.id == id && controller.session.value.phase == Phase.STARTING) {
+            if (
+                controller.session.value.id == id &&
+                    controller.session.value.phase == Phase.STARTING
+            ) {
                 stopCapture(CANCEL)
                 fail(id, "The microphone did not start. Check its privacy switch and try again.")
             }
@@ -122,26 +142,30 @@ class DictationRecordingService : Service() {
         var lastSecond = -1
         try {
             file = java.io.File.createTempFile("capture-", ".wav", directory)
-            val minimum = AudioRecord.getMinBufferSize(Wav.SAMPLE_RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)
+            val minimum =
+                AudioRecord.getMinBufferSize(
+                    Wav.SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                )
             check(minimum > 0)
-            if (checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
-                PackageManager.PERMISSION_GRANTED
+            if (
+                checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
+                    PackageManager.PERMISSION_GRANTED
             ) {
                 throw SecurityException("Microphone permission unavailable")
             }
             val capture =
-                AudioRecord
-                    .Builder()
+                AudioRecord.Builder()
                     .setAudioSource(MediaRecorder.AudioSource.MIC)
                     .setAudioFormat(
-                        AudioFormat
-                            .Builder()
-                            .setSampleRate(
-                                Wav.SAMPLE_RATE,
-                            ).setChannelMask(AudioFormat.CHANNEL_IN_MONO)
+                        AudioFormat.Builder()
+                            .setSampleRate(Wav.SAMPLE_RATE)
+                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO)
                             .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
-                            .build(),
-                    ).setBufferSizeInBytes(maxOf(minimum * 2, 4096))
+                            .build()
+                    )
+                    .setBufferSizeInBytes(maxOf(minimum * 2, 4096))
                     .build()
             synchronized(captureLock) {
                 recorder = capture
@@ -161,7 +185,9 @@ class DictationRecordingService : Service() {
                             AudioRecord.READ_BLOCKING,
                         )
                     if (requested != START) break
-                    check(count > 0 && capture.activeRecordingConfiguration?.isClientSilenced != true)
+                    check(
+                        count > 0 && capture.activeRecordingConfiguration?.isClientSilenced != true
+                    )
                     bytes.clear()
                     for (index in 0 until count) bytes.putShort(buffer[index])
                     output.write(bytes.array(), 0, count * 2)
@@ -177,9 +203,12 @@ class DictationRecordingService : Service() {
                 output.seek(0)
                 output.write(Wav.header(frames))
             }
-            if (frames == 0L && requested != CANCEL) error = "No audio was captured. Check microphone access and try again."
+            if (frames == 0L && requested != CANCEL)
+                error = "No audio was captured. Check microphone access and try again."
         } catch (_: Exception) {
-            if (requested != CANCEL) error = "Recording was interrupted or storage is unavailable. The temporary recording was discarded."
+            if (requested != CANCEL)
+                error =
+                    "Recording was interrupted or storage is unavailable. The temporary recording was discarded."
         } finally {
             synchronized(captureLock) {
                 recorder?.let {
@@ -191,7 +220,10 @@ class DictationRecordingService : Service() {
             val stopped = requested == STOP
             main.post {
                 val audio = file
-                if (controller.session.value.id == id && controller.session.value.phase != Phase.IDLE) {
+                if (
+                    controller.session.value.id == id &&
+                        controller.session.value.phase != Phase.IDLE
+                ) {
                     if (error != null) {
                         controller.event(SessionEvent.Fail(id, error!!))
                     } else if (stopped && audio != null) {
@@ -206,20 +238,36 @@ class DictationRecordingService : Service() {
                             )
                             notificationObserver =
                                 controller.scope.launch {
-                                    controller.diagnostics.report.takeWhile { it != null && it.outcome == null }.collect {
-                                        if (controller.session.value.id == id || controller.recognition.busy.value) {
-                                            getSystemService(NotificationManager::class.java).notify(
-                                                NOTIFICATION,
-                                                notification(id, processing = true, percent = controller.progress.value),
-                                            )
+                                    controller.diagnostics.report
+                                        .takeWhile { it != null && it.outcome == null }
+                                        .collect {
+                                            if (
+                                                controller.session.value.id == id ||
+                                                    controller.recognition.busy.value
+                                            ) {
+                                                getSystemService(NotificationManager::class.java)
+                                                    .notify(
+                                                        NOTIFICATION,
+                                                        notification(
+                                                            id,
+                                                            processing = true,
+                                                            percent = controller.progress.value,
+                                                        ),
+                                                    )
+                                            }
                                         }
-                                    }
                                 }
-                            controller.transcribe(id, audio, { percent ->
-                                getSystemService(
-                                    NotificationManager::class.java,
-                                ).notify(NOTIFICATION, notification(id, processing = true, percent = percent))
-                            }) {
+                            controller.transcribe(
+                                id,
+                                audio,
+                                { percent ->
+                                    getSystemService(NotificationManager::class.java)
+                                        .notify(
+                                            NOTIFICATION,
+                                            notification(id, processing = true, percent = percent),
+                                        )
+                                },
+                            ) {
                                 notificationObserver?.cancel()
                                 stopForeground(STOP_FOREGROUND_REMOVE)
                                 stopSelf()
@@ -227,7 +275,10 @@ class DictationRecordingService : Service() {
                             return@post
                         } catch (_: Exception) {
                             controller.event(
-                                SessionEvent.Fail(id, "Android could not continue local recognition. Try again with Altiro open."),
+                                SessionEvent.Fail(
+                                    id,
+                                    "Android could not continue local recognition. Try again with Altiro open.",
+                                )
                             )
                         }
                     }
@@ -262,25 +313,23 @@ class DictationRecordingService : Service() {
                 PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
             )
         val builder =
-            Notification
-                .Builder(this, CHANNEL)
+            Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
-                .setContentTitle(if (processing) "Altiro · recognizing offline" else "Altiro · recording")
+                .setContentTitle(
+                    if (processing) "Altiro · recognizing offline" else "Altiro · recording"
+                )
                 .setContentText(
                     if (processing) {
                         "${controller.activeModelName.value} · ${controller.processingLabel()} · microphone released"
                     } else {
                         "Maximum 5 minutes · audio stays on this device"
-                    },
-                ).setContentIntent(open)
+                    }
+                )
+                .setContentIntent(open)
                 .setOngoing(true)
                 .addAction(Notification.Action.Builder(null, "Cancel", action(CANCEL, 1)).build())
         if (processing) {
-            val stage =
-                controller.diagnostics.report.value
-                    ?.steps
-                    ?.lastOrNull { it.running }
-                    ?.stage
+            val stage = controller.diagnostics.report.value?.steps?.lastOrNull { it.running }?.stage
             builder.setProgress(100, percent, stage != org.altiro.core.RecognitionStage.INFERENCE)
         } else {
             builder.addAction(Notification.Action.Builder(null, "Stop", action(STOP, 0)).build())
@@ -310,9 +359,7 @@ class DictationRecordingService : Service() {
         unregisterReceiver(screenOff)
         executor.shutdown()
         activeId?.let { id ->
-            if (controller.session.value.id == id &&
-                controller.session.value.busy
-            ) {
+            if (controller.session.value.id == id && controller.session.value.busy) {
                 controller.cancel()
             }
         }
@@ -339,6 +386,9 @@ class DictationRecordingService : Service() {
             context: Context,
             action: String,
             id: SessionId,
-        ): Intent = Intent(context, DictationRecordingService::class.java).setAction(action).putExtra(SESSION, id.value)
+        ): Intent =
+            Intent(context, DictationRecordingService::class.java)
+                .setAction(action)
+                .putExtra(SESSION, id.value)
     }
 }

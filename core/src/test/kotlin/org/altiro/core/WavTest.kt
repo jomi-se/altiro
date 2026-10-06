@@ -1,12 +1,13 @@
 package org.altiro.core
 
-import org.junit.Assert.assertEquals
-import org.junit.Test
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import org.junit.Assert.assertEquals
+import org.junit.Test
 
 class WavTest {
-    @Test fun `header describes exact PCM frame count at all supported durations`() {
+    @Test
+    fun `header describes exact PCM frame count at all supported durations`() {
         for (seconds in listOf(0, 10, 30, 120, 300)) {
             val header = Wav.header(seconds.toLong() * Wav.SAMPLE_RATE)
             val buffer = ByteBuffer.wrap(header).order(ByteOrder.LITTLE_ENDIAN)

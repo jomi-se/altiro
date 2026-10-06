@@ -7,7 +7,8 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class RecognitionDiagnosticsTest {
-    @Test fun liveAndFinalTimingsUseMonotonicTimeAndExcludeRecordingFromProcessing() {
+    @Test
+    fun liveAndFinalTimingsUseMonotonicTimeAndExcludeRecordingFromProcessing() {
         var now = 0L
         val trace = RecognitionDiagnostics { now }
 
@@ -45,7 +46,8 @@ class RecognitionDiagnosticsTest {
         assertTrue(done.export().contains("Processing/audio ratio: 3.32"))
     }
 
-    @Test fun cancellationKeepsMeasuringUntilCleanupCompletes() {
+    @Test
+    fun cancellationKeepsMeasuringUntilCleanupCompletes() {
         var now = 0L
         val trace = RecognitionDiagnostics { now }
         trace.begin("en", listOf("model-a", "model-b"), true)
@@ -61,12 +63,19 @@ class RecognitionDiagnosticsTest {
         trace.finish(DiagnosticOutcome.CANCELLED)
         val report = trace.report.value!!
         assertTrue(report.cancellationRequested)
-        assertEquals(2000, report.steps.first { it.stage == RecognitionStage.MODEL_LOAD }.durationMillis)
-        assertEquals(1000, report.steps.first { it.stage == RecognitionStage.MODEL_RELEASE }.durationMillis)
+        assertEquals(
+            2000,
+            report.steps.first { it.stage == RecognitionStage.MODEL_LOAD }.durationMillis,
+        )
+        assertEquals(
+            1000,
+            report.steps.first { it.stage == RecognitionStage.MODEL_RELEASE }.durationMillis,
+        )
         assertFalse(report.steps.any { it.modelId == "model-b" })
     }
 
-    @Test fun failureStageSurvivesCleanupAndNextRunReplacesTrace() {
+    @Test
+    fun failureStageSurvivesCleanupAndNextRunReplacesTrace() {
         val trace = RecognitionDiagnostics()
         trace.begin("auto", listOf("model-a"), false)
         trace.phase(RecognitionStage.INFERENCE, "model-a")
@@ -86,10 +95,16 @@ class RecognitionDiagnosticsTest {
         assertEquals(null, trace.report.value)
     }
 
-    @Test fun sameModelBackendPhasesAndFailureStayDistinctAndExcludeContent() {
+    @Test
+    fun sameModelBackendPhasesAndFailureStayDistinctAndExcludeContent() {
         var clock = 0L
         val trace = RecognitionDiagnostics { clock }
-        trace.begin("es", listOf("model-a", "model-a"), true, listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN))
+        trace.begin(
+            "es",
+            listOf("model-a", "model-a"),
+            true,
+            listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN),
+        )
         trace.selectBackend(RecognitionBackend.CPU)
         trace.phase(RecognitionStage.INFERENCE, "model-a")
         clock += 1_000_000_000
@@ -105,20 +120,25 @@ class RecognitionDiagnosticsTest {
                 gpuName = "Mali-G710",
                 vulkanVersion = "1.3.0",
                 storage16 = true,
-            ),
+            )
         )
         trace.markFailure()
         trace.phase(RecognitionStage.AUDIO_DELETE)
         trace.finish(DiagnosticOutcome.FAILED)
         val report = trace.report.value!!
         val phases = report.steps.filter { it.stage == RecognitionStage.INFERENCE }
-        assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), phases.map { it.backend })
+        assertEquals(
+            listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN),
+            phases.map { it.backend },
+        )
         assertEquals(listOf(1000L, 2000L), phases.map { it.durationMillis })
         assertTrue(report.export().contains("WORKER_DIED"))
         assertTrue(report.export().contains("Mali-G710"))
-        assertThrows(
-            IllegalArgumentException::class.java,
-        ) { RuntimeDetails("model-a", RecognitionBackend.VULKAN, gpuName = "/private/file") }
-        assertThrows(IllegalArgumentException::class.java) { RuntimeDetails("model-a", RecognitionBackend.VULKAN, encodeMillis = -1) }
+        assertThrows(IllegalArgumentException::class.java) {
+            RuntimeDetails("model-a", RecognitionBackend.VULKAN, gpuName = "/private/file")
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            RuntimeDetails("model-a", RecognitionBackend.VULKAN, encodeMillis = -1)
+        }
     }
 }

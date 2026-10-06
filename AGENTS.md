@@ -73,7 +73,7 @@ automatic cross-provider failover, or a mandatory hosted backend.
 
 ## Validation and commands
 
-Use `./scripts/verify.sh` for formatting checks, core tests, Android compilation,
+Use `./scripts/verify.sh` to autoformat Kotlin, then run core tests, Android compilation,
 lint, and instrumentation APK compilation. `--core-only` runs JVM checks without
 an Android SDK; `--docs-only` checks the documentation foundation. See
 `docs/development.md`. Compiling test APKs does not execute device tests.

@@ -1,5 +1,8 @@
 package org.altiro.core
 
+import java.io.File
+import java.security.MessageDigest
+import java.util.concurrent.CancellationException
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertThrows
@@ -7,30 +10,37 @@ import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 import org.junit.rules.TemporaryFolder
-import java.io.File
-import java.security.MessageDigest
-import java.util.concurrent.CancellationException
 
 class RecognitionBatchTest {
     @get:Rule val folder = TemporaryFolder()
 
     private fun input(id: String): RecognitionInput {
         val file = folder.newFile("$id.bin").apply { writeText(id) }
-        val sha = MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
+        val sha =
+            MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") {
+                "%02x".format(it)
+            }
         return RecognitionInput(ModelSpec(id, file.length(), sha), file)
     }
 
-    @Test fun sameAudioIsAvailableToBothModelsThenDeleted() {
+    @Test
+    fun sameAudioIsAvailableToBothModelsThenDeleted() {
         val audio = folder.newFile("recording.wav").apply { writeText("same recording") }
         val inputs = listOf(input("q8"), input("fp16"))
         val seen = mutableListOf<String>()
         var clock = 0L
         val results =
-            RecognitionBatch.run(audio, inputs, { false }, { model ->
-                assertEquals("same recording", audio.readText())
-                seen += model.spec.id
-                " result ${model.spec.id} "
-            }, { clock.also { clock += 1_000_000_000 } })
+            RecognitionBatch.run(
+                audio,
+                inputs,
+                { false },
+                { model ->
+                    assertEquals("same recording", audio.readText())
+                    seen += model.spec.id
+                    " result ${model.spec.id} "
+                },
+                { clock.also { clock += 1_000_000_000 } },
+            )
         assertEquals(listOf("q8", "fp16"), seen)
         assertEquals(listOf("result q8", "result fp16"), results.map { it.text })
         assertTrue(results.all { it.elapsedMillis == 1000L })
@@ -38,32 +48,44 @@ class RecognitionBatchTest {
         assertTrue(inputs.all { it.file.exists() })
     }
 
-    @Test fun cancellationAfterFirstModelPreventsSecondAndDeletesAudio() {
+    @Test
+    fun cancellationAfterFirstModelPreventsSecondAndDeletesAudio() {
         val audio = folder.newFile("recording.wav")
         var cancelled = false
         val seen = mutableListOf<String>()
         val inputs = listOf(input("q8"), input("fp16"))
         assertThrows(CancellationException::class.java) {
-            RecognitionBatch.run(audio, inputs, { cancelled }, { model ->
-                seen += model.spec.id
-                cancelled = true
-                "must not publish"
-            })
+            RecognitionBatch.run(
+                audio,
+                inputs,
+                { cancelled },
+                { model ->
+                    seen += model.spec.id
+                    cancelled = true
+                    "must not publish"
+                },
+            )
         }
         assertEquals(listOf("q8"), seen)
         assertFalse(audio.exists())
     }
 
-    @Test fun sameModelRunsOnEachBackendWithoutAnImplicitRetry() {
+    @Test
+    fun sameModelRunsOnEachBackendWithoutAnImplicitRetry() {
         val model = input("q8")
         val audio = folder.newFile("recording.wav")
         val inputs = listOf(model, model.copy(backend = RecognitionBackend.VULKAN))
         val seen = mutableListOf<RecognitionBackend>()
         val results =
-            RecognitionBatch.run(audio, inputs, { false }, {
-                seen += it.backend
-                "speech"
-            })
+            RecognitionBatch.run(
+                audio,
+                inputs,
+                { false },
+                {
+                    seen += it.backend
+                    "speech"
+                },
+            )
         assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), seen)
         assertEquals(seen, results.map { it.backend })
         assertFalse(audio.exists())
@@ -71,43 +93,62 @@ class RecognitionBatchTest {
         val failedAudio = folder.newFile("gpu-failure.wav")
         seen.clear()
         assertThrows(IllegalStateException::class.java) {
-            RecognitionBatch.run(failedAudio, inputs, { false }, {
-                seen += it.backend
-                if (it.backend == RecognitionBackend.VULKAN) throw IllegalStateException("driver failed")
-                "unpublished CPU result"
-            })
+            RecognitionBatch.run(
+                failedAudio,
+                inputs,
+                { false },
+                {
+                    seen += it.backend
+                    if (it.backend == RecognitionBackend.VULKAN)
+                        throw IllegalStateException("driver failed")
+                    "unpublished CPU result"
+                },
+            )
         }
         assertEquals(listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN), seen)
         assertFalse(failedAudio.exists())
     }
 
-    @Test fun corruptedSecondModelPreventsItsNativeLoadAndDeletesAudio() {
+    @Test
+    fun corruptedSecondModelPreventsItsNativeLoadAndDeletesAudio() {
         val audio = folder.newFile("recording.wav")
         val inputs = listOf(input("q8"), input("fp16"))
         inputs[1].file.writeText("xxxx")
         val seen = mutableListOf<String>()
         assertThrows(IllegalStateException::class.java) {
-            RecognitionBatch.run(audio, inputs, { false }, { model ->
-                seen += model.spec.id
-                "text"
-            })
+            RecognitionBatch.run(
+                audio,
+                inputs,
+                { false },
+                { model ->
+                    seen += model.spec.id
+                    "text"
+                },
+            )
         }
         assertEquals(listOf("q8"), seen)
         assertFalse(audio.exists())
     }
 
-    @Test fun nativeFailureAndInvalidBatchBothDeleteAudio() {
+    @Test
+    fun nativeFailureAndInvalidBatchBothDeleteAudio() {
         val model = input("q8")
         for (inputs in listOf(listOf(model), listOf(model, model))) {
             val audio = File(folder.root, "recording.wav").apply { writeText("audio") }
             assertThrows(RuntimeException::class.java) {
-                RecognitionBatch.run(audio, inputs, { false }, { throw IllegalStateException("runtime failed") })
+                RecognitionBatch.run(
+                    audio,
+                    inputs,
+                    { false },
+                    { throw IllegalStateException("runtime failed") },
+                )
             }
             assertFalse(audio.exists())
         }
     }
 
-    @Test fun failedVerificationReportsItsPhaseBeforeDeletingAudioWithoutPublishingText() {
+    @Test
+    fun failedVerificationReportsItsPhaseBeforeDeletingAudioWithoutPublishingText() {
         val model = input("q8")
         model.file.writeText("bad")
         val audio = folder.newFile("recording.wav")

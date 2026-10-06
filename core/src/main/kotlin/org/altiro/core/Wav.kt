@@ -12,8 +12,7 @@ object Wav {
     fun header(frames: Long): ByteArray {
         require(frames in 0..MAX_FRAMES.toLong())
         val size = (frames * BYTES_PER_FRAME).toInt()
-        return ByteBuffer
-            .allocate(44)
+        return ByteBuffer.allocate(44)
             .order(ByteOrder.LITTLE_ENDIAN)
             .apply {
                 put("RIFF".toByteArray(Charsets.US_ASCII))
@@ -28,6 +27,7 @@ object Wav {
                 putShort(16)
                 put("data".toByteArray(Charsets.US_ASCII))
                 putInt(size)
-            }.array()
+            }
+            .array()
     }
 }

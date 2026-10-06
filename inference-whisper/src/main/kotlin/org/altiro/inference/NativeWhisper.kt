@@ -3,7 +3,9 @@ package org.altiro.inference
 fun interface NativeProgress {
     fun onProgress(percent: Int)
 
-    /** 1 audio read, 2 cold load, 3 inference, 4 text assembly, 5 release, 6 failure before cleanup. */
+    /**
+     * 1 audio read, 2 cold load, 3 inference, 4 text assembly, 5 release, 6 failure before cleanup.
+     */
     fun onPhase(phase: Int) {}
 
     /** Structured hardware properties / counters only, never native log text. */

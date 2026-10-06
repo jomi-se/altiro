@@ -20,7 +20,8 @@ data class EditorState(
     val locked: Boolean = false,
     val connectionAvailable: Boolean = false,
 ) {
-    val composing: Boolean get() = composingStart >= 0 || composingEnd >= 0
+    val composing: Boolean
+        get() = composingStart >= 0 || composingEnd >= 0
 }
 
 data class DestinationToken(
@@ -47,6 +48,7 @@ enum class InsertionBlockReason {
 class EditorAuthority {
     var current = EditorState(identity = null)
         private set
+
     private var serviceEpoch = 0L
     private var editorEpoch = 0L
     private var revision = 0L
@@ -89,7 +91,8 @@ class EditorAuthority {
             state.identity.displayId != 0 -> InsertionBlockReason.UNSUPPORTED_DISPLAY
             state.composing -> InsertionBlockReason.COMPOSING
             !state.compositionKnown -> InsertionBlockReason.UNKNOWN_COMPOSITION
-            state.selectionStart < 0 || state.selectionEnd < 0 -> InsertionBlockReason.UNKNOWN_SELECTION
+            state.selectionStart < 0 || state.selectionEnd < 0 ->
+                InsertionBlockReason.UNKNOWN_SELECTION
             token != capture() -> InsertionBlockReason.DESTINATION_CHANGED
             else -> null
         }

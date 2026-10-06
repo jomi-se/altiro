@@ -11,16 +11,17 @@ import org.altiro.core.RuntimeStatus
 import org.json.JSONObject
 
 /** A single bounded, generated report. No native log strings or recognition text reach disk. */
-class RuntimeCheckpoint(
-    context: Context,
-) {
+class RuntimeCheckpoint(context: Context) {
     private val file = AtomicFile(context.noBackupFilesDir.resolve("recognition-checkpoint.txt"))
     private val mutableSaved = MutableStateFlow(read())
     val saved = mutableSaved.asStateFlow()
 
-    @Synchronized fun save(report: DiagnosticReport?) {
+    @Synchronized
+    fun save(report: DiagnosticReport?) {
         if (report == null) return
-        val bytes = ("Content-free checkpoint · app ${BuildConfig.VERSION_NAME}\n" + report.export()).toByteArray(Charsets.UTF_8)
+        val bytes =
+            ("Content-free checkpoint · app ${BuildConfig.VERSION_NAME}\n" + report.export())
+                .toByteArray(Charsets.UTF_8)
         if (bytes.size > 65_536) return
         var output: java.io.FileOutputStream? = null
         try {
@@ -33,7 +34,8 @@ class RuntimeCheckpoint(
         }
     }
 
-    @Synchronized fun clear() {
+    @Synchronized
+    fun clear() {
         file.delete()
         mutableSaved.value = null
     }
@@ -73,7 +75,9 @@ internal fun runtimeDetails(
     ): String? = if (value.has(key)) value.getString(key) else old
     return previous.copy(
         status = RuntimeStatus.valueOf(value.getString("status")),
-        failure = if (value.has("failure")) RuntimeFailure.valueOf(value.getString("failure")) else previous.failure,
+        failure =
+            if (value.has("failure")) RuntimeFailure.valueOf(value.getString("failure"))
+            else previous.failure,
         vulkanResult = number("vk_result", previous.vulkanResult?.toLong())?.toInt(),
         gpuName = label("gpu", previous.gpuName),
         vulkanVersion = label("vulkan", previous.vulkanVersion),

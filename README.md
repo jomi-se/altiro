@@ -90,8 +90,8 @@ NDK 30.0.16248370, and CMake 4.1.2:
 ./scripts/quiet-run.sh "documentation" ./scripts/verify.sh --docs-only
 ```
 
-Full verification compiles both debug apps and test APKs, runs core tests and
-Android lint, and checks formatting and documentation. Device tests need a
+Full verification automatically formats Kotlin before compiling both debug
+apps and test APKs, running core tests and Android lint, and checking documentation. Device tests need a
 connected phone or emulator. See [development](docs/development.md) and the
 [Gate A procedure](docs/testing/gate-a.md).
 

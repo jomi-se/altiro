@@ -7,21 +7,28 @@ plugins {
 }
 
 val outputRoot =
-    providers.environmentVariable("ALTIRO_BUILD_ROOT").orElse(
-        "${System.getProperty("java.io.tmpdir")}/altiro-${Integer.toUnsignedString(rootDir.absolutePath.hashCode())}",
-    )
+    providers
+        .environmentVariable("ALTIRO_BUILD_ROOT")
+        .orElse(
+            "${System.getProperty("java.io.tmpdir")}/altiro-${Integer.toUnsignedString(rootDir.absolutePath.hashCode())}"
+        )
+
 allprojects {
-    layout.buildDirectory.set(file("${outputRoot.get()}/${if (path == ":") "root" else path.trimStart(':').replace(':', '/')}"))
+    layout.buildDirectory.set(
+        file(
+            "${outputRoot.get()}/${if (path == ":") "root" else path.trimStart(':').replace(':', '/')}"
+        )
+    )
 }
 
 spotless {
     kotlin {
         target("**/src/**/*.kt")
-        ktlint("1.7.1")
+        ktfmt("0.63").kotlinlangStyle()
     }
     kotlinGradle {
         target("*.gradle.kts", "*/build.gradle.kts")
-        ktlint("1.7.1")
+        ktfmt("0.63").kotlinlangStyle()
     }
 }
 

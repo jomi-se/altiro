@@ -1,13 +1,21 @@
 package org.altiro.core
 
-enum class RecognitionBackend(
-    val label: String,
-) {
+enum class RecognitionBackend(val label: String) {
     CPU("CPU"),
     VULKAN("Vulkan GPU (experimental)"),
 }
 
-enum class RuntimeStatus { STARTING, PROBING, AVAILABLE, INITIALIZING, READY, FINISHED, FAILED, CANCELLED, WORKER_DIED }
+enum class RuntimeStatus {
+    STARTING,
+    PROBING,
+    AVAILABLE,
+    INITIALIZING,
+    READY,
+    FINISHED,
+    FAILED,
+    CANCELLED,
+    WORKER_DIED,
+}
 
 enum class RuntimeFailure {
     NONE,
@@ -28,7 +36,15 @@ enum class RuntimeFailure {
     DEVICE_LOST,
 }
 
-enum class WorkerExitReason { UNKNOWN, LOW_MEMORY, CRASH, NATIVE_CRASH, SIGNALED, ANR, OTHER }
+enum class WorkerExitReason {
+    UNKNOWN,
+    LOW_MEMORY,
+    CRASH,
+    NATIVE_CRASH,
+    SIGNALED,
+    ANR,
+    OTHER,
+}
 
 /** Only hardware properties and compute counters; never accept arbitrary runtime logs. */
 data class RuntimeDetails(
@@ -58,28 +74,36 @@ data class RuntimeDetails(
         require(vulkanVersion == null || vulkanVersion.matches(Regex("[0-9.]{1,24}")))
         require(driverVersion == null || driverVersion in 0..0xffffffffL)
         require(deviceCount == null || deviceCount in 0..64)
-        require(listOf(encodeMillis, decodeMillis, batchMillis, promptMillis, sampleMillis).all { it == null || it in 0..3_600_000 })
+        require(
+            listOf(encodeMillis, decodeMillis, batchMillis, promptMillis, sampleMillis).all {
+                it == null || it in 0..3_600_000
+            }
+        )
     }
 
-    fun export(): String =
-        buildString {
-            appendLine("$modelId · ${backend.name}: ${status.name}; failure: ${failure.name}")
-            if (status ==
-                RuntimeStatus.WORKER_DIED
-            ) {
-                appendLine("Android worker exit reason: ${workerExit.name} (may be unavailable immediately)")
-            }
-            vulkanResult?.let { appendLine("Vulkan result code: $it") }
-            gpuActive?.let { appendLine("GPU backend initialized in Whisper context: $it") }
-            if (gpuName != null) appendLine("GPU: $gpuName; Vulkan: $vulkanVersion; driver version (raw): $driverVersion")
-            if (deviceCount != null) {
-                appendLine("Vulkan devices: $deviceCount; storage16: $storage16; shaderFloat16: $shaderFloat16; shaderInt8: $shaderInt8")
-            }
-            if (encodeMillis != null) {
-                appendLine(
-                    "Whisper counters (ms): encode=$encodeMillis; decode=$decodeMillis; batch=$batchMillis; " +
-                        "prompt=$promptMillis; sample=$sampleMillis",
-                )
-            }
+    fun export(): String = buildString {
+        appendLine("$modelId · ${backend.name}: ${status.name}; failure: ${failure.name}")
+        if (status == RuntimeStatus.WORKER_DIED) {
+            appendLine(
+                "Android worker exit reason: ${workerExit.name} (may be unavailable immediately)"
+            )
         }
+        vulkanResult?.let { appendLine("Vulkan result code: $it") }
+        gpuActive?.let { appendLine("GPU backend initialized in Whisper context: $it") }
+        if (gpuName != null)
+            appendLine(
+                "GPU: $gpuName; Vulkan: $vulkanVersion; driver version (raw): $driverVersion"
+            )
+        if (deviceCount != null) {
+            appendLine(
+                "Vulkan devices: $deviceCount; storage16: $storage16; shaderFloat16: $shaderFloat16; shaderInt8: $shaderInt8"
+            )
+        }
+        if (encodeMillis != null) {
+            appendLine(
+                "Whisper counters (ms): encode=$encodeMillis; decode=$decodeMillis; batch=$batchMillis; " +
+                    "prompt=$promptMillis; sample=$sampleMillis"
+            )
+        }
+    }
 }

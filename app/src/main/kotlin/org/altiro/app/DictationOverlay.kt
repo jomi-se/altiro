@@ -77,14 +77,15 @@ class DictationOverlay(
             }
         }
     private val params =
-        WindowManager
-            .LayoutParams(
+        WindowManager.LayoutParams(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
                 PixelFormat.TRANSLUCENT,
-            ).apply {
+            )
+            .apply {
                 gravity = Gravity.TOP or Gravity.LEFT
                 val bounds = windows.currentWindowMetrics.bounds
                 x = (preferences.getFloat("x-$orientation", 0.85f) * bounds.width()).toInt()
@@ -97,8 +98,7 @@ class DictationOverlay(
             TextView(context).apply {
                 text = "↕ Move"
                 contentDescription = "Drag the floating microphone"
-                gravity =
-                    Gravity.CENTER
+                gravity = Gravity.CENTER
                 minimumHeight = dp(48)
                 setTextColor(Color.BLACK)
             }
@@ -116,7 +116,10 @@ class DictationOverlay(
                     originY = params.y
                 }
                 MotionEvent.ACTION_MOVE ->
-                    if (kotlin.math.abs(event.rawX - downX) + kotlin.math.abs(event.rawY - downY) > slop) {
+                    if (
+                        kotlin.math.abs(event.rawX - downX) + kotlin.math.abs(event.rawY - downY) >
+                            slop
+                    ) {
                         params.x = originX + (event.rawX - downX).toInt()
                         params.y = originY + (event.rawY - downY).toInt()
                         clamp()
@@ -124,7 +127,9 @@ class DictationOverlay(
                     }
                 MotionEvent.ACTION_UP -> {
                     val bounds = windows.currentWindowMetrics.bounds
-                    params.x = if (params.x + layout.width / 2 < bounds.width() / 2) 0 else bounds.width() - layout.width
+                    params.x =
+                        if (params.x + layout.width / 2 < bounds.width() / 2) 0
+                        else bounds.width() - layout.width
                     clamp()
                     if (attached) windows.updateViewLayout(layout, params)
                     preferences
@@ -133,13 +138,15 @@ class DictationOverlay(
                         .putFloat(
                             "y-$orientation",
                             params.y.toFloat() / bounds.height(),
-                        ).apply()
+                        )
+                        .apply()
                     handle.performClick()
                 }
             }
             true
         }
-        for (view in listOf(handle, status, primary, cancel, copy, discard, disable)) layout.addView(view)
+        for (view in listOf(handle, status, primary, cancel, copy, discard, disable)) layout
+            .addView(view)
     }
 
     fun render(
@@ -148,9 +155,18 @@ class DictationOverlay(
     ) {
         val controlsNeeded = session.busy || session.text != null
         val identity = editor.identity
-        val eligible = identity != null && editor.connectionAvailable && !editor.password && !editor.blocked && identity.displayId == 0
-        if (editor.locked || editor.password || editor.blocked || editor.identity?.displayId?.let { it != 0 } == true ||
-            (!controlsNeeded && !eligible)
+        val eligible =
+            identity != null &&
+                editor.connectionAvailable &&
+                !editor.password &&
+                !editor.blocked &&
+                identity.displayId == 0
+        if (
+            editor.locked ||
+                editor.password ||
+                editor.blocked ||
+                editor.identity?.displayId?.let { it != 0 } == true ||
+                (!controlsNeeded && !eligible)
         ) {
             close()
             return
@@ -199,8 +215,13 @@ class DictationOverlay(
                 "Open microphone recording screen"
             }
         primary.isEnabled =
-            recording || (pending && eligible) ||
-            (!session.busy && !controller.recognition.busy.value && controller.models.ready.value && session.text == null && eligible)
+            recording ||
+                (pending && eligible) ||
+                (!session.busy &&
+                    !controller.recognition.busy.value &&
+                    controller.models.ready.value &&
+                    session.text == null &&
+                    eligible)
         primary.setOnClickListener {
             when {
                 recording -> controller.stop()
@@ -209,9 +230,12 @@ class DictationOverlay(
             }
         }
         cancel.visibility = if (session.busy) android.view.View.VISIBLE else android.view.View.GONE
-        copy.visibility = if (session.text != null) android.view.View.VISIBLE else android.view.View.GONE
+        copy.visibility =
+            if (session.text != null) android.view.View.VISIBLE else android.view.View.GONE
         discard.visibility = copy.visibility
-        disable.visibility = if (!session.busy && session.text == null) android.view.View.VISIBLE else android.view.View.GONE
+        disable.visibility =
+            if (!session.busy && session.text == null) android.view.View.VISIBLE
+            else android.view.View.GONE
     }
 
     fun showMessage(message: String) {
@@ -228,17 +252,22 @@ class DictationOverlay(
     private fun clamp() {
         val metrics = windows.currentWindowMetrics
         val insets = metrics.windowInsets.getInsets(WindowManagerInsets)
-        params.x = params.x.coerceIn(insets.left, maxOf(insets.left, metrics.bounds.width() - layout.width - insets.right))
-        params.y = params.y.coerceIn(insets.top, maxOf(insets.top, metrics.bounds.height() - layout.height - insets.bottom))
+        params.x =
+            params.x.coerceIn(
+                insets.left,
+                maxOf(insets.left, metrics.bounds.width() - layout.width - insets.right),
+            )
+        params.y =
+            params.y.coerceIn(
+                insets.top,
+                maxOf(insets.top, metrics.bounds.height() - layout.height - insets.bottom),
+            )
     }
 
     private fun dp(value: Int): Int = (value * density).toInt()
 
     companion object {
         private val WindowManagerInsets =
-            android.view.WindowInsets.Type
-                .systemBars() or
-                android.view.WindowInsets.Type
-                    .ime()
+            android.view.WindowInsets.Type.systemBars() or android.view.WindowInsets.Type.ime()
     }
 }

@@ -14,12 +14,14 @@ import org.junit.Test
 class FixtureTest {
     @get:Rule val compose = createAndroidComposeRule<FixtureActivity>()
 
-    @Test fun composeFixtureIsEditable() {
+    @Test
+    fun composeFixtureIsEditable() {
         compose.onNodeWithTag("compose-editor").performTextInput("café, mañana")
         compose.onNodeWithTag("compose-editor").assertTextContains("café, mañana")
     }
 
-    @Test fun stockEditorInputConnectionPreservesCursorAndSelectionSemantics() {
+    @Test
+    fun stockEditorInputConnectionPreservesCursorAndSelectionSemantics() {
         compose.runOnIdle {
             val editor = compose.activity.findViewById<EditText>(R.id.plain_editor)
             editor.requestFocus()
@@ -33,7 +35,8 @@ class FixtureTest {
         }
     }
 
-    @Test fun inputFiltersMayTransformAnAttemptedCommit() {
+    @Test
+    fun inputFiltersMayTransformAnAttemptedCommit() {
         compose.runOnIdle {
             val editor = compose.activity.findViewById<EditText>(R.id.filtered_editor)
             editor.requestFocus()
