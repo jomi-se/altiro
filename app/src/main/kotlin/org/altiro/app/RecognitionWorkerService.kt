@@ -4,6 +4,9 @@ import android.app.Service
 import android.content.Intent
 import android.os.IBinder
 import android.os.Process
+import java.nio.CharBuffer
+import java.nio.charset.CharacterCodingException
+import java.nio.charset.CodingErrorAction
 import java.util.concurrent.Executors
 import org.altiro.inference.NativeProgress
 import org.altiro.inference.NativeWhisper
@@ -26,6 +29,7 @@ class RecognitionWorkerService : Service() {
                 gpu: Boolean,
                 flashAttention: Boolean,
                 dynamicWindow: Boolean,
+                vocabularyPrompt: String,
                 callback: IRecognitionCallback,
             ) {
                 synchronized(lock) {
@@ -35,6 +39,13 @@ class RecognitionWorkerService : Service() {
                 executor.execute {
                     var status = 2
                     try {
+                        val prompt = promptBytes(vocabularyPrompt)
+                        if (prompt == null) {
+                            callback.onRuntime(
+                                "{\"status\":\"FAILED\",\"failure\":\"VOCABULARY_INVALID\"}"
+                            )
+                            return@execute
+                        }
                         val native = NativeWhisper()
                         synchronized(lock) {
                             runtime = native
@@ -59,6 +70,7 @@ class RecognitionWorkerService : Service() {
                                     override fun onRuntime(report: String) =
                                         callback.onRuntime(report)
                                 },
+                                prompt,
                             )
                         if (text != null && !synchronized(lock) { cancelled }) {
                             // Bound Binder transactions; partial chunks never become an insertion
@@ -102,6 +114,19 @@ class RecognitionWorkerService : Service() {
         }
 
     override fun onBind(intent: Intent): IBinder = binder
+
+    /** Lone surrogates fail instead of becoming '?'; native enforces the byte cap and NUL. */
+    private fun promptBytes(value: String): ByteArray? =
+        try {
+            val bytes =
+                Charsets.UTF_8.newEncoder()
+                    .onMalformedInput(CodingErrorAction.REPORT)
+                    .onUnmappableCharacter(CodingErrorAction.REPORT)
+                    .encode(CharBuffer.wrap(value))
+            ByteArray(bytes.remaining()).also { bytes.get(it) }
+        } catch (_: CharacterCodingException) {
+            null
+        }
 
     override fun onUnbind(intent: Intent): Boolean {
         // No native work may outlive its single parent-owned binding.

@@ -49,6 +49,20 @@ Framework startup regression tests and API 33/37 emulator jobs, including a
 Their stable `emulator` aggregate matches the protected branch's required check;
 every configuration must pass before that gate reports success.
 
+Version 0.5.2 adds the optional local vocabulary required by specification 10.4.
+Setup edits a bounded 100-term/4 KiB list; empty is the default, and Clear plus
+Save disables hints. Inputs snapshot the list at recording start for every
+comparison pass. IPC/JNI carries strict UTF-8 without exposing words in diagnostic
+reports, which show only the configured count. Whisper treats it as a prompt,
+with its own token limit and final-window anti-hallucination behavior retained.
+See [decision 0011](../decisions/0011-local-vocabulary-hints.md).
+Host verification passes: 35 core and 8 acquisition tests, Android assembly and
+lint, native 16 KiB packaging, and instrumentation APK compilation. Production
+JNI checks pass with empty/Unicode hints, all-audio processing, digital silence,
+cancellation and invalid byte inputs; requested unavailable GPU still fails
+without a CPU retry. Physical vocabulary quality, noise and editing checks remain
+pending in [the phone procedure](../testing/vocabulary.md).
+
 Public-repository preparation adds private-reporting guidance, staged and
 full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency
 update configuration alongside existing GitHub Actions updates. Remote security

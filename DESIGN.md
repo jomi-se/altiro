@@ -377,6 +377,17 @@ audited binaries have a distribution location. Source and License links stay
 beside supporting model actions and wrap rather than being squeezed away;
 opening either link is separate from choosing a download.
 
+### Names and terms
+
+Setup has a quiet outlined Names & terms action with the saved count. It expands
+an ordinary multiline Material text field in place, with one term per line,
+validation and count/UTF-8 budget feedback. Save is explicit; Clear edits the
+draft and Save commits the empty list. Cancel preserves the saved vocabulary.
+The field and Save/Clear disable during recording or native work. The main
+scroll container consumes system insets and adds IME padding so the form and
+actions remain reachable when the keyboard opens. Native rendered validation
+at increased font scale remains pending.
+
 ### Navigation and Console
 
 Home, Models and Console use a native bottom navigation bar with chalk layer

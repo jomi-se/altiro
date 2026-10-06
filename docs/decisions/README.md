@@ -23,6 +23,8 @@ initial choices. No additional decision records are needed to restate it.
   approved visual direction and the actual overlay's interaction priorities.
 - [0010 — Foreground-start teardown](0010-foreground-start-teardown.md):
   acknowledged startup before abandoned capture, with microphone checks retained.
+- [0011 — Local vocabulary hints](0011-local-vocabulary-hints.md):
+  bounded, explicit names and terms frozen per recording, with content-free diagnostics.
 
 Record meaningful departures or newly resolved forks as numbered Markdown
 files with title, status, date, context, decision, consequences, and evidence.

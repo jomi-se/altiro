@@ -65,13 +65,14 @@ class WorkerIsolationTest {
                 false,
                 true,
                 true,
+                "Ñuñoa, 𝔸ltiro",
                 object : IRecognitionCallback.Stub() {
                     override fun onProgress(percent: Int) {}
 
                     override fun onPhase(phase: Int) {}
 
                     override fun onRuntime(report: String) {
-                        assertTrue(!report.contains("missing-audio"))
+                        assertTrue(!report.contains("missing-audio") && !report.contains("Ñuñoa"))
                     }
 
                     override fun onTextChunk(text: String): Unit =

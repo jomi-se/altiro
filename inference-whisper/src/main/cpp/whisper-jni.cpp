@@ -92,6 +92,27 @@ void progress(whisper_context *, whisper_state *, int percent, void *data) {
         callback->operation->cancelled.store(true);
     }
 }
+// Well-formed UTF-8 without NUL (Unicode Table 3-7), so c_str() carries the whole prompt.
+bool valid_prompt(const std::string &text) {
+    for (size_t i = 0; i < text.size();) {
+        const auto c = static_cast<unsigned char>(text[i]);
+        if (c == 0) return false;
+        if (c < 0x80) { ++i; continue; }
+        size_t n = 0;
+        unsigned char low = 0x80, high = 0xBF;
+        if (c >= 0xC2 && c <= 0xDF) n = 1;
+        else if (c >= 0xE0 && c <= 0xEF) { n = 2; if (c == 0xE0) low = 0xA0; if (c == 0xED) high = 0x9F; }
+        else if (c >= 0xF0 && c <= 0xF4) { n = 3; if (c == 0xF0) low = 0x90; if (c == 0xF4) high = 0x8F; }
+        else return false;
+        if (i + n >= text.size()) return false;
+        for (size_t k = 1; k <= n; ++k) {
+            const auto b = static_cast<unsigned char>(text[i + k]);
+            if (b < (k == 1 ? low : 0x80) || b > (k == 1 ? high : 0xBF)) return false;
+        }
+        i += n + 1;
+    }
+    return true;
+}
 jstring utf8_string(JNIEnv *env, const std::string &text) {
     auto bytes = env->NewByteArray(static_cast<jsize>(text.size()));
     if (!bytes) return nullptr;
@@ -170,9 +191,9 @@ extern "C" JNIEXPORT void JNICALL Java_org_altiro_inference_NativeWhisper_releas
     operations.erase(id);
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_transcribe(
-    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jboolean flash_attention, jboolean dynamic_window, jobject receiver) {
+    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jboolean flash_attention, jboolean dynamic_window, jobject receiver, jbyteArray initial_prompt) {
     auto operation = lookup(id);
-    if (!operation || !model_path || !audio_path || !language || !receiver) {
+    if (!operation || !model_path || !audio_path || !language || !receiver || !initial_prompt) {
         error(env, "Invalid native operation"); return nullptr;
     }
     jmethodID runtime_method = nullptr;
@@ -200,6 +221,12 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         runtime_method = env->GetMethodID(cls, "onRuntime", "(Ljava/lang/String;)V");
         env->DeleteLocalRef(cls);
         if (!method || !phase_method || !runtime_method) return nullptr;
+        // Copied, never pinned across inference. Contents stay out of reports and logs.
+        const jsize prompt_size = env->GetArrayLength(initial_prompt);
+        if (prompt_size > 4096) throw RuntimeError("VOCABULARY_INVALID");
+        std::string prompt(static_cast<size_t>(prompt_size), '\0');
+        env->GetByteArrayRegion(initial_prompt, 0, prompt_size, reinterpret_cast<jbyte *>(prompt.data()));
+        if (!valid_prompt(prompt)) throw RuntimeError("VOCABULARY_INVALID");
         auto phase = [&](int value) {
             env->CallVoidMethod(receiver, phase_method, value);
             if (env->ExceptionCheck()) {
@@ -271,6 +298,10 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         params.language = hint == "auto" ? nullptr : lang.data;
         params.detect_language = false; // null language detects then transcribes; true would detect only.
         params.no_context = true;
+        // Empty keeps the previous path exactly. Carrying applies only to a nonempty prompt:
+        // upstream then keeps it before every window, except a final window under 5 s.
+        params.initial_prompt = prompt.empty() ? nullptr : prompt.c_str();
+        params.carry_initial_prompt = !prompt.empty();
         params.single_segment = false;
         params.duration_ms = 0; // Process all windows, including recordings longer than 30 seconds.
         params.print_realtime = params.print_progress = params.print_timestamps = params.print_special = false;

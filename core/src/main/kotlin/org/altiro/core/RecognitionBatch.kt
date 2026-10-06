@@ -10,6 +10,7 @@ data class RecognitionInput(
     val backend: RecognitionBackend = RecognitionBackend.CPU,
     val flashAttention: Boolean = false,
     val window: RecognitionWindow = RecognitionWindow.FULL,
+    val vocabulary: Vocabulary = Vocabulary.EMPTY,
 )
 
 data class TimedTranscript(

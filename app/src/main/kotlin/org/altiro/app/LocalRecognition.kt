@@ -241,6 +241,7 @@ class LocalRecognition(
                         input.backend == RecognitionBackend.VULKAN,
                         input.flashAttention,
                         input.window == RecognitionWindow.DYNAMIC,
+                        input.vocabulary.prompt,
                         callback,
                     )
                     if (operation.cancelled.get()) remote!!.cancel(1)

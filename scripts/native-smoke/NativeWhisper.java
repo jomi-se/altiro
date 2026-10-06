@@ -2,6 +2,7 @@ package org.altiro.inference;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
@@ -19,7 +20,11 @@ public final class NativeWhisper {
     native long create();
     native void cancel(long operation);
     native void release(long operation);
-    native String transcribe(long operation, String model, String wav, String language, boolean gpu, boolean flashAttention, boolean dynamicWindow, Progress progress);
+    native String transcribe(long operation, String model, String wav, String language, boolean gpu, boolean flashAttention, boolean dynamicWindow, Progress progress, byte[] initialPrompt);
+
+    String transcribe(long operation, String model, String wav, String language, boolean gpu, boolean flashAttention, boolean dynamicWindow, Progress progress) {
+        return transcribe(operation, model, wav, language, gpu, flashAttention, dynamicWindow, progress, new byte[0]);
+    }
 
     private String run(String model, String wav, String language, boolean cancelDuringProgress) {
         return run(model, wav, language, cancelDuringProgress, false);
@@ -30,6 +35,10 @@ public final class NativeWhisper {
     }
 
     private String run(String model, String wav, String language, boolean cancelDuringProgress, boolean flashAttention, boolean dynamicWindow) {
+        return run(model, wav, language, cancelDuringProgress, flashAttention, dynamicWindow, new byte[0]);
+    }
+
+    private String run(String model, String wav, String language, boolean cancelDuringProgress, boolean flashAttention, boolean dynamicWindow, byte[] prompt) {
         long handle = create();
         AtomicBoolean requested = new AtomicBoolean();
         Thread[] cancellation = new Thread[1];
@@ -48,7 +57,7 @@ public final class NativeWhisper {
                     cancellation[0].start();
                 }
               }
-            });
+            }, prompt);
             if (text != null && !text.isBlank() && runtimeReports.stream().noneMatch(value -> value.contains("\"flash_attention\":" + flashAttention))) throw new AssertionError("Flash Attention context setting missing or wrong");
             if (cancelDuringProgress && (!requested.get() || text != null)) throw new AssertionError("Native cancellation failed");
             if (cancelDuringProgress && !phases.contains(5)) throw new AssertionError("Cancelled context not released");
@@ -69,6 +78,8 @@ public final class NativeWhisper {
                 if (runtimeReports.stream().noneMatch(value -> value.contains(languageContext))) throw new AssertionError("Language detection window missing or wrong");
             }
             if (runtimeReports.stream().anyMatch(value -> value.contains(model) || value.contains(wav))) throw new AssertionError("Runtime report disclosed paths");
+            String hint = new String(prompt, StandardCharsets.UTF_8);
+            if (!hint.isEmpty() && runtimeReports.stream().anyMatch(value -> value.contains(hint.substring(0, Math.min(8, hint.length()))))) throw new AssertionError("Runtime report disclosed vocabulary");
             return text;
         } finally {
             if (cancellation[0] != null) {
@@ -77,6 +88,24 @@ public final class NativeWhisper {
             release(handle);
             cancel(handle); // A stale operation is harmless.
         }
+    }
+
+    private void rejectsPrompt(String model, String wav, byte[] prompt) {
+        long handle = create();
+        List<Integer> phases = new ArrayList<>();
+        List<String> reports = new ArrayList<>();
+        try {
+            transcribe(handle, model, wav, "en", false, false, false, new Progress() {
+                @Override public void onProgress(int percent) {}
+                @Override public void onPhase(int phase) { phases.add(phase); }
+                @Override public void onRuntime(String report) { reports.add(report); }
+            }, prompt);
+            throw new AssertionError("Invalid vocabulary prompt accepted");
+        } catch (IllegalStateException expected) {
+            if (!"Local recognition failed".equals(expected.getMessage())) throw expected;
+            if (!reports.equals(List.of("{\"status\":\"FAILED\",\"failure\":\"VOCABULARY_INVALID\"}"))) throw new AssertionError("Missing or extra vocabulary failure report");
+            if (!phases.isEmpty()) throw new AssertionError("Invalid vocabulary reached audio or model loading");
+        } finally { release(handle); }
     }
 
     private static byte[] header(int length) {
@@ -158,6 +187,32 @@ public final class NativeWhisper {
         } catch (IllegalStateException expected) {
             if (!"Local recognition failed".equals(expected.getMessage())) throw expected;
         }
-        System.out.println("JNI smoke passed: full/dynamic attention off/on speech and >30s audio, decode/auto/flash cancellation, stale handles, exact silence, malformed WAV");
+        // Vocabulary hints: optional context only. Never print hints or recognized text.
+        byte[] hints = "Ñuñoa, Valparaíso, 𝔸ltiro, 中文, Kotlin".getBytes(StandardCharsets.UTF_8);
+        if (!shortText.equals(nativeWhisper.run(model, speech, "en", false, false, false, new byte[0]))) throw new AssertionError("Empty vocabulary changed recognition");
+        String hinted = nativeWhisper.run(model, speech, "en", false, false, false, hints);
+        if (hinted == null || !hinted.toLowerCase().contains("country")) throw new AssertionError("Speech with vocabulary failed");
+        String hintedLong = nativeWhisper.run(model, longWav.toString(), "en", false, false, true, hints);
+        if (hintedLong == null || hintedLong.toLowerCase().split("country", -1).length < 3) throw new AssertionError("Vocabulary lost a long-audio window");
+        if (!"".equals(nativeWhisper.run(model, silent.toString(), "es", false, false, true, hints))) throw new AssertionError("Exact silence with vocabulary generated text");
+        nativeWhisper.run(model, longWav.toString(), "en", true, false, false, hints);
+        long cancelled = nativeWhisper.create();
+        try {
+            nativeWhisper.cancel(cancelled);
+            if (nativeWhisper.transcribe(cancelled, "unused", "unused", "es", false, false, true, percent -> {}, hints) != null) throw new AssertionError("Pre-cancelled vocabulary run produced text");
+        } finally { nativeWhisper.release(cancelled); }
+        StringBuilder full = new StringBuilder();
+        String term = "Ñuñoa 𝔸 ";
+        int termBytes = term.getBytes(StandardCharsets.UTF_8).length;
+        while (full.toString().getBytes(StandardCharsets.UTF_8).length + termBytes <= 4096) full.append(term);
+        while (full.toString().getBytes(StandardCharsets.UTF_8).length < 4096) full.append('x');
+        byte[] maximum = full.toString().getBytes(StandardCharsets.UTF_8);
+        if (maximum.length != 4096 || nativeWhisper.run(model, speech, "en", false, false, false, maximum) == null) throw new AssertionError("Maximum vocabulary prompt failed");
+        nativeWhisper.rejectsPrompt(model, speech, Arrays.copyOf(maximum, 4097));
+        nativeWhisper.rejectsPrompt(model, speech, new byte[] {'A', 0, 'B'});
+        for (byte[] invalid : new byte[][] {{(byte) 0xC3}, {(byte) 0xC0, (byte) 0xAF}, {(byte) 0xED, (byte) 0xA0, (byte) 0x80}, {(byte) 0xF4, (byte) 0x90, (byte) 0x80, (byte) 0x80}, {(byte) 0xF0, (byte) 0x9D, (byte) 0x94}}) {
+            nativeWhisper.rejectsPrompt(model, speech, invalid);
+        }
+        System.out.println("JNI smoke passed: full/dynamic attention off/on speech and >30s audio, decode/auto/flash cancellation, stale handles, exact silence, malformed WAV; vocabulary empty/Unicode/long/silence/cancel/limit/NUL/malformed");
     }
 }

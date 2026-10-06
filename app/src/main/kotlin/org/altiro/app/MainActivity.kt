@@ -41,6 +41,9 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
+import org.altiro.core.Vocabulary
+import org.altiro.core.VocabularyError
+import org.altiro.core.VocabularyValidation
 import org.altiro.core.Wav
 
 class MainActivity : ComponentActivity() {
@@ -111,6 +114,8 @@ class MainActivity : ComponentActivity() {
                     Column(
                         Modifier.fillMaxSize()
                             .padding(insets)
+                            .consumeWindowInsets(insets)
+                            .imePadding()
                             .verticalScroll(pageScroll)
                             .padding(horizontal = 24.dp, vertical = 16.dp),
                         verticalArrangement = Arrangement.spacedBy(20.dp),
@@ -611,6 +616,100 @@ private fun SetupContent(
         style = MaterialTheme.typography.bodySmall,
     )
     TextButton(onClick = controller::clearDisabledApps) { Text("Restore mic in hidden apps") }
+    VocabularyContent(controller)
+}
+
+@Composable
+private fun VocabularyContent(controller: DictationController) {
+    val saved by controller.vocabulary.collectAsState()
+    val session by controller.session.collectAsState()
+    val nativeBusy by controller.recognition.busy.collectAsState()
+    val editable = !session.busy && !nativeBusy
+    var expanded by rememberSaveable { mutableStateOf(false) }
+    var draft by rememberSaveable { mutableStateOf("") }
+    var oversizedPaste by rememberSaveable { mutableStateOf(false) }
+    if (!expanded) {
+        OutlinedButton(
+            enabled = editable,
+            onClick = {
+                draft = saved.text
+                oversizedPaste = false
+                expanded = true
+            },
+        ) {
+            AltiroIcon(Glyph.MODEL)
+            Spacer(Modifier.width(8.dp))
+            Text(if (saved.count == 0) "Names & terms" else "Names & terms · ${saved.count}")
+        }
+        return
+    }
+    val validation = remember(draft) { Vocabulary.parse(draft) }
+    val validated = (validation as? VocabularyValidation.Valid)?.vocabulary
+    val error =
+        when {
+            oversizedPaste -> "Up to 4 KiB of words. Paste a shorter list."
+            validation is VocabularyValidation.Invalid ->
+                when (validation.error) {
+                    VocabularyError.TOO_MANY_TERMS -> "Keep up to 100 terms. Remove a few to save."
+                    VocabularyError.TOO_LARGE -> "Up to 4 KiB of words. Shorten the list to save."
+                    VocabularyError.INVALID_CHARACTERS ->
+                        "Remove control characters or incomplete Unicode to save."
+                }
+            else -> null
+        }
+    Text("Names & terms", style = MaterialTheme.typography.titleMedium)
+    Text(
+        "Optional spelling hints, one per line. Saved only on this phone. Short lists work best; Whisper may use only the end of a long list. Clear and Save to turn hints off.",
+        style = MaterialTheme.typography.bodySmall,
+    )
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { next ->
+            if (next.length <= Vocabulary.MAX_DRAFT_CHARS) {
+                draft = next
+                oversizedPaste = false
+            } else oversizedPaste = true
+        },
+        modifier = Modifier.fillMaxWidth(),
+        enabled = editable,
+        label = { Text("One term per line") },
+        placeholder = { Text("Kubernetes\nAltiro") },
+        minLines = 4,
+        maxLines = 8,
+        isError = error != null,
+        supportingText = {
+            Text(
+                error
+                    ?: "${validated?.count ?: 0} / 100 terms · ${validated?.prompt?.toByteArray(Charsets.UTF_8)?.size ?: 0} / 4096 bytes"
+            )
+        },
+    )
+    if (!editable)
+        Text(
+            "Finish or cancel dictation to edit hints.",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        TextButton(
+            onClick = {
+                draft = ""
+                oversizedPaste = false
+            },
+            enabled = editable,
+        ) {
+            Text("Clear")
+        }
+        Spacer(Modifier.weight(1f))
+        TextButton(onClick = { expanded = false }) { Text("Cancel") }
+        Button(
+            enabled = editable && error == null && validated != null,
+            onClick = {
+                if (validated != null && controller.saveVocabulary(validated)) expanded = false
+            },
+        ) {
+            Text("Save")
+        }
+    }
 }
 
 @Composable

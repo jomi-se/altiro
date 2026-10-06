@@ -54,6 +54,7 @@ data class DiagnosticReport(
     val runtimes: List<RuntimeDetails> = emptyList(),
     val flashAttention: List<Boolean> = modelIds.map { false },
     val windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
+    val vocabularyTerms: Int = 0,
 ) {
     val processingMillis: Long
         get() =
@@ -65,6 +66,7 @@ data class DiagnosticReport(
         appendLine("Altiro recognition diagnostics · content-free")
         appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
         appendLine("Models: ${modelIds.joinToString()}")
+        appendLine("Vocabulary hints configured: $vocabularyTerms terms; words withheld")
         appendLine("Requested backends: ${backends.joinToString { it.name }}")
         appendLine("Requested audio windows: ${windows.joinToString { it.name }}")
         appendLine(
@@ -144,7 +146,9 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
         flashAttention: List<Boolean> = modelIds.map { false },
         windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
+        vocabularyTerms: Int = 0,
     ) {
+        require(vocabularyTerms in 0..Vocabulary.MAX_TERMS)
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
         require(
@@ -169,6 +173,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                 backends = backends.toList(),
                 flashAttention = flashAttention.toList(),
                 windows = windows.toList(),
+                vocabularyTerms = vocabularyTerms,
             )
         phase(RecognitionStage.STARTUP)
     }

@@ -26,6 +26,8 @@ import org.altiro.core.Session
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
 import org.altiro.core.TimedTranscript
+import org.altiro.core.Vocabulary
+import org.altiro.core.VocabularyValidation
 import org.altiro.core.reduce
 
 class DictationController(private val context: Context) {
@@ -81,6 +83,17 @@ class DictationController(private val context: Context) {
                 .getSharedPreferences("preferences", Context.MODE_PRIVATE)
                 .getBoolean("dynamic-window", true)
         )
+    private val mutableVocabulary =
+        MutableStateFlow(
+            (Vocabulary.parse(
+                    context
+                        .getSharedPreferences("preferences", Context.MODE_PRIVATE)
+                        .getString("vocabulary", "")
+                        .orEmpty()
+                ) as? VocabularyValidation.Valid)
+                ?.vocabulary ?: Vocabulary.EMPTY
+        )
+    val vocabulary = mutableVocabulary.asStateFlow()
     var insertion: (() -> Unit)? = null
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
@@ -150,6 +163,7 @@ class DictationController(private val context: Context) {
             }
         val configuredInputs = inputs.map {
             it.copy(
+                vocabulary = vocabulary.value,
                 flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value,
                 window =
                     if (windowCompare) it.window
@@ -171,6 +185,7 @@ class DictationController(private val context: Context) {
             inputs.map { it.backend },
             configuredInputs.map { it.flashAttention },
             configuredInputs.map { it.window },
+            vocabularyTerms = configuredInputs.first().vocabulary.count,
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
@@ -396,6 +411,14 @@ class DictationController(private val context: Context) {
         if (session.value.busy || recognition.busy.value || models.busy.value) return
         dynamicWindow.value = value
         preferences.edit().putBoolean("dynamic-window", value).apply()
+    }
+
+    fun saveVocabulary(value: Vocabulary): Boolean {
+        checkMain()
+        if (session.value.busy || recognition.busy.value) return false
+        preferences.edit().putString("vocabulary", value.text).apply()
+        mutableVocabulary.value = value
+        return true
     }
 
     fun clearDiagnostics() {

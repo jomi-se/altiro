@@ -29,6 +29,8 @@ class NativeWhisper {
         flashAttention: Boolean,
         dynamicWindow: Boolean,
         progress: NativeProgress,
+        /** Optional recognition context: well-formed UTF-8, at most 4096 bytes, no NUL. */
+        initialPrompt: ByteArray = byteArrayOf(),
     ): String?
 
     companion object {

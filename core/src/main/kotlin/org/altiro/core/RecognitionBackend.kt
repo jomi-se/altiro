@@ -34,6 +34,7 @@ enum class RuntimeFailure {
     INVALID_REPORT,
     OUT_OF_MEMORY,
     DEVICE_LOST,
+    VOCABULARY_INVALID,
 }
 
 enum class WorkerExitReason {

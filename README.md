@@ -88,6 +88,12 @@ contains the reversible CPU/Vulkan, Flash Attention and full/dynamic experiments
 plus same-recording model comparison. Comparisons never insert automatically.
 CPU remains the default; Vulkan compatibility and performance are device-specific.
 
+**Setup → Names & terms** offers optional local spelling hints: one per line,
+up to 100 terms and 4 KiB. Save applies the list to the next recording; Clear
+followed by Save turns hints off. The same saved list is used in every comparison
+pass. Hints guide recognition rather than replacing transcript text, and do not
+guarantee spelling. Console reports only the configured count, never the words.
+
 See the [product interface checks](docs/testing/everyday-interface.md),
 [Gate A](docs/testing/gate-a.md), [Gate B](docs/testing/gate-b.md), and
 [recognition diagnostics](docs/testing/recognition-diagnostics.md).
