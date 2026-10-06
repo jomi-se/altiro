@@ -64,6 +64,12 @@ separate screen, then return to your editor for explicit Insert.
 Use ES for Spanish-only speech. Test airplane mode after installing the model.
 See [Gate B](docs/testing/gate-b.md) for the quality/lifecycle procedure.
 
+Open **Recognition diagnostics** to see where each run spends its time:
+verification, cold model loading, inference and cleanup have separate rows.
+Copy/Share exports a content-free timing report, including failed/cancelled runs.
+The trace stays in memory for ten minutes after completion and is replaced by
+the next recording. See [phone diagnostics](docs/testing/recognition-diagnostics.md).
+
 ## Development checks
 
 Use JDK 21, the pinned wrapper, Android SDK Platform 37.0, Build Tools 36.0.0,

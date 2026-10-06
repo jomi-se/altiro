@@ -24,6 +24,12 @@ data class ModelProfile(
     val experimental: Boolean,
 )
 
+data class ModelCheckTiming(
+    val modelId: String,
+    val elapsedMillis: Long,
+    val verified: Boolean,
+)
+
 class ModelStore(
     private val context: Context,
 ) {
@@ -56,6 +62,8 @@ class ModelStore(
     val selected = mutableSelected.asStateFlow()
     private val mutableInstalled = MutableStateFlow<Set<String>>(emptySet())
     val installed = mutableInstalled.asStateFlow()
+    val startupChecks = MutableStateFlow<List<ModelCheckTiming>>(emptyList())
+    val startupMillis = MutableStateFlow<Long?>(null)
     private val main = Handler(Looper.getMainLooper())
     private val worker = Executors.newSingleThreadExecutor()
     private val cancelled = AtomicBoolean()
@@ -68,6 +76,8 @@ class ModelStore(
 
     init {
         worker.execute {
+            val startupStarted = System.nanoTime()
+            var timings = emptyList<ModelCheckTiming>()
             context.filesDir
                 .resolve("models")
                 .apply { mkdirs() }
@@ -77,15 +87,26 @@ class ModelStore(
             val valid =
                 profiles
                     .filter {
-                        runCatching {
-                            VerifiedModel.matches(
-                                file(it),
-                                it.spec,
-                            )
-                        }.getOrDefault(false)
+                        val exists = file(it).isFile
+                        val started = System.nanoTime()
+                        if (exists) main.post { mutableStatus.value = "Checking ${it.name}…" }
+                        val verified =
+                            runCatching {
+                                VerifiedModel.matches(
+                                    file(it),
+                                    it.spec,
+                                )
+                            }.getOrDefault(false)
+                        if (exists) {
+                            timings = timings + ModelCheckTiming(it.spec.id, (System.nanoTime() - started) / 1_000_000, verified)
+                            val snapshot = timings
+                            main.post { startupChecks.value = snapshot }
+                        }
+                        verified
                     }.map { it.spec.id }
                     .toSet()
             main.post {
+                startupMillis.value = (System.nanoTime() - startupStarted) / 1_000_000
                 mutableInstalled.value = valid
                 updateReady()
                 mutableBusy.value = false

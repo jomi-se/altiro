@@ -18,7 +18,9 @@ import android.media.MediaRecorder
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.takeWhile
 import kotlinx.coroutines.launch
 import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
@@ -38,6 +40,7 @@ class DictationRecordingService : Service() {
     @Volatile private var requested = START
     private var recorder: AudioRecord? = null
     private var activeId: SessionId? = null
+    private var notificationObserver: Job? = null
     private val screenOff =
         object : BroadcastReceiver() {
             override fun onReceive(
@@ -201,11 +204,23 @@ class DictationRecordingService : Service() {
                                 notification(id, processing = true),
                                 ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
                             )
+                            notificationObserver =
+                                controller.scope.launch {
+                                    controller.diagnostics.report.takeWhile { it != null && it.outcome == null }.collect {
+                                        if (controller.session.value.id == id || controller.recognition.busy.value) {
+                                            getSystemService(NotificationManager::class.java).notify(
+                                                NOTIFICATION,
+                                                notification(id, processing = true, percent = controller.progress.value),
+                                            )
+                                        }
+                                    }
+                                }
                             controller.transcribe(id, audio, { percent ->
                                 getSystemService(
                                     NotificationManager::class.java,
                                 ).notify(NOTIFICATION, notification(id, processing = true, percent = percent))
                             }) {
+                                notificationObserver?.cancel()
                                 stopForeground(STOP_FOREGROUND_REMOVE)
                                 stopSelf()
                             }
@@ -253,7 +268,7 @@ class DictationRecordingService : Service() {
                 .setContentTitle(if (processing) "Altiro · recognizing offline" else "Altiro · recording")
                 .setContentText(
                     if (processing) {
-                        "${controller.activeModelName.value} · $percent% · microphone released"
+                        "${controller.activeModelName.value} · ${controller.processingLabel()} · microphone released"
                     } else {
                         "Maximum 5 minutes · audio stays on this device"
                     },
@@ -261,7 +276,12 @@ class DictationRecordingService : Service() {
                 .setOngoing(true)
                 .addAction(Notification.Action.Builder(null, "Cancel", action(CANCEL, 1)).build())
         if (processing) {
-            builder.setProgress(100, percent, percent == 0)
+            val stage =
+                controller.diagnostics.report.value
+                    ?.steps
+                    ?.lastOrNull { it.running }
+                    ?.stage
+            builder.setProgress(100, percent, stage != org.altiro.core.RecognitionStage.INFERENCE)
         } else {
             builder.addAction(Notification.Action.Builder(null, "Stop", action(STOP, 0)).build())
         }
@@ -285,6 +305,7 @@ class DictationRecordingService : Service() {
     }
 
     override fun onDestroy() {
+        notificationObserver?.cancel()
         stopCapture(CANCEL)
         unregisterReceiver(screenOff)
         executor.shutdown()

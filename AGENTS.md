@@ -35,6 +35,9 @@ experimental Chilean Small variants are allowlisted after conversion/audit.
 See `docs/decisions/0003-small-model-comparison.md`.
 Chilean Spanish is an explicit quality target; evaluate specialized models
 separately rather than assuming their training labels establish quality.
+Recognition diagnostics provides content-free phase timings and Copy/Share;
+see `docs/decisions/0004-recognition-diagnostics.md`. Cold loading remains the
+reference path until phone measurements justify an optimization.
 
 Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only

@@ -52,7 +52,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 combine(
                     controller.session,
                     controller.editorLabel,
-                    controller.progress,
+                    controller.diagnostics.report,
                     controller.recognition.busy,
                     controller.models.ready,
                 ) { _, _, _, _, _ -> Unit }.collect {

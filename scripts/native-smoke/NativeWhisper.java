@@ -5,11 +5,16 @@ import java.nio.ByteOrder;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.Arrays;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /** Host harness for the production JNI bridge; never prints recognized text. */
 public final class NativeWhisper {
-    interface Progress { void onProgress(int percent); }
+    interface Progress {
+        void onProgress(int percent);
+        default void onPhase(int phase) {}
+    }
     native long create();
     native void cancel(long operation);
     native void release(long operation);
@@ -19,8 +24,11 @@ public final class NativeWhisper {
         long handle = create();
         AtomicBoolean requested = new AtomicBoolean();
         Thread[] cancellation = new Thread[1];
+        List<Integer> phases = new ArrayList<>();
         try {
-            String text = transcribe(handle, model, wav, language, percent -> {
+            String text = transcribe(handle, model, wav, language, new Progress() {
+              @Override public void onPhase(int phase) { phases.add(phase); }
+              @Override public void onProgress(int percent) {
                 if (cancelDuringProgress && requested.compareAndSet(false, true)) {
                     cancellation[0] = new Thread(() -> {
                         try { Thread.sleep(200); } catch (InterruptedException interrupted) { Thread.currentThread().interrupt(); }
@@ -28,8 +36,11 @@ public final class NativeWhisper {
                     });
                     cancellation[0].start();
                 }
+              }
             });
             if (cancelDuringProgress && (!requested.get() || text != null)) throw new AssertionError("Native cancellation failed");
+            if (cancelDuringProgress && !phases.contains(5)) throw new AssertionError("Cancelled context not released");
+            if (text != null && !text.isBlank() && !phases.equals(List.of(1, 2, 3, 4, 5))) throw new AssertionError("Missing or unordered phase callbacks");
             return text;
         } finally {
             if (cancellation[0] != null) {

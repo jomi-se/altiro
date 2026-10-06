@@ -42,6 +42,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 
@@ -91,6 +92,9 @@ class MainActivity : ComponentActivity() {
                             )
                             Text("No account, network access, transcript history, or word allowance.")
                         }
+                    }
+                    OutlinedButton(onClick = { startActivity(Intent(this@MainActivity, DiagnosticsActivity::class.java)) }) {
+                        Text("Recognition diagnostics")
                     }
                     ModelControls(controller) { id ->
                         pendingImportId = id
@@ -175,18 +179,32 @@ internal fun AltiroTheme(content: @Composable () -> Unit) {
 internal fun ResultControls(controller: DictationController) {
     val session by controller.session.collectAsState()
     val progress by controller.progress.collectAsState()
-    val seconds by controller.processingSeconds.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
     val modelName by controller.activeModelName.collectAsState()
     val results by controller.lastRun.collectAsState()
     val comparing by controller.comparing.collectAsState()
+    val diagnostic by controller.diagnostics.report.collectAsState()
+    val context = LocalContext.current
     if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
-        Text("$modelName · $progress% · ${seconds}s")
-        Text("Loading the model can take a moment. The microphone is released.")
-        LinearProgressIndicator(progress = { progress / 100f })
+        Text("$modelName · ${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop")
+        Text(controller.processingLabel())
+        val trace = diagnostic
+        if (trace?.comparison == true) {
+            val index = trace.modelIds.indexOf(trace.steps.lastOrNull { it.modelId != null }?.modelId) + 1
+            Text("Comparison · model ${index.coerceAtLeast(1)} of ${trace.modelIds.size}, running sequentially")
+        }
+        Text("The microphone is released.")
+        if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE) {
+            LinearProgressIndicator(progress = { progress / 100f })
+        } else {
+            LinearProgressIndicator()
+        }
         OutlinedButton(onClick = controller::cancel) { Text("Cancel recognition") }
     } else if (nativeBusy) {
-        Text("Finishing cancellation and releasing the model…")
+        Text("Cancellation requested · ${controller.processingLabel()}")
+    }
+    if (diagnostic != null) {
+        OutlinedButton(onClick = { context.startActivity(Intent(context, DiagnosticsActivity::class.java)) }) { Text("View phase timings") }
     }
     if (comparing && results.isNotEmpty()) {
         Text("Same recording · ${results.size} models", style = MaterialTheme.typography.titleMedium)
@@ -242,7 +260,9 @@ private fun ModelControls(
     val language by controller.language.collectAsState()
     val available = !session.busy && !nativeBusy && !busy
     Text("Speech model", style = MaterialTheme.typography.titleMedium)
-    Text("Choose the model for everyday dictation. Switching installed models needs no download.")
+    Text(
+        "Everyday dictation runs only the selected model. App startup checks all installed files; other models are not loaded for recognition. Switching needs no download.",
+    )
     for (profile in controller.models.profiles) {
         val chosen = selected.spec.id == profile.spec.id
         val sizeMb = (profile.spec.bytes + 500_000) / 1_000_000

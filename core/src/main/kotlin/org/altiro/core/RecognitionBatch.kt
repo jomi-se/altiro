@@ -23,6 +23,8 @@ object RecognitionBatch {
         cancelled: () -> Boolean,
         transcribe: (RecognitionInput) -> String?,
         clockNanos: () -> Long = System::nanoTime,
+        phase: (RecognitionStage, String?) -> Unit = { _, _ -> },
+        failed: () -> Unit = {},
     ): List<TimedTranscript> {
         try {
             require(inputs.size in 1..4 && inputs.map { it.spec.id }.distinct().size == inputs.size)
@@ -30,6 +32,7 @@ object RecognitionBatch {
                 inputs.map { input ->
                     if (cancelled()) throw CancellationException()
                     val started = clockNanos()
+                    phase(RecognitionStage.VERIFYING, input.spec.id)
                     check(VerifiedModel.matches(input.file, input.spec, cancelled)) { "Model verification failed" }
                     val text = transcribe(input)
                     if (cancelled()) throw CancellationException()
@@ -37,7 +40,11 @@ object RecognitionBatch {
                 }
             if (cancelled()) throw CancellationException()
             return results
+        } catch (failure: Throwable) {
+            if (!cancelled()) failed()
+            throw failure
         } finally {
+            phase(RecognitionStage.AUDIO_DELETE, null)
             audio.delete()
         }
     }

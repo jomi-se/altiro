@@ -79,4 +79,29 @@ class RecognitionBatchTest {
             assertFalse(audio.exists())
         }
     }
+
+    @Test fun failedVerificationReportsItsPhaseBeforeDeletingAudioWithoutPublishingText() {
+        val model = input("q8")
+        model.file.writeText("bad")
+        val audio = folder.newFile("recording.wav")
+        val trace = RecognitionDiagnostics()
+        trace.begin("es", listOf(model.spec.id), false)
+        assertThrows(IllegalStateException::class.java) {
+            RecognitionBatch.run(
+                audio,
+                listOf(model),
+                { false },
+                { throw AssertionError("Native must not run") },
+                phase = trace::phase,
+                failed = trace::markFailure,
+            )
+        }
+        trace.finish(DiagnosticOutcome.FAILED)
+        val report = trace.report.value!!
+        assertEquals(RecognitionStage.VERIFYING, report.failureStage)
+        assertTrue(report.steps.any { it.stage == RecognitionStage.AUDIO_DELETE })
+        assertFalse(audio.exists())
+        assertFalse(report.export().contains(audio.absolutePath))
+        assertFalse(report.export().contains(model.file.absolutePath))
+    }
 }

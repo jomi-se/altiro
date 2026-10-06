@@ -13,9 +13,12 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import org.altiro.core.DiagnosticOutcome
 import org.altiro.core.EditorAuthority
 import org.altiro.core.Phase
+import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionInput
+import org.altiro.core.RecognitionStage
 import org.altiro.core.Session
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
@@ -38,6 +41,8 @@ class DictationController(
     val activeModelName = MutableStateFlow("")
     val lastRun = MutableStateFlow<List<TimedTranscript>>(emptyList())
     val comparing = MutableStateFlow(false)
+    val diagnostics = RecognitionDiagnostics()
+    private var diagnosticGeneration = 0L
 
     private data class RunPlan(
         val inputs: List<RecognitionInput>,
@@ -89,13 +94,38 @@ class DictationController(
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
+        diagnosticGeneration = id.value
+        diagnostics.begin(runPlan!!.language, profiles.map { it.spec.id }, compareIds != null)
+        scope.launch {
+            while (diagnosticGeneration == id.value && diagnostics.report.value?.let { it.outcome == null } == true) {
+                delay(1000)
+                if (diagnosticGeneration == id.value) diagnostics.refresh()
+            }
+            delay(600_000)
+            if (diagnosticGeneration == id.value && !recognition.busy.value) diagnostics.clear()
+        }
         event(SessionEvent.Start(id, if (explicit) null else editor.capture()))
         return id
     }
 
     fun event(event: SessionEvent) {
         checkMain()
-        mutableSession.value = reduce(session.value, event)
+        val previous = session.value
+        mutableSession.value = reduce(previous, event)
+        if (previous.id != event.id || diagnosticGeneration != event.id.value) return
+        if (event is SessionEvent.Cancel && !previous.attemptConsumed) {
+            diagnostics.requestCancellation()
+            if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.CANCELLED)
+        } else if (event is SessionEvent.Fail && !previous.attemptConsumed) {
+            diagnostics.markFailure()
+            if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.FAILED)
+        } else if (previous.phase != session.value.phase) {
+            when (session.value.phase) {
+                Phase.RECORDING -> diagnostics.phase(RecognitionStage.RECORDING)
+                Phase.FINALIZING -> diagnostics.phase(RecognitionStage.FINALIZING)
+                else -> Unit
+            }
+        }
     }
 
     fun transcribe(
@@ -127,13 +157,23 @@ class DictationController(
         }
         try {
             val plan = checkNotNull(runPlan)
-            recognition.transcribe(audio, plan.inputs, plan.language, { percent, modelId ->
+            diagnostics.audioDuration(((audio.length() - 44).coerceAtLeast(0) / 32).coerceAtMost(300_000))
+            recognition.transcribe(audio, plan.inputs, plan.language, diagnostics, { percent, modelId ->
                 if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
                     activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
                     progress.value = percent
                     onProgress(percent)
                 }
             }) { result ->
+                if (diagnosticGeneration == id.value) {
+                    diagnostics.finish(
+                        when {
+                            session.value.phase == Phase.FAILED || result.isFailure -> DiagnosticOutcome.FAILED
+                            diagnostics.report.value?.cancellationRequested == true -> DiagnosticOutcome.CANCELLED
+                            else -> DiagnosticOutcome.COMPLETED
+                        },
+                    )
+                }
                 if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
                     val transcripts = result.getOrNull().orEmpty()
                     lastRun.value = transcripts
@@ -232,6 +272,16 @@ class DictationController(
 
     fun copyText(text: String) {
         context.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("Altiro dictation", text))
+    }
+
+    fun processingLabel(): String {
+        val step =
+            diagnostics.report.value
+                ?.steps
+                ?.lastOrNull { it.running }
+        val label = step?.stage?.label ?: "Preparing recognition"
+        val seconds = (step?.durationMillis ?: 0) / 1000
+        return if (step?.stage == RecognitionStage.INFERENCE) "$label · ${progress.value}% · ${seconds}s" else "$label · ${seconds}s"
     }
 
     private fun checkMain() {

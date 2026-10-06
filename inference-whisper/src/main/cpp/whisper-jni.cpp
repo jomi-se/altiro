@@ -5,6 +5,7 @@
 #include <cstdint>
 #include <cstring>
 #include <fstream>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <stdexcept>
@@ -117,22 +118,36 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         if (!model.data || !wav.data || !lang.data) return nullptr;
         const std::string hint(lang.data);
         if (hint != "auto" && hint != "en" && hint != "fr" && hint != "es") throw std::runtime_error("Unsupported language");
+        auto cls = env->GetObjectClass(receiver);
+        auto method = env->GetMethodID(cls, "onProgress", "(I)V");
+        auto phase_method = env->GetMethodID(cls, "onPhase", "(I)V");
+        env->DeleteLocalRef(cls);
+        if (!method || !phase_method) return nullptr;
+        auto phase = [&](int value) {
+            env->CallVoidMethod(receiver, phase_method, value);
+            if (env->ExceptionCheck()) {
+                env->ExceptionClear();
+                operation->cancelled.store(true);
+            }
+        };
+        phase(1);
         auto audio = read_audio(wav.data, *operation);
         if (operation->cancelled.load()) return nullptr;
         if (std::all_of(audio.begin(), audio.end(), [](float value) { return value == 0; })) return utf8_string(env, "");
         std::call_once(log_once, [] { whisper_log_set([](ggml_log_level, const char *, void *) {}, nullptr); });
         auto context_params = whisper_context_default_params();
         context_params.use_gpu = false;
-        std::unique_ptr<whisper_context, decltype(&whisper_free)> context(
-            whisper_init_from_file_with_params(model.data, context_params), whisper_free);
+        phase(2);
+        std::unique_ptr<whisper_context, std::function<void(whisper_context *)>> context(
+            whisper_init_from_file_with_params(model.data, context_params), [&](whisper_context *value) {
+                if (std::uncaught_exceptions() && !operation->cancelled.load()) phase(6);
+                phase(5);
+                whisper_free(value);
+            });
         // Model loading itself is synchronous upstream. Cancellation is honored before
         // inference and the context is freed here before completion is reported.
         if (operation->cancelled.load()) return nullptr;
         if (!context) throw std::runtime_error("Model load failed");
-        auto cls = env->GetObjectClass(receiver);
-        auto method = env->GetMethodID(cls, "onProgress", "(I)V");
-        env->DeleteLocalRef(cls);
-        if (!method) return nullptr;
         Progress callback{env, receiver, method, operation.get()};
         auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         params.n_threads = 4;
@@ -151,9 +166,11 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         params.encoder_begin_callback_user_data = operation.get();
         params.abort_callback = abort_inference;
         params.abort_callback_user_data = operation.get();
+        phase(3);
         const int status = whisper_full(context.get(), params, audio.data(), static_cast<int>(audio.size()));
         if (operation->cancelled.load()) return nullptr;
         if (status != 0) throw std::runtime_error("Recognition failed");
+        phase(4);
         std::string text;
         for (int segment = 0; segment < whisper_full_n_segments(context.get()); ++segment) {
             text += whisper_full_get_segment_text(context.get(), segment);

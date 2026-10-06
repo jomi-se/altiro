@@ -90,6 +90,12 @@ release, and deletes audio after native work finishes, including cancellation.
 Capture errors discard audio. Result text is process-memory only; no history is
 persisted. Models are durable private files excluded from backup/transfer.
 
+**Recognition diagnostics** displays the latest session's monotonic timings
+without text/audio/editor data. It updates during native work, survives result
+discard and expires ten minutes after completion. Explicit Copy/Share includes
+app/OS versions, permission state and runtime/decode settings. No diagnostics
+are persisted or emitted to logcat. See [phone diagnostics](testing/recognition-diagnostics.md).
+
 ## Release boundary
 
 The preview is a debug APK. Release signing needs separately supplied secure

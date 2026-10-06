@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-03.
+Updated: 2026-10-06.
 
 ## Offline recognition preview
 
@@ -28,6 +28,15 @@ show separate transcripts and verification/load/recognition timings; Copy is
 explicit per result. Comparison produces no floating insertion payload. Cold-load each session, then release native
 memory before completion; warm residency is deferred. Rechecking the model,
 context ownership, and audio deletion share one serialized native worker.
+
+The operator reports roughly 40 seconds or more per dictation and unclear
+loading feedback; no captured benchmark yet. A dedicated diagnostics screen
+now traces phases without text/audio/editor data and offers Copy/Share. It
+separately times verification of all installed files on process startup. Each
+comparison model has separate verification/load/inference/release rows, with
+native failure/cancellation cleanup retained. Cold loading and decode settings
+remain unchanged. See [the decision](../decisions/0004-recognition-diagnostics.md)
+and [phone procedure](../testing/recognition-diagnostics.md).
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
@@ -61,7 +70,7 @@ rejection. All four Small profiles also passed public-sample recognition through
 production JNI bridge using the app's greedy, four-thread decode path. These
 are host-native tests, not Android or Chilean quality evidence.
 
-The Kotlin suite has eighteen passing tests, including sequential same-audio
+The Kotlin suite has twenty-two passing tests, including sequential same-audio
 comparison, cancellation before later models, corrupted model rejection, audio
 cleanup on failure, and comparison having no insertion payload. Both apps and instrumentation
 APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
@@ -70,12 +79,22 @@ and model manifest/artifact validation pass. Instrumentation is compiled
 separately from execution. Read-only CI includes build checks and an API 33 emulator job but
 has not been run remotely in this checkout. No local emulator has executed.
 
+Diagnostics tests cover running/final monotonic durations, processing time
+excluding capture, native cleanup after cancellation, failure-phase preservation,
+trace replacement/clearing, and no paths in exports. The production JNI host
+smoke verifies ordered phase callbacks and context-release callbacks after
+cancellation alongside the existing speech/silence/malformed-audio checks.
+
 [Gate A](../testing/gate-a.md) is partially user-reported and remains
 **unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the
 phone. No phone recognition latency, memory, multilingual accuracy, or runtime
 16 KiB compatibility is claimed. A debug APK is not a signed release.
 
 ## Next work
+
+Collect ordinary one-model phase diagnostics and a repeated run, then Q8/FP16
+at fixed language/duration. Identify whether verification, loading or inference
+dominates before changing residency or native compute settings.
 
 Execute Gate B in airplane mode using the installed real model,
 including native cancellation and 10/30/120-second English/French/Spanish

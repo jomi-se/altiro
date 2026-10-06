@@ -167,13 +167,13 @@ class DictationOverlay(
                 Phase.STARTING -> "Starting…"
                 Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
                 Phase.FINALIZING -> "Finishing recording…"
-                Phase.TRANSCRIBING -> "Recognizing · ${controller.progress.value}%"
+                Phase.TRANSCRIBING -> controller.processingLabel()
                 Phase.AWAITING_USER -> session.message ?: "Text ready"
                 Phase.DISPATCHED_UNCONFIRMED -> "Check insertion"
                 Phase.FAILED -> session.message ?: "Recognition failed"
                 else ->
                     if (controller.recognition.busy.value) {
-                        "Finishing cancellation…"
+                        "Cancelling · ${controller.processingLabel()}"
                     } else if (!controller.models.ready.value) {
                         "Import model in Altiro"
                     } else {

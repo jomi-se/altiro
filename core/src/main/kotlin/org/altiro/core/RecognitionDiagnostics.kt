@@ -1,0 +1,180 @@
+package org.altiro.core
+
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
+import java.util.Locale
+
+enum class RecognitionStage(
+    val label: String,
+) {
+    STARTUP("Starting microphone"),
+    RECORDING("Recording"),
+    FINALIZING("Finishing recording"),
+    QUEUED("Waiting for recognition worker"),
+    RUNTIME_START("Starting recognition runtime"),
+    VERIFYING("Checking model file"),
+    AUDIO_READ("Reading recorded audio"),
+    MODEL_LOAD("Loading model into memory"),
+    INFERENCE("Recognizing speech"),
+    TEXT_ASSEMBLY("Preparing result"),
+    MODEL_RELEASE("Releasing model memory"),
+    AUDIO_DELETE("Deleting temporary audio"),
+    WORKER_RELEASE("Finishing recognition worker"),
+}
+
+enum class DiagnosticOutcome { COMPLETED, CANCELLED, FAILED }
+
+data class DiagnosticStep(
+    val stage: RecognitionStage,
+    val modelId: String?,
+    val startMillis: Long,
+    val durationMillis: Long,
+    val running: Boolean,
+)
+
+/** An allowlisted, content-free trace of the latest session, kept only in memory. */
+data class DiagnosticReport(
+    val language: String,
+    val modelIds: List<String>,
+    val comparison: Boolean,
+    val audioMillis: Long? = null,
+    val steps: List<DiagnosticStep> = emptyList(),
+    val elapsedMillis: Long = 0,
+    val outcome: DiagnosticOutcome? = null,
+    val cancellationRequested: Boolean = false,
+    val failureStage: RecognitionStage? = null,
+) {
+    val processingMillis: Long
+        get() = steps.filter { it.stage !in setOf(RecognitionStage.STARTUP, RecognitionStage.RECORDING) }.sumOf { it.durationMillis }
+
+    fun export(): String =
+        buildString {
+            appendLine("Altiro recognition diagnostics · content-free")
+            appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
+            appendLine("Models: ${modelIds.joinToString()}")
+            appendLine("Runtime: whisper.cpp 1.9.4; CPU; 4 threads; greedy; temperature 0; no translation")
+            appendLine("Model lifecycle: verify, cold load, release on every run; no resident model")
+            appendLine("Audio: ${audioMillis?.let { seconds(it) + " s" } ?: "not finalized"}")
+            appendLine("Outcome: ${outcome?.name ?: "RUNNING"}; cancellation requested: $cancellationRequested")
+            failureStage?.let { appendLine("Failure stage: ${it.name}") }
+            appendLine("Session: ${seconds(elapsedMillis)} s; after Stop: ${seconds(processingMillis)} s")
+            audioMillis?.takeIf { it > 0 }?.let {
+                appendLine(
+                    "Processing/audio ratio: ${String.format(
+                        Locale.ROOT,
+                        "%.2f",
+                        processingMillis.toDouble() / it,
+                    )}",
+                )
+            }
+            for (step in steps) {
+                appendLine(
+                    "+${seconds(step.startMillis)} s · ${step.modelId ?: "session"} · ${step.stage.label}: " +
+                        "${seconds(step.durationMillis)} s${if (step.running) " (running)" else ""}",
+                )
+            }
+            appendLine("Inference includes audio features, language detection when Auto, encoder and decoder.")
+            appendLine("No dictated text, audio, editor identity, file paths or exception messages included.")
+        }
+
+    companion object {
+        fun seconds(millis: Long): String = String.format(Locale.ROOT, "%.2f", millis / 1000.0)
+    }
+}
+
+class RecognitionDiagnostics(
+    private val clockNanos: () -> Long = System::nanoTime,
+) {
+    private val mutableReport = MutableStateFlow<DiagnosticReport?>(null)
+    val report = mutableReport.asStateFlow()
+    private var started = 0L
+    private var activeStarted = 0L
+    private var completed = emptyList<DiagnosticStep>()
+    private var active: Pair<RecognitionStage, String?>? = null
+
+    @Synchronized fun begin(
+        language: String,
+        modelIds: List<String>,
+        comparison: Boolean,
+    ) {
+        require(language in setOf("auto", "en", "fr", "es"))
+        require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
+        started = clockNanos()
+        completed = emptyList()
+        active = null
+        mutableReport.value = DiagnosticReport(language, modelIds.toList(), comparison)
+        phase(RecognitionStage.STARTUP)
+    }
+
+    @Synchronized fun phase(
+        stage: RecognitionStage,
+        modelId: String? = null,
+    ) {
+        val report = mutableReport.value ?: return
+        if (report.outcome != null || active == (stage to modelId)) return
+        require(modelId == null || modelId in report.modelIds)
+        check(completed.size < 64)
+        val now = clockNanos()
+        closeStep(now)
+        active = stage to modelId
+        activeStarted = now
+        refreshAt(now)
+    }
+
+    @Synchronized fun audioDuration(millis: Long) {
+        require(millis in 0..300_000)
+        mutableReport.value = mutableReport.value?.copy(audioMillis = millis)
+    }
+
+    @Synchronized fun requestCancellation() {
+        mutableReport.value = mutableReport.value?.copy(cancellationRequested = true)
+    }
+
+    @Synchronized fun markFailure() {
+        mutableReport.value =
+            mutableReport.value?.let {
+                if (it.outcome != null) it else it.copy(failureStage = it.failureStage ?: active?.first)
+            }
+    }
+
+    @Synchronized fun finish(outcome: DiagnosticOutcome) {
+        if (mutableReport.value?.outcome != null) return
+        val now = clockNanos()
+        closeStep(now)
+        active = null
+        refreshAt(now)
+        mutableReport.value = mutableReport.value?.copy(outcome = outcome)
+    }
+
+    @Synchronized fun refresh() {
+        if (mutableReport.value?.outcome == null) refreshAt(clockNanos())
+    }
+
+    @Synchronized fun clear() {
+        mutableReport.value = null
+        completed = emptyList()
+        active = null
+    }
+
+    private fun closeStep(now: Long) {
+        active?.let { (stage, model) ->
+            completed =
+                completed + DiagnosticStep(stage, model, (activeStarted - started) / 1_000_000, (now - activeStarted) / 1_000_000, false)
+        }
+    }
+
+    private fun refreshAt(now: Long) {
+        val step =
+            active?.let { (stage, model) ->
+                DiagnosticStep(
+                    stage,
+                    model,
+                    (activeStarted - started) / 1_000_000,
+                    (now - activeStarted) / 1_000_000,
+                    true,
+                )
+            }
+        mutableReport.value =
+            mutableReport.value?.copy(steps = completed + listOfNotNull(step), elapsedMillis = (now - started) / 1_000_000)
+    }
+}
