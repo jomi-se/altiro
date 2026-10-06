@@ -53,8 +53,25 @@ join phase timing exports. One bounded content-free checkpoint survives restart
 outside backup until cleared or replaced; transcript/audio history remains absent.
 Visible recording and diagnostics screens stay awake during active work;
 manual lock still cancels. See [decision 0005](../decisions/0005-vulkan-device-experiment.md)
-and [phone experiment](../testing/gpu-experiment.md). GPU/device IPC execution
-and any speedup remain unverified until phone testing.
+and [phone experiment](../testing/gpu-experiment.md). The operator now reports
+successful stock Small Q8 CPU/Vulkan comparisons in both orders on Pixel 7:
+
+| Order | Audio | CPU inference | Vulkan inference | Vulkan time reduction |
+| --- | --- | --- | --- | --- |
+| Vulkan, CPU | 24.56 s | 38.30 s | 24.93 s | 34.9% |
+| CPU, Vulkan | 11.88 s | 36.50 s | 24.04 s | 34.1% |
+
+Both reports use Auto language, finish without typed failures, and report an
+initialized Mali-G710 GPU backend with Vulkan 1.4.343. These are two different
+recordings, each shared between its own passes; temperature and clock rates
+were not measured. The similar advantage in both orders supports a GPU speed
+improvement in these samples without establishing a controlled benchmark.
+Total encoder counters remain about 20 seconds on Vulkan and 33–34 seconds on
+CPU despite the different audio durations. The pinned runtime uses a full
+30-second audio context by default and Auto performs an additional encoder
+pass for language detection before transcription. Fixed EN/ES skips that pass;
+its phone latency benefit is not yet measured. See the
+[latency explanation](../testing/gpu-experiment.md#short-recordings-and-auto-language).
 
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
@@ -111,16 +128,18 @@ it has not been executed on Android. No host Vulkan compute was executed.
 
 [Gate A](../testing/gate-a.md) is partially user-reported and remains
 **unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the
-phone. User-supplied CPU latency traces are recorded above; controlled phone
-benchmarks, GPU behavior, memory, multilingual accuracy and runtime 16 KiB
-compatibility remain unverified. A debug APK is not a signed release.
+phone. User-supplied CPU/Vulkan latency traces are recorded above; controlled
+benchmarks, GPU failure/cancellation/lock behavior, memory, multilingual accuracy
+and runtime 16 KiB compatibility remain unverified. A debug APK is not a signed release.
 
 ## Next work
 
-Test CPU/GPU comparison on the reference phone with one installed Small Q8
-model and a short fixed-language recording. Export diagnostics on both success
-and failure, then reverse order and test cancellation/manual lock. Use FP16
-only after GPU initialization succeeds. Collect memory/thermal/quality evidence
+Both comparison orders now have successful user-reported Q8 smoke evidence.
+Use fixed EN/ES for ordinary dictation to skip Auto language detection; measure
+that latency before changing the runtime. Further optimization should investigate
+reusing the initial encoding for Auto or shortening the audio context, with
+quality checks before accepting either. GPU cancellation/manual lock and
+failure recovery still need phone evidence. FP16 remains a separate comparison. Collect memory/thermal/quality evidence
 before choosing a GPU default or enabling other compute optimizations. Inference
 dominates the supplied CPU traces; warm residency is not the main latency target.
 

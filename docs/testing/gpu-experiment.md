@@ -56,3 +56,21 @@ or a guarantee against system-wide driver/device faults.
 Host/build checks do not execute Android drivers or IPC lifecycle. Execute
 `WorkerIsolationTest` on device as well as the manual procedure. Existing
 [Gate A](gate-a.md) and [Gate B](gate-b.md) still apply.
+
+## Short recordings and Auto language
+
+The pinned whisper.cpp runtime uses the model's full audio context by default;
+Whisper's standard window is 30 seconds. Short clips still pass through that
+encoder window, so recognition time need not shrink in proportion to recording
+length. The operator's 11.88- and 24.56-second Q8 traces show similar total
+encoder counters in each backend; this is consistent with the implementation.
+See [Whisper audio constants](https://github.com/openai/whisper/blob/main/whisper/audio.py)
+and the [pinned encoder implementation](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L1850-L1869).
+
+With Auto, the pinned runtime calls the encoder for language identification,
+then calls it again in the transcription loop. Selecting EN or ES skips the
+automatic-language branch. This is an available setting, not a model change;
+the phone latency improvement remains to be measured. See the pinned
+[language detection](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L3788-L3814),
+[Auto branch](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L6351-L6371),
+and [transcription loop](https://github.com/ggml-org/whisper.cpp/blob/927cfce34f31707e17f2bff35c349632fb9e2c3a/src/whisper.cpp#L6532-L6555).
