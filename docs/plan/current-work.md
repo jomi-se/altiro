@@ -46,6 +46,8 @@ notice while its content-free Console checkpoint remains available. Pre-native
 Fail/Cancel now persist their terminal outcome to avoid a false restart notice.
 Framework startup regression tests and API 33/37 emulator jobs, including a
 16 KiB image, are prepared. Execution and physical recovery checks remain pending.
+Their stable `emulator` aggregate matches the protected branch's required check;
+every configuration must pass before that gate reports success.
 
 Public-repository preparation adds private-reporting guidance, staged and
 full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency

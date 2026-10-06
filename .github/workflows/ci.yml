@@ -54,7 +54,8 @@ jobs:
             ${{ runner.temp }}/altiro-build/**/test-results/
           retention-days: 7
 
-  emulator:
+  device-tests:
+    name: device-tests (${{ matrix.api-level }}, ${{ matrix.target }})
     runs-on: ubuntu-24.04
     strategy:
       fail-fast: false
@@ -102,3 +103,15 @@ jobs:
           name: emulator-tests-api-${{ matrix.api-level }}-${{ matrix.target }}
           path: ${{ runner.temp }}/altiro-build/**/reports/androidTests/
           retention-days: 7
+
+  emulator:
+    name: emulator
+    if: ${{ always() }}
+    needs: device-tests
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    steps:
+      - name: Require all device-test configurations to pass
+        env:
+          DEVICE_TEST_RESULT: ${{ needs.device-tests.result }}
+        run: test "$DEVICE_TEST_RESULT" = success

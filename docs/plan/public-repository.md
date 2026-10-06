@@ -36,7 +36,9 @@ remain explicit reviewed changes rather than Dependabot-managed updates.
 
 Main-branch rules prevent deletion and force pushes and require linear history.
 A separate pull-request/check rule requires `build`, `emulator` and `gitleaks`;
-administrators can bypass that rule, matching the existing public-project
+the `emulator` check aggregates all API/page-size device configurations and
+runs even after their failure, rejecting failed, cancelled or skipped results.
+Administrators can bypass that rule, matching the existing public-project
 workflow. Check requirements exempt initial branch creation so the first push
 can trigger CI. History protections have no bypass actors. Rebase is the
 enabled merge method.
