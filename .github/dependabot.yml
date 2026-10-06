@@ -3,10 +3,39 @@ updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 1
+    cooldown:
+      default-days: 7
+    # Restrict routine updates without excluding major security fixes.
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      routine-actions:
+        applies-to: version-updates
+        patterns: ["*"]
+      actions-security:
+        applies-to: security-updates
+        patterns: ["*"]
   - package-ecosystem: gradle
     directory: /
     schedule:
-      interval: weekly
-    open-pull-requests-limit: 5
+      interval: monthly
+    open-pull-requests-limit: 3
+    cooldown:
+      default-days: 7
+    allow:
+      - dependency-type: all
+        update-types:
+          - version-update:semver-minor
+          - version-update:semver-patch
+    groups:
+      routine-gradle:
+        applies-to: version-updates
+        patterns: ["*"]
+      gradle-security:
+        applies-to: security-updates
+        patterns: ["*"]

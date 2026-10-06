@@ -27,7 +27,12 @@ The repository is public. Verified settings enable secret scanning, secret
 push protection, Dependabot alerts/security updates, private vulnerability
 reporting, and read-only default Actions permissions without permission to
 approve pull requests. Local configuration adds GitHub Actions and Gradle
-Dependabot updates and a full-history Gitleaks workflow.
+Dependabot updates and a full-history Gitleaks workflow. Routine dependency
+updates are grouped separately for Gradle and GitHub Actions, run monthly, and
+wait seven days after a release. Routine updates allow minor/patch versions;
+security fixes are grouped separately without excluding major security fixes.
+This follows the existing public project's policy. Native runtime/model pins
+remain explicit reviewed changes rather than Dependabot-managed updates.
 
 Main-branch rules prevent deletion and force pushes and require linear history.
 A separate pull-request/check rule requires `build`, `emulator` and `gitleaks`;
