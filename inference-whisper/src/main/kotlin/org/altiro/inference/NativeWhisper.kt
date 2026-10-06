@@ -27,6 +27,7 @@ class NativeWhisper {
         language: String,
         gpu: Boolean,
         flashAttention: Boolean,
+        dynamicWindow: Boolean,
         progress: NativeProgress,
     ): String?
 

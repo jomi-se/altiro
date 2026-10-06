@@ -81,6 +81,15 @@ diagnostics screens stay awake during work; manual lock still cancels. See
 [GPU testing](docs/testing/gpu-experiment.md). Phone speed/compatibility remain
 unverified, and a failed GPU run is never silently retried on CPU.
 
+**Dynamic window for short recordings (experimental)** is enabled by default.
+Recordings under 30 seconds get a smaller padded encoder window; longer recordings
+keep the full-window path. Turn the switch off to restore the normal context.
+**Compare full and dynamic windows** uses the same recording and selected
+model/processor/attention setting twice, with separate results and no automatic
+insertion. Diagnostics show the native-selected window and Auto's separate
+language-detection window. Accuracy and phone speed remain experimental. See
+[dynamic-window testing](docs/testing/dynamic-window.md).
+
 ## Development checks
 
 Use JDK 21, the pinned wrapper, Android SDK Platform 37.0, Build Tools 36.0.0,

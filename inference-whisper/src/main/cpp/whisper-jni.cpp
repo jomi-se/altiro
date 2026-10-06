@@ -1,5 +1,6 @@
 #include <jni.h>
 #include "whisper.h"
+#include "audio-window.h"
 #include "ggml-backend.h"
 #ifdef ALTIRO_VULKAN
 #include <vulkan/vulkan.h>
@@ -169,7 +170,7 @@ extern "C" JNIEXPORT void JNICALL Java_org_altiro_inference_NativeWhisper_releas
     operations.erase(id);
 }
 extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_transcribe(
-    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jboolean flash_attention, jobject receiver) {
+    JNIEnv *env, jobject, jlong id, jstring model_path, jstring audio_path, jstring language, jboolean gpu, jboolean flash_attention, jboolean dynamic_window, jobject receiver) {
     auto operation = lookup(id);
     if (!operation || !model_path || !audio_path || !language || !receiver) {
         error(env, "Invalid native operation"); return nullptr;
@@ -259,10 +260,13 @@ extern "C" JNIEXPORT jstring JNICALL Java_org_altiro_inference_NativeWhisper_tra
         if (!context) throw RuntimeError("MODEL_LOAD_FAILED");
         const bool gpu_active = altiro_whisper_gpu_active(context.get());
         if (gpu && !gpu_active) throw RuntimeError("GPU_INIT_FAILED");
-        runtime(std::string("{\"status\":\"READY\",\"gpu_active\":") + (gpu_active ? "true" : "false") + ",\"flash_attention\":" + (altiro_whisper_flash_attention(context.get()) ? "true}" : "false}"));
+        const int full_context = whisper_n_audio_ctx(context.get());
+        const int audio_context = altiro_audio_context(audio.size(), full_context, dynamic_window);
+        runtime(std::string("{\"status\":\"READY\",\"gpu_active\":") + (gpu_active ? "true" : "false") + ",\"flash_attention\":" + (altiro_whisper_flash_attention(context.get()) ? "true" : "false") + ",\"audio_ctx\":" + std::to_string(audio_context) + ",\"language_detection_audio_ctx\":" + std::to_string(hint == "auto" ? full_context : 0) + "}");
         Progress callback{env, receiver, method, operation.get()};
         auto params = whisper_full_default_params(WHISPER_SAMPLING_GREEDY);
         params.n_threads = 4;
+        params.audio_ctx = audio_context < full_context ? audio_context : 0;
         params.translate = false;
         params.language = hint == "auto" ? nullptr : lang.data;
         params.detect_language = false; // null language detects then transcribes; true would detect only.

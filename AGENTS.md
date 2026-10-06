@@ -45,6 +45,9 @@ Flash Attention is enabled for GPU runs in the next experiment, with an in-app
 off switch and per-recording diagnostic setting. See
 `docs/decisions/0006-flash-attention-experiment.md`; Mali stability remains a
 phone gate.
+Dynamic windows are enabled for recordings under 30 seconds, with a full-window
+switch and same-recording comparison. See `docs/decisions/0007-dynamic-audio-window.md`;
+short-window accuracy and GPU behavior remain phone gates.
 Visible recording/diagnostics screens stay awake during work; manual lock still
 cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 

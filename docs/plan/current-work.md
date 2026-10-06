@@ -138,6 +138,17 @@ attention-specific speedup nor prove a regression. They show comparable
 ordinary-dictation latency and successful use of both switch settings. The
 remaining roughly nine-second encoder cost persists in both configurations.
 
+The requested [dynamic-window experiment](../decisions/0007-dynamic-audio-window.md)
+adds an enabled-by-default short-recording mode and a full-window switch. The
+native bridge uses decoded sample count, adds one second of padding and rounds
+up to five-second windows, capped at the normal context. Recordings of 30 seconds
+or more retain normal full-window processing. Model files stay unchanged.
+**Compare full and dynamic windows** uses one recording with the selected model,
+backend and attention setting held fixed, with reversible order and no insertion
+payload. Modes are frozen before capture and included in result/trace identity.
+Native-selected context frames and Auto's separate full-window detection are
+exported. Version 0.4.2 accuracy, performance and phone lifecycle remain unverified.
+
 The app has no Internet permission. Explicit browser download and file-picker
 import acquire the model. Import enforces actual byte size/SHA-256, bounded
 copy, cancellation, and atomic installation. Failed imports preserve a valid
@@ -170,8 +181,9 @@ rejection. All four Small profiles also passed public-sample recognition through
 production JNI bridge using the app's greedy, four-thread decode path. These
 are host-native tests, not Android or Chilean quality evidence.
 
-The Kotlin suite has twenty-five passing tests, including sequential same-audio
+The Kotlin suite has twenty-seven passing tests, including sequential same-audio
 comparison (including the same model with two backends and no silent fallback),
+same-model/backend window comparisons with distinct results and diagnostic traces,
 cancellation before later models, corrupted model rejection, audio
 cleanup on failure, and comparison having no insertion payload. Both apps and instrumentation
 APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
@@ -194,6 +206,11 @@ real speech, recordings longer than 30 seconds and cancellation with Flash
 Attention both off and on, including reporting the initialized graph setting.
 An explicit GPU request with Flash Attention enabled also returns the typed
 GPU-unavailable failure on the CPU-only host. No host Vulkan compute was executed.
+Dynamic-window production JNI checks also pass speech with attention off/on,
+sentence-ending retention, Auto's separate full context, native cancellation and
+audio beyond 30 seconds retaining full windows. Exhaustive sub-30-second sample
+counts cover sizing, padding and rounding boundaries. These checks use the
+public English sample on CPU; short-window phone/Chilean accuracy is unverified.
 
 [Gate A](../testing/gate-a.md) is partially user-reported and remains
 **unverified** overall. [Gate B](../testing/gate-b.md) is **unverified** on the
@@ -203,14 +220,17 @@ and runtime 16 KiB compatibility remain unverified. A debug APK is not a signed 
 
 ## Next work
 
-Both comparison orders now have successful user-reported Q8 smoke evidence.
-Use fixed EN/ES for ordinary dictation to skip Auto language detection; measure
-that latency before changing the runtime. Further optimization should investigate
-reusing the initial encoding for Auto or shortening the audio context, with
-quality checks before accepting either. GPU cancellation/manual lock and
-failure recovery still need phone evidence. FP16 remains a separate comparison. Collect memory/thermal/quality evidence
-before choosing a GPU default or enabling other compute optimizations. Inference
-dominates the supplied CPU traces; warm residency is not the main latency target.
+Q8 runs in both backend orders and FP16 GPU/CPU runs already have user-reported
+smoke evidence. Next compare full/dynamic windows on the same short recording
+using Small FP16, Vulkan and fixed EN/ES, holding attention constant. Follow the
+[dynamic-window procedure](../testing/dynamic-window.md), compare encoder time
+and text (especially sentence endings), and evaluate Chilean Spanish separately.
+Verify long recordings retain full windows. Auto encoding reuse remains a
+separate possible optimization; it is not implemented by this experiment.
+GPU cancellation/manual lock and failure recovery still need phone evidence.
+Collect memory/thermal/quality evidence before choosing a GPU default or
+accepting short-window quality parity. Inference dominates the supplied CPU
+traces; warm residency is not the main latency target.
 
 Execute Gate B in airplane mode using the installed real model,
 including native cancellation and 10/30/120-second English/French/Spanish

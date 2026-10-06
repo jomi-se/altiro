@@ -95,8 +95,10 @@ base model and a canonical mono PCM16/16 kHz copy of upstream's JFK sample:
 ./scripts/quiet-run.sh "native smoke" ./scripts/check-whisper-native.sh /path/to/ggml-base.bin /path/to/jfk-canonical.wav
 ```
 
-This tests real recognition with Flash Attention off/on, audio beyond 30 seconds, native cancellation,
-stale handles, exact silence, and malformed WAV rejection. It does not execute
+This tests full/dynamic-window recognition with Flash Attention off/on, short-window
+sample-count boundaries and sentence endings, audio beyond 30 seconds, Auto's
+separate full window, native cancellation, stale handles, exact silence, and
+malformed WAV rejection. It does not execute
 Android, evaluate conversational speech, or establish phone latency. JDK 21,
 CMake, a C++ compiler, and build-network access are needed for this optional
 host check. No model download is required by routine PR checks; manifest

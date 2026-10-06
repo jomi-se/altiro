@@ -21,6 +21,7 @@ import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
+import org.altiro.core.RecognitionWindow
 import org.altiro.core.Session
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
@@ -72,6 +73,12 @@ class DictationController(private val context: Context) {
                 .getSharedPreferences("preferences", Context.MODE_PRIVATE)
                 .getBoolean("flash-attention", true)
         )
+    val dynamicWindow =
+        MutableStateFlow(
+            context
+                .getSharedPreferences("preferences", Context.MODE_PRIVATE)
+                .getBoolean("dynamic-window", true)
+        )
     var insertion: (() -> Unit)? = null
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
@@ -100,6 +107,8 @@ class DictationController(private val context: Context) {
         compareIds: List<String>? = null,
         gpuCompare: Boolean = false,
         gpuFirst: Boolean = false,
+        windowCompare: Boolean = false,
+        dynamicFirst: Boolean = false,
     ): SessionId? {
         checkMain()
         val state = session.value
@@ -113,13 +122,22 @@ class DictationController(private val context: Context) {
         )
             return null
         if (gpuCompare && (!explicit || compareIds != null)) return null
+        if (windowCompare && (!explicit || compareIds != null || gpuCompare)) return null
         val profiles =
             (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
                 models.profiles.firstOrNull { it.spec.id == id } ?: return null
             }
         if (profiles.any { it.spec.id !in models.installed.value }) return null
         val inputs =
-            if (gpuCompare) {
+            if (windowCompare) {
+                val order =
+                    listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC).let {
+                        if (dynamicFirst) it.reversed() else it
+                    }
+                order.map {
+                    models.snapshot(profiles.single()).copy(backend = backend.value, window = it)
+                }
+            } else if (gpuCompare) {
                 val order =
                     listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let {
                         if (gpuFirst) it.reversed() else it
@@ -130,11 +148,15 @@ class DictationController(private val context: Context) {
             }
         val configuredInputs = inputs.map {
             it.copy(
-                flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value
+                flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value,
+                window =
+                    if (windowCompare) it.window
+                    else if (dynamicWindow.value) RecognitionWindow.DYNAMIC
+                    else RecognitionWindow.FULL,
             )
         }
         runPlan = RunPlan(configuredInputs, language.value)
-        comparing.value = compareIds != null || gpuCompare
+        comparing.value = compareIds != null || gpuCompare || windowCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
@@ -145,6 +167,7 @@ class DictationController(private val context: Context) {
             comparing.value,
             inputs.map { it.backend },
             configuredInputs.map { it.flashAttention },
+            configuredInputs.map { it.window },
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
@@ -341,6 +364,12 @@ class DictationController(private val context: Context) {
         if (session.value.busy || recognition.busy.value || models.busy.value) return
         flashAttention.value = value
         preferences.edit().putBoolean("flash-attention", value).apply()
+    }
+
+    fun selectDynamicWindow(value: Boolean) {
+        if (session.value.busy || recognition.busy.value || models.busy.value) return
+        dynamicWindow.value = value
+        preferences.edit().putBoolean("dynamic-window", value).apply()
     }
 
     fun clearDiagnostics() {

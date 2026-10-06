@@ -141,6 +141,7 @@ class DiagnosticsActivity : ComponentActivity() {
                                         style = MaterialTheme.typography.titleSmall,
                                     )
                                     step.backend?.let { Text(it.label) }
+                                    step.window?.let { Text(it.label) }
                                     Text(
                                         "${DiagnosticReport.seconds(step.durationMillis)} s${if (step.running) " · running" else ""}"
                                     )

@@ -42,13 +42,16 @@ class RecordingActivity : ComponentActivity() {
                 val backend by controller.backend.collectAsState()
                 val compareIds = intent.getStringArrayListExtra("compare-models")
                 val gpuCompare = intent.getBooleanExtra("compare-backends", false)
+                val windowCompare = intent.getBooleanExtra("compare-windows", false)
                 val allReady = if (compareIds != null) compareIds.all { it in installed } else ready
                 Column(
                     Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(24.dp),
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
-                        if (gpuCompare) {
+                        if (windowCompare) {
+                            "Compare audio windows"
+                        } else if (gpuCompare) {
                             "Compare CPU and GPU"
                         } else if (compareIds != null || comparing) {
                             "Compare speech models"
@@ -58,7 +61,9 @@ class RecordingActivity : ComponentActivity() {
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        if (gpuCompare) {
+                        if (windowCompare) {
+                            "One recording uses full and dynamic windows with the same model, processor and attention setting. Record less than 30 seconds. Compare the text, especially sentence endings. Nothing is inserted automatically."
+                        } else if (gpuCompare) {
                             "The same ${selected.name} model processes one recording on CPU and Vulkan GPU, sequentially. Nothing is inserted automatically. Keep this screen open while testing."
                         } else if (compareIds != null || comparing) {
                             "One recording is processed by each model sequentially. Nothing is inserted automatically. Copy the result you prefer. Starting another recording clears these results."
@@ -122,6 +127,8 @@ class RecordingActivity : ComponentActivity() {
                 compareIds = intent.getStringArrayListExtra("compare-models"),
                 gpuCompare = intent.getBooleanExtra("compare-backends", false),
                 gpuFirst = intent.getBooleanExtra("gpu-first", false),
+                windowCompare = intent.getBooleanExtra("compare-windows", false),
+                dynamicFirst = intent.getBooleanExtra("dynamic-first", false),
             ) ?: return
         try {
             startForegroundService(

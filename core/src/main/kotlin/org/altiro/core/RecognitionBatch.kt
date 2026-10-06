@@ -9,6 +9,7 @@ data class RecognitionInput(
     val file: File,
     val backend: RecognitionBackend = RecognitionBackend.CPU,
     val flashAttention: Boolean = false,
+    val window: RecognitionWindow = RecognitionWindow.FULL,
 )
 
 data class TimedTranscript(
@@ -17,6 +18,7 @@ data class TimedTranscript(
     val elapsedMillis: Long,
     val backend: RecognitionBackend = RecognitionBackend.CPU,
     val flashAttention: Boolean = false,
+    val window: RecognitionWindow = RecognitionWindow.FULL,
 )
 
 object RecognitionBatch {
@@ -33,7 +35,8 @@ object RecognitionBatch {
         try {
             require(
                 inputs.size in 1..4 &&
-                    inputs.map { it.spec.id to it.backend }.distinct().size == inputs.size
+                    inputs.map { Triple(it.spec.id, it.backend, it.window) }.distinct().size ==
+                        inputs.size
             )
             val results = inputs.map { input ->
                 if (cancelled()) throw CancellationException()
@@ -50,6 +53,7 @@ object RecognitionBatch {
                     (clockNanos() - started) / 1_000_000,
                     input.backend,
                     input.flashAttention,
+                    input.window,
                 )
             }
             if (cancelled()) throw CancellationException()

@@ -70,6 +70,9 @@ data class RuntimeDetails(
     val batchMillis: Long? = null,
     val promptMillis: Long? = null,
     val sampleMillis: Long? = null,
+    val window: RecognitionWindow = RecognitionWindow.FULL,
+    val audioContextFrames: Int? = null,
+    val languageDetectionContextFrames: Int? = null,
 ) {
     init {
         require(modelId.matches(Regex("[a-z0-9-]{1,80}")))
@@ -79,6 +82,8 @@ data class RuntimeDetails(
         require(deviceCount == null || deviceCount in 0..64)
         require(encodeCalls == null || encodeCalls in 0..1_000_000)
         require(decodeCalls == null || decodeCalls in 0..1_000_000)
+        require(audioContextFrames == null || audioContextFrames in 1..1500)
+        require(languageDetectionContextFrames == null || languageDetectionContextFrames in 0..1500)
         require(
             listOf(encodeMillis, decodeMillis, batchMillis, promptMillis, sampleMillis).all {
                 it == null || it in 0..3_600_000
@@ -87,7 +92,9 @@ data class RuntimeDetails(
     }
 
     fun export(): String = buildString {
-        appendLine("$modelId · ${backend.name}: ${status.name}; failure: ${failure.name}")
+        appendLine(
+            "$modelId · ${backend.name} · ${window.name}: ${status.name}; failure: ${failure.name}"
+        )
         if (status == RuntimeStatus.WORKER_DIED) {
             appendLine(
                 "Android worker exit reason: ${workerExit.name} (may be unavailable immediately)"
@@ -96,6 +103,18 @@ data class RuntimeDetails(
         vulkanResult?.let { appendLine("Vulkan result code: $it") }
         gpuActive?.let { appendLine("GPU backend initialized in Whisper context: $it") }
         flashAttention?.let { appendLine("Flash Attention enabled in Whisper context: $it") }
+        audioContextFrames?.let {
+            appendLine(
+                "Transcription window selected by native runtime: ${DiagnosticReport.seconds(it * 20L)} s ($it encoder positions)"
+            )
+        }
+        languageDetectionContextFrames
+            ?.takeIf { it > 0 }
+            ?.let {
+                appendLine(
+                    "Auto language detection uses a separate full window: ${DiagnosticReport.seconds(it * 20L)} s"
+                )
+            }
         if (gpuName != null)
             appendLine(
                 "GPU: $gpuName; Vulkan: $vulkanVersion; driver version (raw): $driverVersion"

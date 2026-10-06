@@ -36,6 +36,7 @@ data class DiagnosticStep(
     val durationMillis: Long,
     val running: Boolean,
     val backend: RecognitionBackend? = null,
+    val window: RecognitionWindow? = null,
 )
 
 /** An allowlisted, content-free trace of the latest session, kept only in memory. */
@@ -52,6 +53,7 @@ data class DiagnosticReport(
     val backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
     val runtimes: List<RuntimeDetails> = emptyList(),
     val flashAttention: List<Boolean> = modelIds.map { false },
+    val windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
 ) {
     val processingMillis: Long
         get() =
@@ -64,6 +66,7 @@ data class DiagnosticReport(
         appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
         appendLine("Models: ${modelIds.joinToString()}")
         appendLine("Requested backends: ${backends.joinToString { it.name }}")
+        appendLine("Requested audio windows: ${windows.joinToString { it.name }}")
         appendLine(
             "Requested Flash Attention: ${flashAttention.joinToString { if (it) "ON" else "OFF" }}"
         )
@@ -100,7 +103,7 @@ data class DiagnosticReport(
             appendLine(
                 "+${seconds(
                         step.startMillis
-                    )} s · ${step.modelId ?: "session"}${step.backend?.let { " · ${it.name}" } ?: ""} · ${step.stage.label}: " +
+                    )} s · ${step.modelId ?: "session"}${step.backend?.let { " · ${it.name}" } ?: ""}${step.window?.let { " · ${it.name}" } ?: ""} · ${step.stage.label}: " +
                     "${seconds(step.durationMillis)} s${if (step.running) " (running)" else ""}"
             )
         }
@@ -130,6 +133,8 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
     private var active: Pair<RecognitionStage, String?>? = null
     private var backend: RecognitionBackend? = null
     private var activeBackend: RecognitionBackend? = null
+    private var window: RecognitionWindow? = null
+    private var activeWindow: RecognitionWindow? = null
 
     @Synchronized
     fun begin(
@@ -138,18 +143,24 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         comparison: Boolean,
         backends: List<RecognitionBackend> = modelIds.map { RecognitionBackend.CPU },
         flashAttention: List<Boolean> = modelIds.map { false },
+        windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
     ) {
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
         require(
             backends.size == modelIds.size &&
-                modelIds.zip(backends).distinct().size == modelIds.size
+                windows.size == modelIds.size &&
+                modelIds.indices
+                    .map { Triple(modelIds[it], backends[it], windows[it]) }
+                    .distinct()
+                    .size == modelIds.size
         )
         require(flashAttention.size == modelIds.size)
         started = clockNanos()
         completed = emptyList()
         active = null
         backend = null
+        window = null
         mutableReport.value =
             DiagnosticReport(
                 language,
@@ -157,25 +168,35 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                 comparison,
                 backends = backends.toList(),
                 flashAttention = flashAttention.toList(),
+                windows = windows.toList(),
             )
         phase(RecognitionStage.STARTUP)
     }
 
     @Synchronized
-    fun selectBackend(value: RecognitionBackend?) {
+    fun selectBackend(value: RecognitionBackend?, selectedWindow: RecognitionWindow? = null) {
         backend = value
+        window = if (value == null) null else selectedWindow ?: RecognitionWindow.FULL
     }
 
     @Synchronized
     fun runtime(value: RuntimeDetails) {
         val report = mutableReport.value ?: return
         if (report.outcome != null) return
-        require((value.modelId to value.backend) in report.modelIds.zip(report.backends))
+        require(
+            report.modelIds.indices.any {
+                report.modelIds[it] == value.modelId &&
+                    report.backends[it] == value.backend &&
+                    report.windows[it] == value.window
+            }
+        )
         mutableReport.value =
             report.copy(
                 runtimes =
                     report.runtimes.filterNot {
-                        it.modelId == value.modelId && it.backend == value.backend
+                        it.modelId == value.modelId &&
+                            it.backend == value.backend &&
+                            it.window == value.window
                     } + value
             )
     }
@@ -189,7 +210,8 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         if (
             report.outcome != null ||
                 (active == (stage to modelId) &&
-                    activeBackend == if (modelId == null) null else backend)
+                    activeBackend == (if (modelId == null) null else backend) &&
+                    activeWindow == (if (modelId == null) null else window))
         )
             return
         require(modelId == null || modelId in report.modelIds)
@@ -198,6 +220,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         closeStep(now)
         active = stage to modelId
         activeBackend = if (modelId == null) null else backend
+        activeWindow = if (modelId == null) null else window
         activeStarted = now
         refreshAt(now)
     }
@@ -255,6 +278,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                         (now - activeStarted) / 1_000_000,
                         false,
                         activeBackend,
+                        activeWindow,
                     )
         }
     }
@@ -268,6 +292,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                 (now - activeStarted) / 1_000_000,
                 true,
                 activeBackend,
+                activeWindow,
             )
         }
         mutableReport.value =

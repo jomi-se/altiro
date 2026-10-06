@@ -24,6 +24,7 @@ class NativeLifecycleTest {
                         "es",
                         false,
                         false,
+                        true,
                         NativeProgress {},
                     )
                 )

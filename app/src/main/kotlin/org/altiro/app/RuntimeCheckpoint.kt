@@ -88,6 +88,14 @@ internal fun runtimeDetails(
         shaderInt8 = boolean("int8", previous.shaderInt8),
         gpuActive = boolean("gpu_active", previous.gpuActive),
         flashAttention = boolean("flash_attention", previous.flashAttention),
+        audioContextFrames =
+            number("audio_ctx", previous.audioContextFrames?.toLong())?.let { Math.toIntExact(it) },
+        languageDetectionContextFrames =
+            number(
+                    "language_detection_audio_ctx",
+                    previous.languageDetectionContextFrames?.toLong(),
+                )
+                ?.let { Math.toIntExact(it) },
         encodeCalls =
             number("encode_calls", previous.encodeCalls?.toLong())?.let { Math.toIntExact(it) },
         decodeCalls =

@@ -131,6 +131,29 @@ class RecognitionBatchTest {
     }
 
     @Test
+    fun sameRecordingRunsWithBothWindowsAndResultsKeepTheirIdentity() {
+        val model = input("fp16").copy(backend = RecognitionBackend.VULKAN, flashAttention = true)
+        val audio =
+            folder.newFile("window.wav").apply { writeText("complete recording including ending") }
+        val modes = listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC)
+        val results =
+            RecognitionBatch.run(
+                audio,
+                modes.map { model.copy(window = it) },
+                { false },
+                {
+                    assertEquals("complete recording including ending", audio.readText())
+                    assertEquals(RecognitionBackend.VULKAN, it.backend)
+                    assertTrue(it.flashAttention)
+                    it.window.name
+                },
+            )
+        assertEquals(modes, results.map { it.window })
+        assertEquals(modes.map { it.name }, results.map { it.text })
+        assertFalse(audio.exists())
+    }
+
+    @Test
     fun nativeFailureAndInvalidBatchBothDeleteAudio() {
         val model = input("q8")
         for (inputs in listOf(listOf(model), listOf(model, model))) {

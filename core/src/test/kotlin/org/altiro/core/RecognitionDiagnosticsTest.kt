@@ -175,4 +175,43 @@ class RecognitionDiagnosticsTest {
             trace.begin("en", listOf("model-a"), false, flashAttention = emptyList())
         }
     }
+
+    @Test
+    fun windowComparisonKeepsBothTracesAndNativeContexts() {
+        val modes = mutableListOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC)
+        val trace = RecognitionDiagnostics()
+        trace.begin("auto", listOf("model-a", "model-a"), true, windows = modes)
+        modes.reverse()
+        assertEquals(
+            listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC),
+            trace.report.value!!.windows,
+        )
+        for (mode in listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC)) {
+            trace.selectBackend(RecognitionBackend.CPU, mode)
+            trace.phase(RecognitionStage.VERIFYING, "model-a")
+            trace.runtime(
+                RuntimeDetails(
+                    "model-a",
+                    RecognitionBackend.CPU,
+                    window = mode,
+                    audioContextFrames = if (mode == RecognitionWindow.FULL) 1500 else 750,
+                    languageDetectionContextFrames = 1500,
+                )
+            )
+        }
+        val report = trace.report.value!!
+        assertEquals(2, report.runtimes.size)
+        assertEquals(
+            listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC),
+            report.steps.filter { it.modelId != null }.map { it.window },
+        )
+        assertTrue(report.export().contains("Requested audio windows: FULL, DYNAMIC"))
+        assertTrue(report.export().contains("15.00 s (750 encoder positions)"))
+        assertTrue(
+            report.export().contains("Auto language detection uses a separate full window: 30.00 s")
+        )
+        assertThrows(IllegalArgumentException::class.java) {
+            RuntimeDetails("model-a", RecognitionBackend.CPU, audioContextFrames = 1501)
+        }
+    }
 }

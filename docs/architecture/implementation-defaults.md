@@ -60,6 +60,10 @@ small content-free restart checkpoint, with no transcript/audio history.
 The [Flash Attention experiment](../decisions/0006-flash-attention-experiment.md)
 enables GPU Flash Attention with an in-app off switch, frozen per recording
 and exported in diagnostics. CPU passes retain the previous attention method.
+The [dynamic-window experiment](../decisions/0007-dynamic-audio-window.md) sizes
+short recordings from decoded sample count, with padding and a full-context
+switch. Long recordings retain full windows. Same-recording window comparison
+does not insert automatically; Auto detection still uses its full context.
 
 Local dictation makes no network calls. Remote STT and cleanup are independently
 configured and opt-in, with exact HTTPS endpoints, bounded responses, safe

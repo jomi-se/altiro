@@ -21,6 +21,7 @@ import org.altiro.core.RecognitionBatch
 import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
+import org.altiro.core.RecognitionWindow
 import org.altiro.core.RuntimeDetails
 import org.altiro.core.RuntimeFailure
 import org.altiro.core.RuntimeStatus
@@ -61,7 +62,7 @@ class LocalRecognition(
 
         @Volatile private var bound = false
         private var status = 2
-        private var details = RuntimeDetails(input.spec.id, input.backend)
+        private var details = RuntimeDetails(input.spec.id, input.backend, window = input.window)
         private val text = StringBuilder()
         private val startedWall = System.currentTimeMillis()
         private val death = IBinder.DeathRecipient {
@@ -239,6 +240,7 @@ class LocalRecognition(
                         language,
                         input.backend == RecognitionBackend.VULKAN,
                         input.flashAttention,
+                        input.window == RecognitionWindow.DYNAMIC,
                         callback,
                     )
                     if (operation.cancelled.get()) remote!!.cancel(1)
@@ -370,7 +372,8 @@ class LocalRecognition(
                     },
                     phase = { stage, modelId ->
                         diagnostics.selectBackend(
-                            if (modelId == null) null else inputs[index].backend
+                            if (modelId == null) null else inputs[index].backend,
+                            if (modelId == null) null else inputs[index].window,
                         )
                         diagnostics.phase(stage, modelId)
                         checkpoint.save(diagnostics.report.value)

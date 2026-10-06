@@ -64,6 +64,7 @@ class WorkerIsolationTest {
                 "es",
                 false,
                 true,
+                true,
                 object : IRecognitionCallback.Stub() {
                     override fun onProgress(percent: Int) {}
 

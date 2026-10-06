@@ -125,6 +125,13 @@ class MainActivity : ComponentActivity() {
                                 .putExtra("gpu-first", gpuFirst)
                         )
                     }
+                    WindowControls(controller, allowed) { dynamicFirst ->
+                        startActivity(
+                            Intent(this@MainActivity, RecordingActivity::class.java)
+                                .putExtra("compare-windows", true)
+                                .putExtra("dynamic-first", dynamicFirst)
+                        )
+                    }
                     ComparisonControls(controller, allowed) { ids ->
                         startActivity(
                             Intent(
@@ -303,6 +310,7 @@ internal fun ResultControls(controller: DictationController) {
                         result.backend.label +
                             if (result.flashAttention) " · Flash Attention" else ""
                     )
+                    Text(result.window.label)
                     Text(result.text.ifBlank { "No speech recognized." })
                     OutlinedButton(
                         onClick = { controller.copyText(result.text) },
@@ -405,6 +413,56 @@ private fun GpuControls(
         enabled = available && ready && microphoneAllowed && session.text == null,
     ) {
         Text("Compare CPU and GPU")
+    }
+}
+
+@Composable
+private fun WindowControls(
+    controller: DictationController,
+    microphoneAllowed: Boolean,
+    compare: (Boolean) -> Unit,
+) {
+    val dynamic by controller.dynamicWindow.collectAsState()
+    val session by controller.session.collectAsState()
+    val busy by controller.recognition.busy.collectAsState()
+    val modelBusy by controller.models.busy.collectAsState()
+    val ready by controller.models.ready.collectAsState()
+    var dynamicFirst by remember { mutableStateOf(false) }
+    val available = !session.busy && !busy && !modelBusy
+    Text("Audio window", style = MaterialTheme.typography.titleMedium)
+    Row(
+        Modifier.fillMaxWidth().toggleable(dynamic, enabled = available, role = Role.Checkbox) {
+            controller.selectDynamicWindow(it)
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = dynamic, onCheckedChange = null, enabled = available)
+        Text("Dynamic window for short recordings (experimental)")
+    }
+    Text(
+        "Short recordings use a smaller window with padding. Recordings of 30 seconds or more keep full windows. This may affect accuracy; turn it off to use the full window."
+    )
+    Text(
+        "Compare one short recording using both windows. Your model, processor and Flash Attention setting stay the same. Choose EN or ES to measure without automatic language detection's extra full window."
+    )
+    Row(
+        Modifier.fillMaxWidth().toggleable(
+            dynamicFirst,
+            enabled = available,
+            role = Role.Checkbox,
+        ) {
+            dynamicFirst = it
+        },
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Checkbox(checked = dynamicFirst, onCheckedChange = null, enabled = available)
+        Text("Run dynamic window first")
+    }
+    Button(
+        onClick = { compare(dynamicFirst) },
+        enabled = available && ready && microphoneAllowed && session.text == null,
+    ) {
+        Text("Compare full and dynamic windows")
     }
 }
 

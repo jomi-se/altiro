@@ -12,6 +12,8 @@ shift 2
 python3 scripts/check-model-manifest.py "$model"
 scratch=$(mktemp -d "${TMPDIR:-/tmp}/altiro-native-smoke-XXXXXXXX")
 trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+c++ -std=c++17 scripts/native-smoke/audio-window-test.cpp -o "$scratch/audio-window-test"
+"$scratch/audio-window-test"
 cmake -S inference-whisper/src/main/cpp -B "$scratch/native" -DCMAKE_BUILD_TYPE=Release "$@"
 cmake --build "$scratch/native" --parallel 2
 javac -d "$scratch/classes" scripts/native-smoke/NativeWhisper.java
