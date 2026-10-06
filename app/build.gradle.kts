@@ -12,8 +12,8 @@ android {
         applicationId = "org.altiro.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 9
-        versionName = "0.5.0-everyday-preview"
+        versionCode = 10
+        versionName = "0.5.1-everyday-preview"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += setOf("arm64-v8a", "x86_64")

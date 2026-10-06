@@ -22,6 +22,7 @@ import android.widget.TextView
 import org.altiro.core.EditorState
 import org.altiro.core.Phase
 import org.altiro.core.Session
+import org.altiro.core.Wav
 
 /** The real, non-focusable accessibility overlay. It never owns the host editor's focus. */
 class DictationOverlay(
@@ -178,6 +179,7 @@ class DictationOverlay(
     private var orientation = context.resources.configuration.orientation
     private var lastPhase: Phase? = null
     private var lastBusy = false
+    private var lastRecordingWarning = false
     private var message: String? = null
     private var messageUntil = 0L
     private var pending = false
@@ -307,9 +309,12 @@ class DictationOverlay(
         val currentMessage = message?.takeIf {
             android.os.SystemClock.uptimeMillis() < messageUntil
         }
+        val recordingWarning = recording && session.elapsedSeconds >= Wav.MAX_SECONDS - 30
         val nextStatus =
             currentMessage
                 ?: when {
+                    recordingWarning ->
+                        "Stops at 5:00 · ${(Wav.MAX_SECONDS - session.elapsedSeconds).coerceAtLeast(0)}s left"
                     recording -> "Recording · ${session.elapsedSeconds}s"
                     session.phase == Phase.STARTING -> "Starting microphone…"
                     busy ->
@@ -327,11 +332,17 @@ class DictationOverlay(
         // Announce meaningful recovery changes, but never the elapsed-time/progress ticker.
         if (status.text.toString() != nextStatus) {
             status.accessibilityLiveRegion =
-                if (lastPhase != session.phase || !busy || currentMessage != null)
+                if (
+                    lastPhase != session.phase ||
+                        recordingWarning != lastRecordingWarning ||
+                        !busy ||
+                        currentMessage != null
+                )
                     View.ACCESSIBILITY_LIVE_REGION_POLITE
                 else View.ACCESSIBILITY_LIVE_REGION_NONE
         }
         status.text = nextStatus
+        lastRecordingWarning = recordingWarning
         status.contentDescription =
             if (pending) session.message ?: "Text ready; focus an eligible field to insert or copy"
             else status.text

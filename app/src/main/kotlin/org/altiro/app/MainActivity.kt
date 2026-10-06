@@ -41,6 +41,7 @@ import androidx.compose.ui.unit.sp
 import kotlinx.coroutines.delay
 import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
+import org.altiro.core.Wav
 
 class MainActivity : ComponentActivity() {
     private val controller
@@ -275,6 +276,23 @@ internal fun HomeContent(
     val busy = session.busy || nativeBusy
     val recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING)
     val pending = session.text != null && !session.attemptConsumed
+    val interrupted by controller.checkpoint.interrupted.collectAsState()
+    if (interrupted) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                "The last dictation was interrupted. Its audio and text could not be recovered. Details are in Console.",
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+            )
+            IconButton(
+                onClick = controller.checkpoint::dismissInterruption,
+                modifier =
+                    Modifier.semantics { contentDescription = "Dismiss interruption notice" },
+            ) {
+                AltiroIcon(Glyph.CLOSE)
+            }
+        }
+    }
     Surface(
         onClick = models,
         shape = RoundedCornerShape(32.dp),
@@ -341,7 +359,10 @@ internal fun HomeContent(
         )
         Text(
             when {
-                recording -> "Recording · ${session.elapsedSeconds}s"
+                recording ->
+                    if (session.elapsedSeconds >= Wav.MAX_SECONDS - 30)
+                        "Stops at 5:00 · ${(Wav.MAX_SECONDS - session.elapsedSeconds).coerceAtLeast(0)}s left"
+                    else "Recording · ${session.elapsedSeconds}s"
                 busy ->
                     if (nativeBusy && !session.busy) "Cancelling…" else controller.processingLabel()
                 pending -> "Text ready"
@@ -565,8 +586,12 @@ private fun SetupContent(
         accessibility,
     )
     Text(
-        "Model downloads contact the listed host only when you choose Download. Recording and recognition stay on this phone. Audio is deleted after recognition or cancellation; results are temporary.",
+        "Model downloads contact the listed host only when you choose Download. Recording and recognition stay on this phone. Audio is deleted after recognition or cancellation; results expire after ten minutes.",
         style = MaterialTheme.typography.bodyMedium,
+    )
+    Text(
+        "Each recording stops at five minutes and transcribes what you captured. Android closing the app can interrupt unfinished work.",
+        style = MaterialTheme.typography.bodySmall,
     )
     val context = LocalContext.current
     val preferences = remember { RecordingPreferences(context) }

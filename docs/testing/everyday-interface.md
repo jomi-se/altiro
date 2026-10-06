@@ -1,6 +1,6 @@
 # Everyday interface: physical-device checks
 
-Target: the 0.5.0 native interface, especially the real accessibility overlay in
+Target: the 0.5.1 native interface, especially the real accessibility overlay in
 other apps. Build checks and concept approval do not pass this matrix.
 
 1. Install as an update with the same signing identity. Existing verified models,
@@ -39,6 +39,14 @@ other apps. Build checks and concept approval do not pass this matrix.
     reports. Clear is disabled while work owns its trace. Run a comparison from
     Runtime & comparisons: all passes and transcripts remain available, with no
     automatic insertion. Reopen after a worker crash and inspect the checkpoint.
+11. Cancel or Stop immediately after tapping the mic, then start a new session.
+    The app must survive and recover without capturing unintended audio. Also
+    test denied microphone access using the [startup procedure](service-startup.md).
+    Notification Cancel must discard during both capture and recognition.
+12. Record through 4:30: Home, overlay and notification must warn before the
+    5:00 automatic Stop. The overlay announces the warning once rather than
+    reading every countdown tick. Killing unfinished work must show the Home
+    interruption notice on restart; Dismiss preserves its Console evidence.
 
 Use [Gate A](gate-a.md) for the full editor/resource matrix and
 [Gate B](gate-b.md) for language quality, long audio and cancellation. Report

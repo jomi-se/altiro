@@ -318,6 +318,7 @@ Small enough to live in the editor, with work and recovery stated plainly.
   Primary/language backgrounds become opaque chalk while pressed; their
   resting touch backgrounds are transparent. Messages last five seconds.
   Status is a polite live region when the phase or a recovery message changes;
+  the 4:30 recording-limit warning is announced once; later countdown,
   elapsed-time and progress ticks stay silent. The primary's
   state description reports its phase without announcing each elapsed second.
 - **Motion:** the active arc rotates linearly once every 1,400 ms while busy.
@@ -329,6 +330,12 @@ Small enough to live in the editor, with work and recovery stated plainly.
   the child click before movement, so moving the bubble does not
   start or stop recording. Lock closes the overlay; Stop/Cancel remain
   available during work even if the destination becomes ineligible.
+
+Home shows a brief dismissible interruption notice only when the previous
+process left a RUNNING checkpoint. Dismissal preserves Console evidence; the
+next accepted session resets the notice. At 4:30, Home and overlay show the
+remaining time until automatic Stop at 5:00, with the recording notification
+carrying the same warning. These are recovery feedback, not transcript history.
 
 ### Microphone dial
 

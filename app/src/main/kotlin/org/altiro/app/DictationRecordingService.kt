@@ -15,6 +15,7 @@ import android.content.pm.ServiceInfo
 import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
+import android.os.Build
 import android.os.Handler
 import android.os.IBinder
 import android.os.Looper
@@ -42,6 +43,7 @@ class DictationRecordingService : Service() {
     @Volatile private var requested = START
     private var recorder: AudioRecord? = null
     private var activeId: SessionId? = null
+    private var foregroundAcknowledged = false
     private var notificationObserver: Job? = null
     private val screenOff =
         object : BroadcastReceiver() {
@@ -74,8 +76,25 @@ class DictationRecordingService : Service() {
         startId: Int,
     ): Int {
         val id = intent?.getLongExtra(SESSION, -1)?.takeIf { it >= 0 }?.let(::SessionId)
+        if (intent?.action == CANCEL) {
+            // A notification can cancel directly; the controller may already have invalidated it.
+            if (id != null && activeId == id) {
+                if (controller.session.value.id == id) {
+                    controller.event(SessionEvent.Cancel(id))
+                    controller.recognition.cancel()
+                }
+                stopCapture(CANCEL)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf(startId)
+            } else if (activeId == null) stopSelf(startId)
+            return START_NOT_STICKY
+        }
         if (id == null || controller.session.value.id != id) {
-            if (activeId == null) stopSelf(startId)
+            if (activeId == null) {
+                if (intent?.action == START) acknowledgeTeardown(id)
+                stopForeground(STOP_FOREGROUND_REMOVE)
+                stopSelf(startId)
+            }
             return START_NOT_STICKY
         }
         when (intent.action) {
@@ -84,7 +103,10 @@ class DictationRecordingService : Service() {
                     if (controller.session.value.phase == Phase.STARTING) {
                         beginCapture(id)
                     } else if (controller.session.value.phase == Phase.FINALIZING) {
-                        fail(id, "Stopped before audio arrived. Start another microphone test.")
+                        fail(
+                            id,
+                            "Recording stopped before audio arrived. Tap the mic to try again.",
+                        )
                     }
                 }
             STOP ->
@@ -92,9 +114,12 @@ class DictationRecordingService : Service() {
                     controller.event(SessionEvent.Stop(id))
                     stopCapture(STOP)
                 }
-            CANCEL -> if (activeId == id) controller.cancel()
         }
-        if (activeId == null) stopSelf(startId)
+        if (activeId == null) {
+            if (intent.action == START) acknowledgeTeardown(id)
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            stopSelf(startId)
+        }
         return START_NOT_STICKY
     }
 
@@ -111,6 +136,7 @@ class DictationRecordingService : Service() {
                 notification(id),
                 ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE,
             )
+            foregroundAcknowledged = true
         } catch (_: SecurityException) {
             fail(
                 id,
@@ -196,7 +222,20 @@ class DictationRecordingService : Service() {
                     val second = (frames / Wav.SAMPLE_RATE).toInt()
                     if (second != lastSecond) {
                         lastSecond = second
-                        main.post { controller.event(SessionEvent.Tick(id, second)) }
+                        main.post {
+                            if (controller.session.value.id != id) {
+                                stopCapture(CANCEL)
+                                return@post
+                            }
+                            controller.event(SessionEvent.Tick(id, second))
+                            if (
+                                second == Wav.MAX_SECONDS - 30 &&
+                                    controller.session.value.id == id &&
+                                    controller.session.value.phase == Phase.RECORDING
+                            )
+                                getSystemService(NotificationManager::class.java)
+                                    .notify(NOTIFICATION, notification(id))
+                        }
                     }
                 }
                 if (frames >= Wav.MAX_FRAMES) requested = STOP
@@ -294,6 +333,7 @@ class DictationRecordingService : Service() {
         id: SessionId,
         processing: Boolean = false,
         percent: Int = 0,
+        endingStartup: Boolean = false,
     ): Notification {
         fun action(
             command: String,
@@ -316,13 +356,20 @@ class DictationRecordingService : Service() {
             Notification.Builder(this, CHANNEL)
                 .setSmallIcon(android.R.drawable.ic_btn_speak_now)
                 .setContentTitle(
-                    if (processing) "Altiro · recognizing offline" else "Altiro · recording"
+                    when {
+                        endingStartup -> "Altiro · finishing startup"
+                        processing -> "Altiro · recognizing offline"
+                        else -> "Altiro · recording"
+                    }
                 )
                 .setContentText(
-                    if (processing) {
+                    if (endingStartup) "Microphone is off."
+                    else if (processing) {
                         "${controller.activeModelName.value} · ${controller.processingLabel()} · microphone released"
                     } else {
-                        "Maximum 5 minutes · audio stays on this device"
+                        if (controller.session.value.elapsedSeconds >= Wav.MAX_SECONDS - 30)
+                            "Recording stops at 5:00, then transcription begins."
+                        else "Maximum 5 minutes · audio stays on this device"
                     }
                 )
                 .setContentIntent(open)
@@ -331,7 +378,7 @@ class DictationRecordingService : Service() {
         if (processing) {
             val stage = controller.diagnostics.report.value?.steps?.lastOrNull { it.running }?.stage
             builder.setProgress(100, percent, stage != org.altiro.core.RecognitionStage.INFERENCE)
-        } else {
+        } else if (!endingStartup) {
             builder.addAction(Notification.Action.Builder(null, "Stop", action(STOP, 0)).build())
         }
         return builder.build()
@@ -349,8 +396,22 @@ class DictationRecordingService : Service() {
         reason: String,
     ) {
         controller.event(SessionEvent.Fail(id, reason))
+        acknowledgeTeardown(id)
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+
+    private fun acknowledgeTeardown(id: SessionId?) {
+        if (foregroundAcknowledged) return
+        // An unpromoted foreground start cannot simply stop: Android can crash the parent.
+        // This acknowledges only brief teardown; microphone permission is never bypassed.
+        startForeground(
+            NOTIFICATION,
+            notification(id ?: SessionId(0), endingStartup = true),
+            if (Build.VERSION.SDK_INT >= 34) ServiceInfo.FOREGROUND_SERVICE_TYPE_SHORT_SERVICE
+            else ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC,
+        )
+        foregroundAcknowledged = true
     }
 
     override fun onDestroy() {
@@ -360,7 +421,8 @@ class DictationRecordingService : Service() {
         executor.shutdown()
         activeId?.let { id ->
             if (controller.session.value.id == id && controller.session.value.busy) {
-                controller.cancel()
+                controller.event(SessionEvent.Cancel(id))
+                controller.recognition.cancel()
             }
         }
         super.onDestroy()
@@ -370,7 +432,22 @@ class DictationRecordingService : Service() {
         startId: Int,
         fgsType: Int,
     ) {
-        controller.cancel()
+        cancelForTimeout()
+    }
+
+    override fun onTimeout(startId: Int) {
+        cancelForTimeout()
+    }
+
+    private fun cancelForTimeout() {
+        activeId?.let { id ->
+            if (controller.session.value.id == id && controller.session.value.busy) {
+                controller.event(SessionEvent.Cancel(id))
+                controller.recognition.cancel()
+            }
+        }
+        stopCapture(CANCEL)
+        stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
     }
 

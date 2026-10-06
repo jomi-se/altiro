@@ -31,11 +31,21 @@ selectable but import-only. No release assets have been published. Network use
 occurs only on explicit acquisition, never recognition. See
 [decision 0009](../decisions/0009-everyday-native-interface.md).
 
-Host verification passes for this interface: 30 core and 8 acquisition tests,
+Host verification passes for version 0.5.1: 30 core and 8 acquisition tests,
 debug Android assemblies, lint, packaged native 16 KiB alignment, and app/fixture
 instrumentation APK compilation. The update APK retains the previous debug
 signing identity. Instrumentation tests were not executed; source review and
 concept approval do not establish native visual, gesture or device acceptance.
+
+Version 0.5.1 hardens foreground-service startup teardown for immediate
+Stop/Cancel and microphone refusal; normal capture still requires the microphone
+foreground type. See [decision 0010](../decisions/0010-foreground-start-teardown.md).
+Home, the actual overlay and the recording notification warn at 4:30 before
+automatic Stop at 5:00. A saved interrupted session has a dismissible Home
+notice while its content-free Console checkpoint remains available. Pre-native
+Fail/Cancel now persist their terminal outcome to avoid a false restart notice.
+Framework startup regression tests and API 33/37 emulator jobs, including a
+16 KiB image, are prepared. Execution and physical recovery checks remain pending.
 
 Public-repository preparation adds private-reporting guidance, staged and
 full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency
@@ -238,7 +248,7 @@ rejection. All four Small profiles also passed public-sample recognition through
 production JNI bridge using the app's greedy, four-thread decode path. These
 are host-native tests, not Android or Chilean quality evidence.
 
-The Kotlin suite has twenty-seven passing tests, including sequential same-audio
+The JVM suites have 30 core and 8 acquisition tests, including sequential same-audio
 comparison (including the same model with two backends and no silent fallback),
 same-model/backend window comparisons with distinct results and diagnostic traces,
 cancellation before later models, corrupted model rejection, audio
@@ -247,7 +257,8 @@ APKs build, Android lint has no errors, and ARM64/x86-64 JNI libraries compile.
 Actual ELF/APK 16 KiB alignment passes for bundled native libraries. Kotlin formatting is applied automatically with ktfmt before verification;
 ktlint style/line-length rules have been removed. Model manifest/artifact validation
 passes. Instrumentation is compiled
-separately from execution. Read-only CI includes build checks and an API 33 emulator job but
+separately from execution. Read-only CI includes build checks and API 33/37
+emulator jobs, including a 16 KiB image, but
 has not been run remotely in this checkout. No local emulator has executed.
 
 Diagnostics tests cover running/final monotonic durations, processing time

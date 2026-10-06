@@ -1,7 +1,7 @@
 # 06 — Model manager, onboarding, recovery, and first APK
 
-Status: ready-for-agent
-Blocked by: 05
+Status: in-progress
+Acceptance dependency: Gate A and B device evidence
 
 ## Authority
 
@@ -26,10 +26,16 @@ Produce a labeled debug APK unless secure signing material is separately supplie
 
 ## Comments
 
-The offline preview implements verified file-picker model import, deletion
-when idle, explicit language selection, progress/cancellation, and browser
-download handoff without an Internet permission. The phone acceptance matrix
-and release gate remain outstanding. These source additions do not mark this
-ticket done.
+The everyday preview implements verified one-tap stock model downloads with
+Internet permission limited to explicit acquisition, verified file-picker
+import, idle deletion, Setup, language selection, result actions and Console.
+Chilean profiles remain import-only until compatible public binaries exist.
+Foreground-start recovery, visible five-minute recording warnings and a
+content-free interruption notice are implemented. See
+[current work](../../current-work.md) and the
+[physical interface matrix](../../../testing/everyday-interface.md).
 
-No execution evidence recorded yet.
+Host compilation, JVM acquisition/session tests, lint and packaged native
+16 KiB alignment have passed for the everyday interface. Instrumentation is
+compiled; framework execution, rendered native review, the full physical-phone
+matrix and release acceptance remain outstanding. This ticket is not done.

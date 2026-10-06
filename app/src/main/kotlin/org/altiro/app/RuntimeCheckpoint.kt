@@ -12,9 +12,27 @@ import org.json.JSONObject
 
 /** A single bounded, generated report. No native log strings or recognition text reach disk. */
 class RuntimeCheckpoint(context: Context) {
+    private val preferences =
+        context.getSharedPreferences("diagnostic-notice", Context.MODE_PRIVATE)
     private val file = AtomicFile(context.noBackupFilesDir.resolve("recognition-checkpoint.txt"))
     private val mutableSaved = MutableStateFlow(read())
     val saved = mutableSaved.asStateFlow()
+    private val mutableInterrupted =
+        MutableStateFlow(
+            mutableSaved.value?.lineSequence()?.any { it.startsWith("Outcome: RUNNING;") } ==
+                true && !preferences.getBoolean("interruption-dismissed", false)
+        )
+    val interrupted = mutableInterrupted.asStateFlow()
+
+    fun beginSession() {
+        mutableInterrupted.value = false
+        preferences.edit().remove("interruption-dismissed").apply()
+    }
+
+    fun dismissInterruption() {
+        mutableInterrupted.value = false
+        preferences.edit().putBoolean("interruption-dismissed", true).apply()
+    }
 
     @Synchronized
     fun save(report: DiagnosticReport?) {
@@ -38,6 +56,8 @@ class RuntimeCheckpoint(context: Context) {
     fun clear() {
         file.delete()
         mutableSaved.value = null
+        mutableInterrupted.value = false
+        preferences.edit().remove("interruption-dismissed").apply()
     }
 
     private fun read(): String? =

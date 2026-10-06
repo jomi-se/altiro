@@ -56,6 +56,19 @@ jobs:
 
   emulator:
     runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - api-level: '33'
+            target: google_apis
+            ram: 2048M
+          - api-level: '37.0'
+            target: google_apis
+            ram: 4096M
+          - api-level: '37.0'
+            target: google_apis_ps16k
+            ram: 4096M
     timeout-minutes: 30
     env:
       ALTIRO_BUILD_ROOT: ${{ runner.temp }}/altiro-build
@@ -73,18 +86,19 @@ jobs:
         run: sudo apt-get update && sudo apt-get install --no-install-recommends -y glslc=2023.8-1build1
       - name: Enable runner KVM access
         run: sudo chmod 666 /dev/kvm
-      - name: Run API 33 fixture and password tests
+      - name: Run framework, startup, native and fixture tests
         uses: ReactiveCircus/android-emulator-runner@a421e43855164a8197daf9d8d40fe71c6996bb0d
         with:
-          api-level: 33
+          api-level: ${{ matrix.api-level }}
           arch: x86_64
-          target: google_apis
+          target: ${{ matrix.target }}
+          ram-size: ${{ matrix.ram }}
           disable-animations: true
           script: ./gradlew --no-daemon :app:connectedDebugAndroidTest :editor-fixture:connectedDebugAndroidTest
       - name: Retain device-test reports
         if: always()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: emulator-tests
+          name: emulator-tests-api-${{ matrix.api-level }}-${{ matrix.target }}
           path: ${{ runner.temp }}/altiro-build/**/reports/androidTests/
           retention-days: 7

@@ -163,6 +163,7 @@ class DictationController(private val context: Context) {
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
         diagnosticGeneration = id.value
+        checkpoint.beginSession()
         diagnostics.begin(
             runPlan!!.language,
             inputs.map { it.spec.id },
@@ -195,9 +196,11 @@ class DictationController(private val context: Context) {
         if (event is SessionEvent.Cancel && !previous.attemptConsumed) {
             diagnostics.requestCancellation()
             if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.CANCELLED)
+            checkpoint.save(diagnostics.report.value)
         } else if (event is SessionEvent.Fail && !previous.attemptConsumed) {
             diagnostics.markFailure()
             if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.FAILED)
+            checkpoint.save(diagnostics.report.value)
         } else if (previous.phase != session.value.phase) {
             when (session.value.phase) {
                 Phase.RECORDING -> diagnostics.phase(RecognitionStage.RECORDING)
@@ -413,9 +416,21 @@ class DictationController(private val context: Context) {
     fun cancel() {
         val id = session.value.id ?: return
         if (session.value.attemptConsumed) return
+        val starting = session.value.phase == Phase.STARTING
         event(SessionEvent.Cancel(id))
         recognition.cancel()
-        context.stopService(Intent(context, DictationRecordingService::class.java))
+        if (starting) {
+            // Let the pending START acknowledge foreground startup before it stops itself.
+            // Invalidating the session first ensures it cannot start microphone capture.
+            try {
+                context.startService(
+                    DictationRecordingService.intent(context, DictationRecordingService.CANCEL, id)
+                )
+            } catch (_: IllegalStateException) {
+                // If this control command is refused, the already-pending stale START drains
+                // itself. Do not bring down a service that still owes startForeground().
+            }
+        } else context.stopService(Intent(context, DictationRecordingService::class.java))
     }
 
     fun discard() {
