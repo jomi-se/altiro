@@ -89,7 +89,7 @@ class EditorAuthority {
     }
 
     fun observe(state: EditorState) {
-        if (state != current) revision++
+        if (authorityState(state) != authorityState(current)) revision++
         current = state
     }
 
@@ -97,7 +97,13 @@ class EditorAuthority {
         revision++
     }
 
-    fun capture(): DestinationToken = DestinationToken(serviceEpoch, editorEpoch, revision, current)
+    // Learning whether a callback has arrived is not a cursor/composition mutation.
+    // Preserve actual ranges and all other fields; only this knowledge bit is ignored for paste.
+    private fun authorityState(state: EditorState): EditorState =
+        if (state.delivery == TextDelivery.PASTE) state.copy(compositionKnown = false) else state
+
+    fun capture(): DestinationToken =
+        DestinationToken(serviceEpoch, editorEpoch, revision, authorityState(current))
 
     fun blockReason(token: DestinationToken): InsertionBlockReason? {
         val state = current
@@ -107,11 +113,11 @@ class EditorAuthority {
             state.blocked -> InsertionBlockReason.DISABLED_APP
             !state.connectionAvailable || state.identity == null -> InsertionBlockReason.NO_EDITOR
             state.identity.displayId != 0 -> InsertionBlockReason.UNSUPPORTED_DISPLAY
-            state.delivery != TextDelivery.TERMUX_PASTE && state.composing ->
+            state.delivery == TextDelivery.COMMIT && state.composing ->
                 InsertionBlockReason.COMPOSING
-            state.delivery != TextDelivery.TERMUX_PASTE && !state.compositionKnown ->
+            state.delivery == TextDelivery.COMMIT && !state.compositionKnown ->
                 InsertionBlockReason.UNKNOWN_COMPOSITION
-            state.delivery != TextDelivery.TERMUX_PASTE &&
+            state.delivery == TextDelivery.COMMIT &&
                 (state.selectionStart < 0 || state.selectionEnd < 0) ->
                 InsertionBlockReason.UNKNOWN_SELECTION
             token != capture() -> InsertionBlockReason.DESTINATION_CHANGED

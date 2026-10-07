@@ -2,13 +2,27 @@
 
 Updated: 2026-10-07.
 
-Immediate acceptance priority: basic automatic text delivery. The maintainer
-reports no working insertion in apps tried with the preceding build and has
-not tested 0.5.7. Use one normal notes-field dictation and the new `Delivery:`
-code to distinguish a pre-dispatch block from an ignored insertion call.
-Unknown composition waiting on an input-method selection callback is a source
-candidate, not a confirmed device cause. See
+Immediate acceptance priority: basic automatic text delivery and bubble recovery.
+The maintainer reports false “Finish typing” blocks in empty ordinary fields
+and rejects 0.5.7's removal of bubble Copy. Version 0.5.8 selects ordinary paste
+at the cursor, without waiting for composition callbacks or requiring an empty
+field. It uses the freshly focused node's advertised paste action when available,
+otherwise the live input connection's public paste context action, one attempt
+only. Changes after destination capture still invalidate delivery. Copy is
+available directly on the bubble after blocked and unconfirmed results;
+successful Copy releases the retained session and returns to the microphone.
+See [decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md) and
 [the active defect](../issues/0002-overlay-visibility-and-recovery.md).
+Host verification passes: 50 core and 8 acquisition tests, Android application
+and fixture builds/lint, native packaging/notices, and instrumentation APK
+compilation. The two real-editor paste fixtures are compiled, not executed.
+Signing identity is preserved. Phone delivery/appearance remain pending.
+Source review identified hidden-app/no-input visibility and late callback
+knowledge changes; the follow-up patch preserves hide preferences, extends
+no-input recovery only for blocked results and excludes the callback-arrived
+bit from paste authority while retaining real range changes. Follow-up core
+tests, application build/lint and instrumentation compilation pass, and the
+review confirms these corrections. Physical acceptance remains pending.
 
 Version 0.5.5 corrects the active-window-only editor lookup after the maintainer
 reports missing controls in ChatGPT, Termux and Reddit even after fresh setup.

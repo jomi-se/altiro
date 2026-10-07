@@ -72,8 +72,10 @@ automatic cross-provider failover, or a mandatory hosted backend.
 - Compile against public APIs. Accessibility `commitText(text, 1, null)` returns
   no success flag; dispatch does not prove delivery.
 - Keep one serialized session owner. A stale result, changed field, cursor,
-  composition, password field, cancellation, or lock must block automatic
-  insertion. Never revive an invalid destination token.
+  composition after capture, password field, cancellation, or lock must block
+  automatic insertion. Never revive an invalid destination token. Ordinary
+  TEXT uses the editor's paste operation without waiting for a composition
+  callback; see `docs/decisions/0017-paste-at-cursor-and-bubble-copy.md`.
 - Consume one insertion attempt before dispatch. Do not retry uncertain
   insertion or use whole-field replacement as a fallback.
 - Preserve Stop versus Cancel. Release capture before transcription; connect

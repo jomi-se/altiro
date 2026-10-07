@@ -73,7 +73,7 @@ class DictationAccessibilityService : AccessibilityService() {
         super.onServiceConnected()
         controller.editor.reconnect()
         controller.connected.value = true
-        controller.insertion = { dispatch(explicit = false) }
+        controller.insertion = { dispatch() }
         controller.refreshSettings = { refreshEditor() }
         overlay =
             DictationOverlay(
@@ -344,11 +344,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val delivery =
             when {
                 terminal -> TextDelivery.TERMUX_PASTE
-                connectedText &&
-                    node?.isFocused == true &&
-                    !node.isEditable &&
-                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_PASTE } ->
-                    TextDelivery.PASTE
+                connectedText -> TextDelivery.PASTE
                 else -> TextDelivery.COMMIT
             }
         val recordingHost =
@@ -509,37 +505,17 @@ class DictationAccessibilityService : AccessibilityService() {
             else -> EditorWindowKind.OTHER
         }
 
-    private fun dispatch(explicit: Boolean) {
+    private fun dispatch() {
         refreshEditor()
         val session = controller.session.value
         val id = session.id ?: return
         val text = session.text?.takeIf(String::isNotBlank) ?: return
         if (session.attemptConsumed || session.phase !in setOf(Phase.READY, Phase.AWAITING_USER))
             return
-        val token = if (explicit) controller.editor.capture() else session.destination
+        val token = session.destination
         val blocked = token?.let(controller.editor::blockReason)
         if (token == null || blocked != null) {
-            val reason =
-                if (
-                    blocked in
-                        setOf(
-                            org.altiro.core.InsertionBlockReason.COMPOSING,
-                            org.altiro.core.InsertionBlockReason.UNKNOWN_COMPOSITION,
-                        )
-                ) {
-                    "Finish typing · text kept in Altiro"
-                } else if (
-                    controller.editor.current.identity == null &&
-                        controller.editor.current.recordingHost != null
-                ) {
-                    if (
-                        info?.packageName == "com.termux" && !RecordingPreferences(this).termuxPaste
-                    )
-                        "Enable Termux paste in Altiro"
-                    else "Text kept in Altiro"
-                } else {
-                    "Field changed · text kept in Altiro"
-                }
+            val reason = "Not inserted · tap Copy"
             controller.deliveryStatus.value = "BLOCKED_${blocked?.name ?: "NO_DESTINATION"}"
             controller.event(SessionEvent.AwaitUser(id, reason))
             return
@@ -547,54 +523,62 @@ class DictationAccessibilityService : AccessibilityService() {
         val connection = if (::method.isInitialized) method.currentInputConnection else null
         if (connection == null) {
             controller.deliveryStatus.value = "BLOCKED_NO_CONNECTION"
-            controller.event(SessionEvent.AwaitUser(id, "Text kept in Altiro"))
+            controller.event(SessionEvent.AwaitUser(id, "Not inserted · tap Copy"))
             return
         }
         val delivery = controller.editor.current.delivery
         val payload = if (delivery == TextDelivery.TERMUX_PASTE) terminalPasteText(text) else text
         if (payload.isBlank()) {
-            controller.event(SessionEvent.AwaitUser(id, "No pasteable text · kept in Altiro"))
-            return
-        }
-        val pasteNode =
-            if (delivery == TextDelivery.PASTE) findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
-            else null
-        if (
-            delivery == TextDelivery.PASTE &&
-                (pasteNode == null ||
-                    !pasteNode.isFocused ||
-                    !pasteNode.isVisibleToUser ||
-                    pasteNode.isPassword ||
-                    pasteNode.packageName?.toString() != token.editor.identity?.packageName ||
-                    pasteNode.windowId != token.editor.identity?.windowId ||
-                    pasteNode.actionList.none { it.id == AccessibilityNodeInfo.ACTION_PASTE })
-        ) {
-            controller.deliveryStatus.value = "BLOCKED_PASTE_TARGET"
-            controller.event(SessionEvent.AwaitUser(id, "Text kept in Altiro"))
+            controller.event(SessionEvent.AwaitUser(id, "No pasteable text · tap Copy"))
             return
         }
         // Prepare payload before consuming; recheck authority after the clipboard operation.
         if (delivery != TextDelivery.COMMIT && !pasteClipboard.stage(payload)) {
             controller.deliveryStatus.value = "BLOCKED_CLIPBOARD"
-            controller.event(SessionEvent.AwaitUser(id, "Paste unavailable · text kept in Altiro"))
+            controller.event(SessionEvent.AwaitUser(id, "Couldn't paste · tap Copy"))
             return
         }
         refreshEditor()
         if (controller.editor.blockReason(token) != null) {
             controller.deliveryStatus.value = "BLOCKED_DESTINATION_CHANGED"
-            controller.event(SessionEvent.AwaitUser(id, "Field changed · text kept in Altiro"))
+            controller.event(SessionEvent.AwaitUser(id, "Field changed · tap Copy"))
             return
         }
+        // Clipboard staging can change advertised actions. Choose a fresh, matching
+        // node only now; otherwise use the same live input connection's paste command.
+        val pasteNode =
+            if (delivery == TextDelivery.PASTE)
+                findFocus(AccessibilityNodeInfo.FOCUS_INPUT)?.takeIf {
+                    it.isFocused &&
+                        it.isVisibleToUser &&
+                        !it.isPassword &&
+                        it.packageName?.toString() == token.editor.identity?.packageName &&
+                        it.windowId == token.editor.identity?.windowId &&
+                        it.actionList.any { action ->
+                            action.id == AccessibilityNodeInfo.ACTION_PASTE
+                        }
+                }
+            else null
         // Mark consumed before the cross-process mutation. Never retry on uncertainty.
         controller.event(SessionEvent.Dispatch(id))
         if (!controller.session.value.attemptConsumed) return
-        controller.deliveryStatus.value = "${delivery.name}_DISPATCHED_UNCONFIRMED"
+        val route =
+            when {
+                delivery == TextDelivery.PASTE && pasteNode != null -> "PASTE_NODE"
+                delivery == TextDelivery.PASTE -> "PASTE_INPUT"
+                else -> delivery.name
+            }
+        controller.deliveryStatus.value = "${route}_DISPATCHED_UNCONFIRMED"
         try {
             when (delivery) {
                 TextDelivery.COMMIT -> connection.commitText(payload, 1, null)
                 TextDelivery.PASTE -> {
-                    if (pasteNode?.performAction(AccessibilityNodeInfo.ACTION_PASTE) != true)
-                        controller.event(SessionEvent.Fail(id, "Paste outcome unknown."))
+                    if (pasteNode != null) {
+                        if (!pasteNode.performAction(AccessibilityNodeInfo.ACTION_PASTE)) {
+                            controller.deliveryStatus.value = "PASTE_NODE_REJECTED"
+                            controller.event(SessionEvent.Fail(id, "Couldn't paste · tap Copy"))
+                        }
+                    } else connection.performContextMenuAction(android.R.id.paste)
                 }
                 TextDelivery.TERMUX_PASTE -> {
                     val now = SystemClock.uptimeMillis()
@@ -622,7 +606,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 }
             }
         } catch (_: RuntimeException) {
-            controller.deliveryStatus.value = "${delivery.name}_OUTCOME_UNKNOWN"
+            controller.deliveryStatus.value = "${route}_OUTCOME_UNKNOWN"
             controller.event(SessionEvent.Fail(id, "Insertion outcome unknown."))
         }
     }

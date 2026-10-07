@@ -237,8 +237,11 @@ The overlay capsule is 64 dp high with a 76 dp wide primary and a separate
 in the same non-focusable overlay; changing language never happens on the first
 tap. Busy phase text can expand the disabled secondary slot inward. An 8 dp
 outer row inset leaves room for the shadow. Cancel remains a separate 48 dp
-circle with an 8 dp gap during work. Successful dispatch returns to the mic;
-the old Copy/Insert/Discard cluster is removed. The primary stays at the docked
+circle with an 8 dp gap during work. Successful dispatch returns to the mic
+with a secondary Copy circle while the transcript remains. A blocked result
+turns the primary into Copy, with an explicit discard circle; copying succeeds
+before releasing the result and returning to the microphone. There is no
+manual Insert step or required trip back into the app. The primary stays at the docked
 edge. The entire window is measured and clamped before a size change.
 
 Dock side and vertical position persist per orientation. Dragging crosses
@@ -295,9 +298,11 @@ Material shapes; do not invent a web component shape system for this Android UI.
 
 Visibility follows the live recording host, separately from insertion identity.
 Missing or noneditable accessibility nodes must not hide a mic for a positively
-matching active input. Keep the ordinary mic and existing result controls;
-no Copy-mode label or additional primary action. A result's insertion arrow stays
-disabled when no insertion identity/connection exists.
+matching active input. Recording requires a live eligible input; a blocked
+result can retain Copy recovery after that input disappears. Dispatched
+results expose secondary Copy only while an ordinary input is eligible. Hidden
+apps, lock and password restrictions still hide the overlay. Recovery never
+creates insertion authority.
 
 - **Idle:** mic glyph over faint ink backing, unbacked language and no phase
   text. Idle settles as described above; no continuous idle animation runs.
@@ -308,10 +313,12 @@ disabled when no insertion identity/connection exists.
   arc with a minimum 8-degree sweep. The primary is disabled but stays at full
   local alpha; language is disabled and its text alpha is 0.5. The job retains
   its start-time language/settings snapshot. Cancel remains available while busy.
-- **Blocked result:** an app-opening Home glyph and concise feedback lead to
-  the retained transcript in Altiro. No Copy/Insert/Discard cluster or dictated
-  text appears on the overlay. Successful unconfirmed dispatch returns quietly
-  to the mic; consuming an attempt prevents another insertion of that result.
+- **Blocked result:** Copy glyph in the primary target, separate discard and
+  concise “Not inserted · tap Copy” feedback. No dictated text appears on the
+  overlay. Successful unconfirmed dispatch returns quietly to the mic with
+  secondary Copy available; consuming an attempt prevents another insertion
+  of that result. Copy writes the clipboard before clearing the retained result
+  and briefly confirms “Copied”. A failed copy retains the result and controls.
 - **Missing model:** download glyph opens Altiro, with a concise installation
   note. This is a distinct state, not a recognition action.
 - **Failure:** persistent content-free feedback includes recognition failure or

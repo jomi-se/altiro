@@ -130,7 +130,13 @@ class DictationOverlay(
         }
     private val cancel =
         iconButton(Glyph.CLOSE, "Cancel and discard recording").apply {
-            setOnClickListener { controller.cancel() }
+            setOnClickListener {
+                if (controller.session.value.busy) controller.cancel() else controller.discard()
+            }
+        }
+    private val copy =
+        iconButton(Glyph.COPY, "Copy transcript").apply {
+            setOnClickListener { copyResult() }
         }
     private val languageMenu =
         LinearLayout(context).apply {
@@ -240,7 +246,7 @@ class DictationOverlay(
         slot.addView(phase, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
         capsule.addView(slot, LinearLayout.LayoutParams(dp(48), dp(64)))
         row.addView(capsule, LinearLayout.LayoutParams(-2, dp(64)))
-        for (view in listOf(cancel)) row.addView(
+        for (view in listOf(copy, cancel)) row.addView(
             view,
             LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(8) },
         )
@@ -263,13 +269,13 @@ class DictationOverlay(
         primary.setOnClickListener {
             when (mode) {
                 Mode.RECORDING -> controller.stop()
-                Mode.PENDING -> openApp()
+                Mode.PENDING -> copyResult()
                 Mode.NO_MODEL -> openApp()
                 Mode.IDLE -> record()
                 Mode.WORKING -> Unit
             }
         }
-        // No long-press handler on the primary action: slow Stop/Insert presses must click.
+        // No long-press handler on the primary action: slow Stop/Copy presses must click.
         primary.isLongClickable = false
         applyPalette()
         layout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> clampAndUpdate() }
@@ -291,6 +297,7 @@ class DictationOverlay(
         val eligible = editor.recordingAvailable
         if (busy || !eligible) dismissLanguageMenu()
         val pending = session.text != null && !session.attemptConsumed
+        val hasResult = session.text != null && !busy
         val now = SystemClock.uptimeMillis()
         val current = notice?.takeIf { now < it.until }
         // A just-hidden app keeps only the Undo note until it expires; nothing else is shown.
@@ -298,9 +305,10 @@ class DictationOverlay(
         if (
             editor.locked ||
                 editor.password ||
+                (editor.blocked && !undoing) ||
                 editor.identity?.displayId?.let { it != 0 } == true ||
                 editor.recordingHost?.displayId?.let { it != 0 } == true ||
-                (!busy && !eligible && !undoing)
+                (!busy && !eligible && !undoing && !pending)
         ) {
             close()
             return
@@ -344,7 +352,7 @@ class DictationOverlay(
         primary.contentDescription =
             when (mode) {
                 Mode.RECORDING -> "Stop and transcribe"
-                Mode.PENDING -> "Open retained transcript in Altiro"
+                Mode.PENDING -> "Copy transcript"
                 Mode.WORKING ->
                     if (modelBusy && !busy) "Preparing model" else "Microphone off; recognizing"
                 Mode.NO_MODEL -> "Install a model in Altiro"
@@ -381,7 +389,7 @@ class DictationOverlay(
                 session.phase == Phase.TRANSCRIBING -> "Preparing"
                 busy -> "Finishing"
                 modelBusy -> "Preparing"
-                mode == Mode.PENDING -> "Saved"
+                mode == Mode.PENDING -> "Copy"
                 else -> ""
             }
         language.textSize = if (phaseText.isEmpty()) 14f else 12f
@@ -397,8 +405,14 @@ class DictationOverlay(
         phase.visibility = if (phaseText.isEmpty()) View.GONE else View.VISIBLE
         lastRecordingWarning = recordingWarning
 
-        cancel.visibility = if (busy) View.VISIBLE else View.GONE
-        cancel.contentDescription = if (recording) "Cancel and discard recording" else "Cancel"
+        copy.visibility = if (hasResult && !pending) View.VISIBLE else View.GONE
+        cancel.visibility = if (busy || pending) View.VISIBLE else View.GONE
+        cancel.contentDescription =
+            when {
+                pending -> "Discard transcript"
+                recording -> "Cancel and discard recording"
+                else -> "Cancel"
+            }
 
         val persistent =
             when {
@@ -414,7 +428,7 @@ class DictationOverlay(
         note.contentDescription = note.text
         note.visibility = if (shown == null) View.GONE else View.VISIBLE
         note.minHeight = dp(if (shown?.onTap != null) 48 else 32)
-        val onTap = shown?.onTap ?: if (mode == Mode.PENDING) openApp else null
+        val onTap = shown?.onTap ?: if (mode == Mode.PENDING) ::copyResult else null
         if (onTap != null) note.setOnClickListener { onTap() }
         else {
             note.setOnClickListener(null)
@@ -849,6 +863,15 @@ class DictationOverlay(
         if (force || oldX != params.x || oldY != params.y) windows.updateViewLayout(layout, params)
     }
 
+    private fun copyResult() {
+        val session = controller.session.value
+        if (session.busy || session.text == null || controller.recognition.busy.value) return
+        if (runCatching { controller.copy() }.isSuccess) {
+            controller.discard()
+            showMessage("Copied")
+        } else showMessage("Couldn't copy · try again")
+    }
+
     private fun applyPalette() {
         language.setTextColor(ink)
         phase.setTextColor(ink)
@@ -866,7 +889,7 @@ class DictationOverlay(
                 setColor(chalk)
                 cornerRadius = dp(16).toFloat()
             }
-        for (view in listOf(cancel)) view.background =
+        for (view in listOf(copy, cancel)) view.background =
             StateListDrawable().apply {
                 addState(
                     intArrayOf(android.R.attr.state_pressed),
@@ -886,6 +909,7 @@ class DictationOverlay(
                 )
             }
         cancel.setImageDrawable(GlyphDrawable(Glyph.CLOSE, ink))
+        copy.setImageDrawable(GlyphDrawable(Glyph.COPY, ink))
         capsule.invalidate()
         primary.invalidate()
         target.invalidate()
@@ -1095,7 +1119,7 @@ class DictationOverlay(
                 Face.RECOVERY -> {
                     p.color = withAlpha(ink, if (isPressed) 210 else 255)
                     canvas.drawCircle(cx, cy, r, p)
-                    glyph(canvas, Glyph.HOME, chalk)
+                    glyph(canvas, Glyph.COPY, chalk)
                 }
                 Face.STOP -> {
                     p.style = Paint.Style.STROKE

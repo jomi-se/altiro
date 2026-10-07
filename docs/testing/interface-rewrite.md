@@ -64,16 +64,34 @@ Git, and use synthetic text instead of personal chat content.
 
 ## Overlay and Console
 
-### Automatic delivery and bubble controls in 0.5.7
+### Paste delivery and bubble recovery in 0.5.8
 
 - Focus an ordinary native/Compose field, dictate and Stop. Valid unchanged
-  destinations receive one automatic commit; the bubble returns to its mic
-  without Insert, Copy or Discard controls. Confirm text arrival separately
-  from the content-free `DISPATCHED_UNCONFIRMED` diagnostic.
+  destinations receive one editor-owned paste; the bubble returns to its mic
+  with secondary Copy available. Confirm text arrival separately from the
+  `PASTE_NODE_DISPATCHED_UNCONFIRMED`/`PASTE_INPUT_DISPATCHED_UNCONFIRMED` code.
+  Missing composition callbacks must not block an empty field. Continue at the
+  end and middle of existing text, and replace an explicit selection. A stable
+  pre-existing composing word must remain intact; no whole-field replacement
+  or inferred empty-field requirement is permitted.
+  With Gboard, type a word without a trailing space, dictate, then type one
+  more character. Verify that neither the typed word nor the pasted transcript
+  is swallowed or rewritten by the keyboard. The fixture assertions do not
+  establish this real-keyboard behavior.
 - Repeat on ChatGPT, Reddit and Twitter with blank fields and after typing.
   Test same-window field switches, cursor changes, composition, keyboard close,
-  app switches and lock during recognition. Changed/unknown destinations retain
-  the transcript in Altiro; they must not receive an automatic mutation.
+  app switches and lock during recognition. Changed destinations retain
+  the transcript; they must not receive an automatic mutation. Copy must be
+  immediately available from the bubble after blocked and unconfirmed delivery,
+  including a provider ignoring paste. Copy releases the result only after its
+  clipboard write succeeds; the next recording must work without opening Altiro.
+  Discard must release a blocked result without changing host text. No recovery
+  tap may retry insertion. Keep Copy usable if the original input disappears.
+  Only a blocked result may extend visibility after the input disappears;
+  successful/unconfirmed dispatch must not leave a bubble over the launcher.
+  Copy reappears with its retained result in an eligible input. A hidden app
+  must stay hidden even when a result is retained. A late composition callback
+  with identical ranges must not invent a destination change.
 - Tap language: a menu opens, with Auto/English/Español/Français and the current
   choice marked. Only tapping a choice changes language. Mic is the larger
   edge target. Menu opening must keep the keyboard and editor focus; recording
@@ -92,7 +110,8 @@ Git, and use synthetic text instead of personal chat content.
   selected receiving app. The provider must expose no recordings or models.
 - Clipboard-based delivery must leave a newer user clip alone; when both the
   prior clip and staged ownership are readable, check best-effort restoration.
-  Verify ordinary commit delivery does not touch the clipboard.
+  Ordinary TEXT now uses the clipboard too; this is a deliberate transport
+  change. Explicit bubble Copy leaves the transcript available for manual paste.
 
 These are pending physical checks, not executed device results.
 

@@ -355,7 +355,7 @@ class DictationController(private val context: Context) {
                                             editor.current.identity == null &&
                                                 editor.current.recordingHost != null
                                         )
-                                            "Insertion unavailable here"
+                                            "Not inserted · tap Copy"
                                         else "Text ready in Altiro.",
                                     )
                                 )

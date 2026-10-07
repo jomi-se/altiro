@@ -35,7 +35,12 @@ injection or a small container, not a global Activity reference.
 Capture destination authority at recording start. Invalidate it on relevant
 editor, content, selection, composition, lifecycle, and focus changes.
 Recheck before dispatch using the current input connection. Consume one attempt
-before invoking the public accessibility commit API. Successful dispatch is
+before invoking one public paste/commit operation. Ordinary TEXT uses the
+editor's paste command at its current cursor/selection. A missing composition
+callback or stable pre-existing typed word does not veto that route; direct
+commit retains composition checks. See
+[decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md).
+Successful dispatch is
 unconfirmed delivery, and must never trigger an automatic fallback mutation.
 
 Stop releases capture then transcribes; Cancel invalidates the session and

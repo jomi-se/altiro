@@ -131,3 +131,21 @@ actually being composed. The current “Finish typing” notice conflates unknow
 composition with active composition; neither the notice nor compilation proves
 that the user had an unfinished word. Preserve composition protection while
 investigating a supported way to establish the initial state.
+
+The maintainer then tests 0.5.7 and reports worse recovery: a failed result has
+no bubble Copy, and returning to the app is slow. “Finish typing” appears in
+empty regular inputs. The requested behavior is continuation at the cursor,
+including existing typed text, and an immediately accessible bubble Copy when
+automatic delivery fails. No field-emptiness restriction is requested or present
+in the delivery contract.
+
+Version 0.5.8 follows [decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md):
+ordinary TEXT selects one native editor paste operation rather than a commit
+that needs composition metadata. Missing composition/selection callbacks and
+stable pre-existing composition do not block paste; changes after capture,
+passwords, lock and cancellation still do. Blocked results expose primary Copy
+and discard directly on the bubble; dispatched results keep a secondary Copy
+for ignored/unconfirmed delivery. Copy succeeds before releasing the result.
+The bubble may retain recovery controls after its original input disappears,
+while recording still requires a live eligible input. Physical delivery remains
+unverified until the next phone check.
