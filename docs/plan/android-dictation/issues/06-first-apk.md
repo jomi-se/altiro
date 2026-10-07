@@ -34,6 +34,8 @@ Foreground-start recovery, visible five-minute recording warnings and a
 content-free interruption notice are implemented. See
 [current work](../../current-work.md) and the
 [physical interface matrix](../../../testing/everyday-interface.md).
+The [first-release checklist](../../release-readiness.md) records the remaining
+deliverables and the evidence required to accept them.
 
 Host compilation, JVM acquisition/session tests, lint and packaged native
 16 KiB alignment have passed for the everyday interface. Instrumentation is

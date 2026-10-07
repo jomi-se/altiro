@@ -1,6 +1,6 @@
 # Everyday interface: physical-device checks
 
-Target: the 0.5.1 native interface, especially the real accessibility overlay in
+Target: the 0.5.2 native interface, especially the real accessibility overlay in
 other apps. Build checks and concept approval do not pass this matrix.
 
 1. Install as an update with the same signing identity. Existing verified models,
@@ -49,7 +49,8 @@ other apps. Build checks and concept approval do not pass this matrix.
     interruption notice on restart; Dismiss preserves its Console evidence.
 
 Use [Gate A](gate-a.md) for the full editor/resource matrix and
-[Gate B](gate-b.md) for language quality, long audio and cancellation. Report
+[Gate B](gate-b.md) for language quality, long audio and cancellation, plus
+[vocabulary checks](vocabulary.md) for optional names and terms. Report
 version, OS, device and exact step; export the Console trace without private
 speech. Native screenshots for review should show idle/recording/recognizing
 across a light and dark editor, Home, Models, Setup and Console. Capture only

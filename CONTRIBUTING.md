@@ -21,6 +21,11 @@ Full verification needs JDK 21 and the pinned SDK and compiles Android/test APKs
 runs core tests/lint, and checks formatting. Connected tests and the physical
 Gate A procedure are separate; do not call compiled tests executed tests.
 
+For workflow changes, also install the checksum-pinned validator with
+`./scripts/install-actionlint.sh` and run `./scripts/check-workflows.sh`.
+It checks Actions syntax, expression contexts and types. A separate workflow
+runs this check even when the Android workflow itself cannot start.
+
 ## Changes
 
 Keep changes focused on a runnable increment in the accepted build order.

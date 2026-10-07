@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-06.
+Updated: 2026-10-07.
 
 ## Productization direction
 
@@ -66,10 +66,19 @@ pending in [the phone procedure](../testing/vocabulary.md).
 Public-repository preparation adds private-reporting guidance, staged and
 full-history Gitleaks scans, pinned read-only scanning CI, and Gradle dependency
 update configuration alongside existing GitHub Actions updates. Remote security
-settings have been verified on the new public repository. It is still empty;
-first push and first CI execution remain pending. See the
+settings have been verified on the public repository. Its initial everyday
+source is now public and secret scanning has passed. Android verification failed
+workflow parsing before jobs started: runner context is invalid in job-level
+environment expressions. The [local fix](../issues/0001-invalid-workflow-context.md)
+sets the output directory in a runner step and adds an independent checksum-pinned
+workflow validator. Corrected Android execution and newer local commits await
+the operator's push. See the
 [publication review](public-repository.md). The owner explicitly retains
 existing public author identities.
+
+The [first-release checklist](release-readiness.md) separates source/host
+verification from native appearance, physical editor/lifecycle/quality gates,
+public Chilean binaries and release qualification. It is not a completed release.
 
 The owner selected concepts before implementation, approved the refined centered
 mic in misty sage/chalk/charcoal, and emphasized the actual floating accessibility

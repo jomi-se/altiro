@@ -1,6 +1,7 @@
 # Public repository preparation
 
-Status: local preparation and GitHub settings verified; first push pending.
+Status: initial source public; newer local commits and corrected Android CI
+execution pending.
 
 The public destination is [jomi-se/altiro](https://github.com/jomi-se/altiro).
 The owner requested public setup and confirmed that existing author identities
@@ -43,7 +44,11 @@ workflow. Check requirements exempt initial branch creation so the first push
 can trigger CI. History protections have no bypass actors. Rebase is the
 enabled merge method.
 
-The repository was created empty. Its security settings are verified, but
-its workflows have not run and its local source has not been pushed. The
-operator owns push actions under repository guidance. An APK release, model
-asset publication and store submission are separate actions.
+The initial everyday-interface source has reached the public main branch.
+Independent secret scans have passed. Android verification was rejected before
+starting jobs because of invalid runner-context expressions; the
+[local fix](../issues/0001-invalid-workflow-context.md) and independent workflow
+validation await an operator push. Newer local startup/vocabulary changes are
+also ahead of that public source. The operator owns pushes under repository
+guidance. An APK release, model asset publication and store submission are
+separate actions.

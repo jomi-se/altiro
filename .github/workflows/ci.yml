@@ -17,9 +17,10 @@ jobs:
   build:
     runs-on: ubuntu-24.04
     timeout-minutes: 25
-    env:
-      ALTIRO_BUILD_ROOT: ${{ runner.temp }}/altiro-build
     steps:
+      - name: Set build output directory
+        run: echo "ALTIRO_BUILD_ROOT=$RUNNER_TEMP/altiro-build" >> "$GITHUB_ENV"
+
       - name: Check out repository
         uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
         with:
@@ -71,9 +72,9 @@ jobs:
             target: google_apis_ps16k
             ram: 4096M
     timeout-minutes: 30
-    env:
-      ALTIRO_BUILD_ROOT: ${{ runner.temp }}/altiro-build
     steps:
+      - name: Set build output directory
+        run: echo "ALTIRO_BUILD_ROOT=$RUNNER_TEMP/altiro-build" >> "$GITHUB_ENV"
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803
         with:
           persist-credentials: false

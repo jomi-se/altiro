@@ -1,6 +1,7 @@
 # Confirmed defects
 
-No confirmed implementation defects are recorded yet; the app has not been built.
+- [0001 — Invalid workflow context](0001-invalid-workflow-context.md): local fix
+  validated; execution of the corrected public workflow remains pending.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.
