@@ -22,8 +22,8 @@ identity. No device tests or frame-pacing measurements were executed here.
 
 Version 0.5.6 separates recording availability from insertion authority. The
 maintainer's 0.5.5 phone trace confirms that ChatGPT search/composer and Reddit
-search lack a focused node despite a matching connected input; Reddit comments
-work. Termux's raw terminal exposes a focused noneditable host. All five models
+search/comments fail. The trace includes a matching connected TEXT input with
+no focused node; it does not map every timestamp to an app. Termux's raw terminal exposes a focused noneditable host. All five models
 are verified. A matching visible focused application window and started TEXT/RAW
 connection can now show a Copy mic without an insertion identity. Contradictory
 nodes, password/lock/hidden/display failures remain closed. Raw inputs never

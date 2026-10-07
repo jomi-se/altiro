@@ -8,7 +8,8 @@ The maintainer's 0.5.5 trace has a started TEXT input, connected input connectio
 and matching input-focused application window, but no node from either focused
 lookup. A separate RAW input has a focused, visible, matching-window node marked
 noneditable. The maintainer identifies the failed surfaces as ChatGPT search and
-composer, Reddit search and Termux's terminal; Reddit comments work. The report
+composer, Reddit search/comments and Termux's terminal. The follow-up corrects
+the earlier interpretation that Reddit comments worked. The report
 does not map every retained event to an app, and its 48-event ring omits the
 earliest attempts. All five models are verified and ready.
 

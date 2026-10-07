@@ -70,7 +70,8 @@ execution and the three reported editor results remain pending.
 
 Version 0.5.5 phone feedback identifies two failures: connected TEXT input with
 no accessible focused node, and connected RAW input with a focused noneditable
-host. ChatGPT search/composer and Reddit search fail; Reddit comments work;
+host. ChatGPT search/composer and Reddit search/comments fail, according to the
+maintainer's follow-up correction;
 Termux's terminal still fails. The limited ring cannot assign each timestamp to
 an app. All five models are now verified, so further storage resets are not a
 recovery step.
