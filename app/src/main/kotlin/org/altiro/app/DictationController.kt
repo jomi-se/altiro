@@ -38,6 +38,9 @@ class DictationController(private val context: Context) {
     val overlayWindowEvents = MutableStateFlow(0)
     val otherWindowEvents = MutableStateFlow(0)
     val editorLabel = MutableStateFlow("No eligible field")
+    // Fixed content-free reason codes only; never editor names or identifiers.
+    val overlayStatus = MutableStateFlow("DISCONNECTED")
+    val lastEditorStatus = MutableStateFlow("NONE")
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
     val checkpoint = RuntimeCheckpoint(context)
@@ -98,21 +101,43 @@ class DictationController(private val context: Context) {
     var refreshSettings: (() -> Unit)? = null
     private var generation = 0L
     private val preferences = context.getSharedPreferences("preferences", Context.MODE_PRIVATE)
+    private val mutableHiddenApps =
+        MutableStateFlow(preferences.getStringSet("disabled", emptySet()).orEmpty().toSet())
+    val hiddenApps = mutableHiddenApps.asStateFlow()
+    val restoreFeedback = MutableStateFlow<String?>(null)
 
-    fun isDisabled(packageName: String): Boolean =
-        packageName in preferences.getStringSet("disabled", emptySet()).orEmpty()
+    fun isDisabled(packageName: String): Boolean = packageName in mutableHiddenApps.value
 
     fun disableCurrentApp() {
         val packageName = editor.current.identity?.packageName ?: return
-        val disabled = preferences.getStringSet("disabled", emptySet()).orEmpty() + packageName
+        val disabled = mutableHiddenApps.value + packageName
         preferences.edit().putStringSet("disabled", disabled).apply()
+        mutableHiddenApps.value = disabled
+        restoreFeedback.value = null
         editor.observe(editor.current.copy(blocked = true))
         editorLabel.value = "Disabled for this app"
         refreshSettings?.invoke()
     }
 
     fun clearDisabledApps() {
+        val count = mutableHiddenApps.value.size
         preferences.edit().remove("disabled").apply()
+        mutableHiddenApps.value = emptySet()
+        restoreFeedback.value =
+            when {
+                count == 0 -> "No apps were hidden."
+                !connected.value -> "Restored $count apps. Enable the floating mic to use it."
+                else -> "Restored $count apps. Return to your editor."
+            }
+        editor.invalidate()
+        refreshSettings?.invoke()
+    }
+
+    fun restoreApp(packageName: String) {
+        val remaining = mutableHiddenApps.value - packageName
+        preferences.edit().putStringSet("disabled", remaining).apply()
+        mutableHiddenApps.value = remaining
+        restoreFeedback.value = "Restored. Return to your editor."
         editor.invalidate()
         refreshSettings?.invoke()
     }

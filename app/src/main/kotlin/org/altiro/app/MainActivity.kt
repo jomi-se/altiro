@@ -17,7 +17,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
-import androidx.compose.foundation.selection.toggleable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -31,7 +30,6 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -70,13 +68,11 @@ class MainActivity : ComponentActivity() {
         setContent {
             AltiroTheme {
                 var page by rememberSaveable { mutableIntStateOf(0) }
-                var settings by rememberSaveable { mutableStateOf(false) }
                 val session by controller.session.collectAsState()
                 val nativeBusy by controller.recognition.busy.collectAsState()
                 KeepAwake(session.busy || nativeBusy)
-                BackHandler(page != 0 || settings) {
+                BackHandler(page != 0) {
                     page = 0
-                    settings = false
                 }
                 Scaffold(
                     containerColor = MaterialTheme.colorScheme.background,
@@ -89,17 +85,18 @@ class MainActivity : ComponentActivity() {
                                 listOf(
                                         Glyph.HOME to "Home",
                                         Glyph.MODEL to "Models",
+                                        Glyph.SETTINGS to "Settings",
                                         Glyph.CONSOLE to "Console",
                                     )
                                     .withIndex()) {
                                 NavigationBarItem(
-                                    selected = page == index && !settings,
+                                    selected = page == index,
                                     onClick = {
                                         page = index
-                                        settings = false
                                     },
                                     icon = { AltiroIcon(item.first) },
                                     label = { Text(item.second) },
+                                    alwaysShowLabel = false,
                                     colors =
                                         NavigationBarItemDefaults.colors(
                                             indicatorColor =
@@ -110,7 +107,7 @@ class MainActivity : ComponentActivity() {
                         }
                     },
                 ) { insets ->
-                    val pageScroll = key(page, settings) { rememberScrollState() }
+                    val pageScroll = key(page) { rememberScrollState() }
                     Column(
                         Modifier.fillMaxSize()
                             .padding(insets)
@@ -118,7 +115,7 @@ class MainActivity : ComponentActivity() {
                             .imePadding()
                             .verticalScroll(pageScroll)
                             .padding(horizontal = 24.dp, vertical = 16.dp),
-                        verticalArrangement = Arrangement.spacedBy(20.dp),
+                        verticalArrangement = Arrangement.spacedBy(if (page == 0) 20.dp else 8.dp),
                     ) {
                         Row(
                             Modifier.fillMaxWidth(),
@@ -126,63 +123,48 @@ class MainActivity : ComponentActivity() {
                             horizontalArrangement = Arrangement.SpaceBetween,
                         ) {
                             Text(
-                                if (settings) "Setup"
-                                else listOf("Altiro", "Models", "Console")[page],
+                                listOf("Altiro", "Models", "Settings", "Console")[page],
                                 style = MaterialTheme.typography.headlineLarge,
                                 fontWeight = FontWeight.SemiBold,
                                 letterSpacing = (-1).sp,
                             )
-                            IconButton(
-                                onClick = { settings = !settings },
-                                modifier =
-                                    Modifier.semantics {
-                                        contentDescription =
-                                            if (settings) "Close setup" else "Open setup"
-                                    },
-                            ) {
-                                AltiroIcon(if (settings) Glyph.CLOSE else Glyph.SETTINGS)
-                            }
                         }
                         when {
-                            settings ->
-                                SetupContent(
-                                    controller,
-                                    microphoneAllowed,
-                                    ::requestPermission,
-                                    ::openAccessibility,
-                                    ::openPermissionSettings,
-                                )
                             page == 0 ->
                                 HomeContent(
                                     controller,
                                     microphoneAllowed,
                                     ::startRecording,
                                     { page = 1 },
-                                    { settings = true },
+                                    { page = 2 },
                                 )
                             page == 1 ->
                                 ModelsContent(controller) { id ->
                                     pendingImportId = id
                                     modelImport.launch(arrayOf("*/*"))
                                 }
+                            page == 2 ->
+                                SettingsContent(
+                                    controller,
+                                    microphoneAllowed,
+                                    ::requestPermission,
+                                    ::openAccessibility,
+                                    ::openPermissionSettings,
+                                )
                             else -> {
                                 ConsoleContent(controller, microphoneAllowed)
-                                var experiments by rememberSaveable { mutableStateOf(false) }
-                                TextButton(onClick = { experiments = !experiments }) {
-                                    Text(
-                                        if (experiments) "Close experiments"
-                                        else "Runtime & comparisons"
-                                    )
-                                }
-                                if (experiments) {
-                                    LanguageControls(controller)
-                                    GpuControls(controller, microphoneAllowed) { first ->
+                                if (controller.comparing.collectAsState().value)
+                                    ResultControls(controller)
+                                ComparisonTools(
+                                    controller,
+                                    microphoneAllowed,
+                                    { first ->
                                         launchComparison("compare-backends", "gpu-first", first)
-                                    }
-                                    WindowControls(controller, microphoneAllowed) { first ->
+                                    },
+                                    { first ->
                                         launchComparison("compare-windows", "dynamic-first", first)
-                                    }
-                                    ComparisonControls(controller, microphoneAllowed) { ids ->
+                                    },
+                                    { ids ->
                                         startActivity(
                                             Intent(this@MainActivity, RecordingActivity::class.java)
                                                 .putStringArrayListExtra(
@@ -190,9 +172,8 @@ class MainActivity : ComponentActivity() {
                                                     ArrayList(ids),
                                                 )
                                         )
-                                    }
-                                    ResultControls(controller)
-                                }
+                                    },
+                                )
                             }
                         }
                     }
@@ -532,16 +513,12 @@ internal fun LanguageControls(controller: DictationController) {
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
     val modelBusy by controller.models.busy.collectAsState()
-    var more by rememberSaveable { mutableStateOf(false) }
     val available = !session.busy && !nativeBusy && !modelBusy
     FlowRow(
         horizontalArrangement = Arrangement.spacedBy(12.dp),
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
-        for ((value, label) in
-            listOf("en" to "EN", "es" to "ES") +
-                if (more || language in setOf("auto", "fr")) listOf("auto" to "Auto", "fr" to "FR")
-                else emptyList()) {
+        for ((value, label) in listOf("en" to "EN", "es" to "ES", "auto" to "Auto", "fr" to "FR")) {
             FilterChip(
                 selected = language == value,
                 onClick = { controller.selectLanguage(value) },
@@ -553,74 +530,11 @@ internal fun LanguageControls(controller: DictationController) {
                     },
             )
         }
-        if (!more && language !in setOf("auto", "fr"))
-            IconButton(
-                onClick = { more = true },
-                modifier = Modifier.semantics { contentDescription = "More languages" },
-            ) {
-                AltiroIcon(Glyph.GLOBE)
-            }
     }
 }
 
 @Composable
-private fun SetupContent(
-    controller: DictationController,
-    microphoneAllowed: Boolean,
-    request: () -> Unit,
-    accessibility: () -> Unit,
-    permissions: () -> Unit,
-) {
-    val connected by controller.connected.collectAsState()
-    Text("Your keyboard stays yours.", style = MaterialTheme.typography.titleLarge)
-    Text(
-        "Microphone access records only when you start. Accessibility adds the floating mic and inserts at the selected cursor; it does not collect screen or clipboard contents."
-    )
-    SetupStep(
-        "Microphone",
-        microphoneAllowed,
-        if (microphoneAllowed) "Allowed" else "Record when you tap the mic",
-        request,
-    )
-    if (!microphoneAllowed)
-        TextButton(onClick = permissions) { Text("Android permission settings") }
-    SetupStep(
-        "Floating mic",
-        connected,
-        if (connected) "Connected" else "Enable Altiro in Accessibility settings",
-        accessibility,
-    )
-    Text(
-        "Model downloads contact the listed host only when you choose Download. Recording and recognition stay on this phone. Audio is deleted after recognition or cancellation; results expire after ten minutes.",
-        style = MaterialTheme.typography.bodyMedium,
-    )
-    Text(
-        "Each recording stops at five minutes and transcribes what you captured. Android closing the app can interrupt unfinished work.",
-        style = MaterialTheme.typography.bodySmall,
-    )
-    val context = LocalContext.current
-    val preferences = remember { RecordingPreferences(context) }
-    var inPlace by remember { mutableStateOf(preferences.recordInPlace) }
-    Row(
-        Modifier.fillMaxWidth().toggleable(inPlace, role = Role.Switch) {
-            inPlace = it
-            preferences.recordInPlace = it
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("Record in place", Modifier.weight(1f))
-        Switch(inPlace, onCheckedChange = null)
-    }
-    Text(
-        "If Android blocks recording from the overlay, start from Altiro, then return to your editor.",
-        style = MaterialTheme.typography.bodySmall,
-    )
-    TextButton(onClick = controller::clearDisabledApps) { Text("Restore mic in hidden apps") }
-    VocabularyContent(controller)
-}
-
-@Composable
-private fun VocabularyContent(controller: DictationController) {
+internal fun VocabularyContent(controller: DictationController) {
     val saved by controller.vocabulary.collectAsState()
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
@@ -713,25 +627,6 @@ private fun VocabularyContent(controller: DictationController) {
 }
 
 @Composable
-private fun SetupStep(title: String, done: Boolean, detail: String, action: () -> Unit) {
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = action).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(16.dp),
-    ) {
-        AltiroIcon(
-            if (done) Glyph.CHECK else Glyph.ARROW,
-            color = MaterialTheme.colorScheme.primary,
-        )
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(detail, style = MaterialTheme.typography.bodySmall)
-        }
-    }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
-}
-
-@Composable
 private fun ModelsContent(controller: DictationController, importModel: (String) -> Unit) {
     val selected by controller.models.selected.collectAsState()
     val installed by controller.models.installed.collectAsState()
@@ -741,10 +636,6 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
     val available = !busy && !session.busy && !nativeBusy
-    Text(
-        "One model runs at a time. Keep several installed to switch instantly.",
-        style = MaterialTheme.typography.bodyMedium,
-    )
     for (profile in controller.models.profiles) {
         Row(
             Modifier.fillMaxWidth()
@@ -770,17 +661,10 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
         }
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     }
-    Text(selected.description)
-    Text(selected.attribution, style = MaterialTheme.typography.bodySmall)
-    Text(
-        "Needs ${(selected.spec.bytes+10_999_999)/1_000_000} MB free. Source: ${Uri.parse(selected.sourceUrl).host}",
-        style = MaterialTheme.typography.bodySmall,
-    )
-    if (selected.experimental)
-        Text(
-            "Chilean fine-tune by Roberto Castro-Vexler. Import the audited converted file; a direct download is not published yet. Its training label does not establish better accuracy.",
-            style = MaterialTheme.typography.bodyMedium,
-        )
+    var info by rememberSaveable { mutableStateOf(false) }
+    if (selected.experimental && selected.spec.id !in installed)
+        Text("Experimental · verified file import only", style = MaterialTheme.typography.bodySmall)
+    Text(Uri.parse(selected.sourceUrl).host.orEmpty(), style = MaterialTheme.typography.bodySmall)
     if (selected.download != null && selected.spec.id !in installed)
         Button(onClick = { controller.downloadModel(selected.spec.id) }, enabled = available) {
             AltiroIcon(Glyph.DOWNLOAD, color = MaterialTheme.colorScheme.onPrimary)
@@ -797,6 +681,7 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
     Text(status, style = MaterialTheme.typography.bodySmall)
     linkNotice?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
     FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        TextButton(onClick = { info = !info }) { Text(if (info) "Less" else "Details") }
         TextButton(onClick = controller::openModelSource, enabled = available) {
             Text("Source")
         }
@@ -808,6 +693,14 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
             Text("Delete model")
         }
     }
+    if (info) {
+        Text(selected.description, style = MaterialTheme.typography.bodySmall)
+        Text(selected.attribution, style = MaterialTheme.typography.bodySmall)
+        Text(
+            "${Uri.parse(selected.sourceUrl).host} · needs ${(selected.spec.bytes+10_999_999)/1_000_000} MB free",
+            style = MaterialTheme.typography.bodySmall,
+        )
+    }
 }
 
 @Composable
@@ -815,258 +708,52 @@ internal fun ResultControls(controller: DictationController) {
     val session by controller.session.collectAsState()
     val progress by controller.progress.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
-    val modelName by controller.activeModelName.collectAsState()
     val results by controller.lastRun.collectAsState()
     val comparing by controller.comparing.collectAsState()
     val diagnostic by controller.diagnostics.report.collectAsState()
-    val context = LocalContext.current
-    if (session.phase == org.altiro.core.Phase.TRANSCRIBING) {
-        Text("$modelName · ${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop")
-        Text(controller.processingLabel())
-        diagnostic?.steps?.lastOrNull { it.running }?.backend?.let { Text(it.label) }
-        val trace = diagnostic
-        if (trace?.comparison == true) {
-            val step = trace.steps.lastOrNull { it.modelId != null }
-            val index =
-                trace.modelIds.zip(trace.backends).indexOf(step?.modelId to step?.backend) + 1
-            Text(
-                "Comparison · pass ${index.coerceAtLeast(1)} of ${trace.modelIds.size}, running sequentially"
-            )
-        }
-        Text("The microphone is released.")
-        if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE) {
+    if (session.phase == Phase.TRANSCRIBING) {
+        Text(controller.processingLabel(), style = MaterialTheme.typography.bodyMedium)
+        Text(
+            "${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop",
+            style = MaterialTheme.typography.bodySmall,
+        )
+        if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE)
             LinearProgressIndicator(progress = { progress / 100f })
-        } else {
-            LinearProgressIndicator()
-        }
-        OutlinedButton(onClick = controller::cancel) { Text("Cancel recognition") }
+        else LinearProgressIndicator()
+        OutlinedButton(onClick = controller::cancel) { Text("Cancel") }
     } else if (nativeBusy) {
-        Text("Cancellation requested · ${controller.processingLabel()}")
-    }
-    if (diagnostic != null) {
-        OutlinedButton(
-            onClick = { context.startActivity(Intent(context, DiagnosticsActivity::class.java)) }
-        ) {
-            Text("View phase timings")
-        }
+        Text("Cancelling…", style = MaterialTheme.typography.bodyMedium)
     }
     if (comparing && results.isNotEmpty()) {
-        Text(
-            "Same recording · ${results.size} passes",
-            style = MaterialTheme.typography.titleMedium,
-        )
-        Text(
-            "Times include verification, cold model loading and recognition. Models run one after another; these are not accuracy scores."
-        )
         for (result in results) {
-            Card(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(
-                        controller.models.profiles.first { it.spec.id == result.modelId }.name,
-                        style = MaterialTheme.typography.titleMedium,
-                    )
-                    Text(
-                        "${"%.1f".format(java.util.Locale.ROOT, result.elapsedMillis / 1000.0)} seconds"
-                    )
-                    Text(
-                        result.backend.label +
-                            if (result.flashAttention) " · Flash Attention" else ""
-                    )
-                    Text(result.window.label)
-                    Text(result.text.ifBlank { "No speech recognized." })
-                    OutlinedButton(
-                        onClick = { controller.copyText(result.text) },
-                        enabled = result.text.isNotBlank(),
-                    ) {
-                        Text("Copy this result")
-                    }
-                }
-            }
-        }
-        OutlinedButton(onClick = controller::discard) { Text("Clear comparison") }
-    }
-    if (!comparing) {
-        session.text?.let { text ->
-            Text("Transcript", style = MaterialTheme.typography.titleMedium)
-            results.firstOrNull()?.let {
-                Text(
-                    "$modelName · ${"%.1f".format(java.util.Locale.ROOT, it.elapsedMillis / 1000.0)} seconds"
-                )
-            }
-            Text(text)
-            session.message?.let { Text(it) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
             Text(
-                "Return to your editor for Insert. Copy changes the clipboard only when you tap it."
+                controller.models.profiles.first { it.spec.id == result.modelId }.name,
+                style = MaterialTheme.typography.titleMedium,
             )
-            OutlinedButton(onClick = controller::copy) { Text("Copy result") }
-            OutlinedButton(onClick = controller::discard) { Text("Discard result") }
-        }
-    }
-    if (session.text == null && !(comparing && results.isNotEmpty()))
-        session.message?.let { Text(it) }
-    Spacer(Modifier.height(4.dp))
-}
-
-@Composable
-internal fun GpuControls(
-    controller: DictationController,
-    microphoneAllowed: Boolean,
-    compare: (Boolean) -> Unit,
-) {
-    val backend by controller.backend.collectAsState()
-    val flashAttention by controller.flashAttention.collectAsState()
-    val session by controller.session.collectAsState()
-    val busy by controller.recognition.busy.collectAsState()
-    val modelBusy by controller.models.busy.collectAsState()
-    val ready by controller.models.ready.collectAsState()
-    val selected by controller.models.selected.collectAsState()
-    val available = !session.busy && !busy && !modelBusy
-    var gpuFirst by remember { mutableStateOf(false) }
-    Text("Recognition processor", style = MaterialTheme.typography.titleMedium)
-    Text(
-        "Selected: ${backend.label}. CPU is the reference; GPU speed and compatibility need testing on your phone."
-    )
-    for (option in org.altiro.core.RecognitionBackend.entries) {
-        Row(
-            Modifier.fillMaxWidth().selectable(
-                backend == option,
-                enabled = available,
-                role = Role.RadioButton,
+            Text(
+                "${result.backend.label} · ${result.window.label} · ${"%.1f".format(java.util.Locale.ROOT, result.elapsedMillis / 1000.0)}s${if (result.flashAttention) " · FA" else ""}",
+                style = MaterialTheme.typography.bodySmall,
+            )
+            Text(result.text.ifBlank { "No speech recognized." })
+            TextButton(
+                onClick = { controller.copyText(result.text) },
+                enabled = result.text.isNotBlank(),
             ) {
-                controller.selectBackend(option)
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            RadioButton(selected = backend == option, onClick = null, enabled = available)
-            Text(option.label)
+                AltiroIcon(Glyph.COPY)
+                Spacer(Modifier.width(8.dp))
+                Text("Copy")
+            }
+        }
+        TextButton(onClick = controller::discard) { Text("Clear comparison") }
+    } else if (!comparing) {
+        session.text?.let {
+            Text(it, style = MaterialTheme.typography.bodyLarge)
+            FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = controller::copy) { Text("Copy") }
+                TextButton(onClick = controller::discard) { Text("Clear") }
+            }
         }
     }
-    Row(
-        Modifier.fillMaxWidth().toggleable(
-            flashAttention,
-            enabled = available,
-            role = Role.Checkbox,
-        ) {
-            controller.selectFlashAttention(it)
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = flashAttention, onCheckedChange = null, enabled = available)
-        Text("Flash Attention for GPU (experimental)")
-    }
-    Text(
-        "Applies to GPU runs, including comparison. Turn it off to return to the previous attention method."
-    )
-    Text("GPU failures are reported in diagnostics. The app does not silently retry on CPU.")
-    Text(
-        "CPU/GPU comparison uses ${selected.name} twice with the same recording and language. Nothing is inserted automatically."
-    )
-    Row(
-        Modifier.fillMaxWidth().toggleable(gpuFirst, enabled = available, role = Role.Checkbox) {
-            gpuFirst = it
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = gpuFirst, onCheckedChange = null, enabled = available)
-        Text("Run GPU first (reverse the comparison order)")
-    }
-    Button(
-        onClick = { compare(gpuFirst) },
-        enabled = available && ready && microphoneAllowed && session.text == null,
-    ) {
-        Text("Compare CPU and GPU")
-    }
-}
-
-@Composable
-internal fun WindowControls(
-    controller: DictationController,
-    microphoneAllowed: Boolean,
-    compare: (Boolean) -> Unit,
-) {
-    val dynamic by controller.dynamicWindow.collectAsState()
-    val session by controller.session.collectAsState()
-    val busy by controller.recognition.busy.collectAsState()
-    val modelBusy by controller.models.busy.collectAsState()
-    val ready by controller.models.ready.collectAsState()
-    var dynamicFirst by remember { mutableStateOf(false) }
-    val available = !session.busy && !busy && !modelBusy
-    Text("Audio window", style = MaterialTheme.typography.titleMedium)
-    Row(
-        Modifier.fillMaxWidth().toggleable(dynamic, enabled = available, role = Role.Checkbox) {
-            controller.selectDynamicWindow(it)
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = dynamic, onCheckedChange = null, enabled = available)
-        Text("Dynamic window for short recordings (experimental)")
-    }
-    Text(
-        "Short recordings use a smaller window with padding. Recordings of 30 seconds or more keep full windows. This may affect accuracy; turn it off to use the full window."
-    )
-    Text(
-        "Compare one short recording using both windows. Your model, processor and Flash Attention setting stay the same. Choose EN or ES to measure without automatic language detection's extra full window."
-    )
-    Row(
-        Modifier.fillMaxWidth().toggleable(
-            dynamicFirst,
-            enabled = available,
-            role = Role.Checkbox,
-        ) {
-            dynamicFirst = it
-        },
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Checkbox(checked = dynamicFirst, onCheckedChange = null, enabled = available)
-        Text("Run dynamic window first")
-    }
-    Button(
-        onClick = { compare(dynamicFirst) },
-        enabled = available && ready && microphoneAllowed && session.text == null,
-    ) {
-        Text("Compare full and dynamic windows")
-    }
-}
-
-@Composable
-internal fun ComparisonControls(
-    controller: DictationController,
-    microphoneAllowed: Boolean,
-    open: (List<String>) -> Unit,
-) {
-    val installed by controller.models.installed.collectAsState()
-    val session by controller.session.collectAsState()
-    val nativeBusy by controller.recognition.busy.collectAsState()
-    val modelBusy by controller.models.busy.collectAsState()
-    val experimental = controller.models.profiles.filter { it.experimental }
-    var extraIds by remember { mutableStateOf<Set<String>>(emptySet()) }
-    val available = !session.busy && !nativeBusy && !modelBusy && session.text == null
-    val ids =
-        listOf(ModelStore.SMALL_Q8, ModelStore.SMALL_FP16) +
-            experimental.filter { it.spec.id in extraIds }.map { it.spec.id }
-    Text("Compare one recording", style = MaterialTheme.typography.titleMedium)
-    Text(
-        "Record once, then compare Small Q8 and FP16 on exactly the same audio. Try 10–20 seconds of natural speech. Results stay in memory for ten minutes."
-    )
-    for (profile in experimental) {
-        val checked = profile.spec.id in extraIds
-        Row(
-            Modifier.fillMaxWidth().toggleable(checked, enabled = available, role = Role.Checkbox) {
-                extraIds = if (it) extraIds + profile.spec.id else extraIds - profile.spec.id
-            },
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = checked, onCheckedChange = null, enabled = available)
-            Text("Also compare ${profile.name}", Modifier.weight(1f))
-        }
-    }
-    if (ids.any { it !in installed })
-        Text("Install both Small models and any checked Chilean models first.")
-    Button(
-        onClick = { open(ids) },
-        enabled = available && microphoneAllowed && ids.all { it in installed },
-    ) {
-        Text("Record a comparison")
-    }
-    if (session.text != null) Text("Discard the previous result before starting another recording.")
+    session.message?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
 }

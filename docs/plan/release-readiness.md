@@ -13,10 +13,10 @@ different evidence. A generated concept is not a native screen capture.
 
 | Requirement | Current evidence | Remaining acceptance |
 | --- | --- | --- |
-| Clear install/setup; preserve existing models and keyboard | Native Setup and Models; 0.5.3 update APK has matching debug signing identity | Fresh install and update on Pixel; microphone, notifications, accessibility and restricted-setting recovery |
+| Clear install/setup; preserve existing models and keyboard | Native Settings and Models; previous update APK has matching debug signing identity | Fresh install and update on Pixel; microphone, notifications, accessibility and restricted-setting recovery |
 | One-tap verified model acquisition | Stock Base/Small HTTPS downloads, exact size/hash checks, progress, Cancel, atomic install; 8 acquisition JVM tests | Phone interruption, low storage, relaunch and failed replacement; installed model works in airplane mode |
 | Chilean Small choices and one-tap installation | Both converted precision variants are allowlisted with source/license metadata; verified import works in source | Compatible public binary assets and verified direct URLs; currently import-only, so this requirement is incomplete |
-| Approved centered-mic native interface | Sage/chalk/charcoal Home, Models, Setup and Console implemented | Actual native light/dark captures, font scaling and review; concepts and compilation do not establish polish |
+| Approved centered-mic native interface | Sage/chalk/charcoal Home, Models, Settings and Console; overlay-first rewrite after rejected phone rendering | Actual native light/dark captures, font scaling and review; concepts and compilation do not establish polish |
 | Almost transparent floating overlay over other apps | Small native View, non-focusable overlay, separate busy Cancel, drag handling, bounded positioning | Physical light/dark/busy editors, keyboard and rotation; reachable touch targets without stealing focus or intercepting outside touches |
 | One-touch bubble language change | EN/ES changes the next session; active model/language snapshot frozen; Auto/FR available inside app | Pixel touch and accessibility behavior while typing with the normal keyboard |
 | Insert normal dictation automatically | Serialized session authority, consumed single attempt, invalidation and explicit Insert/Copy recovery; core tests | Full Gate A selection, composition, moved cursor, changed field, password, WebView, filters and second-keyboard matrix; check delivered text |
@@ -31,7 +31,7 @@ different evidence. A generated concept is not a native screen capture.
 
 ## Verified host baseline
 
-The 0.5.3 debug artifact passed 35 core and 8 acquisition JVM tests, Android
+The 0.5.4 debug artifact passed 35 core and 8 acquisition JVM tests, Android
 assemblies, lint, native packaging, runtime notice graph/APK checks and
 instrumentation APK compilation. Production JNI checks on the unchanged 0.5.2
 native source used the real runtime and verified multilingual Base, including

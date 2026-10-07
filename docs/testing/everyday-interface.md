@@ -37,7 +37,7 @@ other apps. Build checks and concept approval do not pass this matrix.
    available, and no continuous animation continue after completion/detach.
 10. Open Console during work; Copy/Share/Clear must operate with content-free
     reports. Clear is disabled while work owns its trace. Run a comparison from
-    Runtime & comparisons: all passes and transcripts remain available, with no
+    Compare a recording: all passes and transcripts remain available, with no
     automatic insertion. Reopen after a worker crash and inspect the checkpoint.
 11. Cancel or Stop immediately after tapping the mic, then start a new session.
     The app must survive and recover without capturing unintended audio. Also
@@ -53,5 +53,5 @@ Use [Gate A](gate-a.md) for the full editor/resource matrix and
 [vocabulary checks](vocabulary.md) for optional names and terms. Report
 version, OS, device and exact step; export the Console trace without private
 speech. Native screenshots for review should show idle/recording/recognizing
-across a light and dark editor, Home, Models, Setup and Console. Capture only
+across a light and dark editor, Home, Models, Settings and Console. Capture only
 synthetic/empty editors; keep images and execution logs outside Git.

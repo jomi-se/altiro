@@ -10,6 +10,7 @@ import android.content.pm.PackageManager
 import android.text.InputType
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
+import android.view.accessibility.AccessibilityWindowInfo
 import android.view.inputmethod.EditorInfo
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.combine
@@ -51,7 +52,14 @@ class DictationAccessibilityService : AccessibilityService() {
         controller.connected.value = true
         controller.insertion = { dispatch(explicit = false) }
         controller.refreshSettings = ::refreshEditor
-        overlay = DictationOverlay(this, controller, ::openRecording, { dispatch(explicit = true) })
+        overlay =
+            DictationOverlay(
+                this,
+                controller,
+                ::openRecording,
+                { dispatch(explicit = true) },
+                ::openApp,
+            )
         observer =
             controller.scope.launch {
                 combine(
@@ -69,7 +77,10 @@ class DictationAccessibilityService : AccessibilityService() {
             }
         languageObserver =
             controller.scope.launch {
-                combine(controller.language, controller.models.busy) { _, _ -> Unit }
+                combine(controller.language, controller.models.busy, controller.progress) { _, _, _
+                        ->
+                        Unit
+                    }
                     .collect { refreshEditor() }
             }
         refreshEditor()
@@ -133,6 +144,7 @@ class DictationAccessibilityService : AccessibilityService() {
         controller.insertion = null
         controller.refreshSettings = null
         controller.connected.value = false
+        controller.overlayStatus.value = "DISCONNECTED"
         controller.editor.reconnect()
         controller.editorLabel.value = "Floating mic disconnected"
         controller.cancel()
@@ -185,6 +197,57 @@ class DictationAccessibilityService : AccessibilityService() {
             if (identity != null) identity.packageName else "No eligible field"
         if (locked && controller.session.value.busy) controller.cancel()
         overlay?.render(state, controller.session.value)
+        // Fixed, content-free codes only: never package names, field ids or text.
+        val reason =
+            when {
+                locked -> "LOCKED"
+                editorInfo == null -> "NO_INPUT_START"
+                node == null ->
+                    if (focusInOtherWindow(packageName)) "FOCUS_IN_OTHER_WINDOW"
+                    else "NO_FOCUS_NODE"
+                !node.isEditable -> "NOT_EDITABLE"
+                !node.isFocused -> "NOT_FOCUSED"
+                !node.isVisibleToUser -> "NOT_VISIBLE"
+                node.packageName?.toString() != packageName -> "PACKAGE_MISMATCH"
+                editorInfo.fieldId == 0 && name.isNullOrBlank() -> "NO_FIELD_KEY"
+                window == null -> "NO_WINDOW"
+                !state.connectionAvailable -> "NO_CONNECTION"
+                window.displayId != 0 -> "OTHER_DISPLAY"
+                state.password -> "PASSWORD"
+                state.blocked -> "HIDDEN_APP"
+                else -> "ELIGIBLE"
+            }
+        controller.overlayStatus.value = if (overlay?.visible == true) "SHOWN" else reason
+        // Keep the last external editor's reason so opening Altiro does not overwrite it.
+        val focusedPackage =
+            windows
+                .firstOrNull {
+                    it.isFocused && it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+                }
+                ?.root
+                ?.packageName
+                ?.toString()
+        if (
+            !locked &&
+                focusedPackage != null &&
+                focusedPackage != this.packageName &&
+                (editorInfo == null || editorInfo.packageName == focusedPackage)
+        )
+            controller.lastEditorStatus.value = reason
+    }
+
+    /**
+     * Diagnostic probe only: whether the input-focused application window, rather than the active
+     * window, holds a focused editable node for the started editor. It never feeds identity.
+     */
+    private fun focusInOtherWindow(packageName: String?): Boolean {
+        packageName ?: return false
+        val focused =
+            windows.firstOrNull {
+                it.isFocused && it.type == AccessibilityWindowInfo.TYPE_APPLICATION
+            } ?: return false
+        val candidate = focused.root?.findFocus(AccessibilityNodeInfo.FOCUS_INPUT) ?: return false
+        return candidate.isEditable && candidate.packageName?.toString() == packageName
     }
 
     private fun dispatch(explicit: Boolean) {
@@ -205,16 +268,16 @@ class DictationAccessibilityService : AccessibilityService() {
                             org.altiro.core.InsertionBlockReason.UNKNOWN_COMPOSITION,
                         )
                 ) {
-                    "Finish the current word, then insert. If unavailable, use Copy."
+                    "Finish the word, then tap Insert"
                 } else {
-                    "Focus an eligible field and tap Insert, or use Copy."
+                    "Tap a text field, then Insert"
                 }
             controller.event(SessionEvent.AwaitUser(id, reason))
             return
         }
         val connection = if (::method.isInitialized) method.currentInputConnection else null
         if (connection == null) {
-            controller.event(SessionEvent.AwaitUser(id, "This editor is not connected. Use Copy."))
+            controller.event(SessionEvent.AwaitUser(id, "Can't insert here · use Copy"))
             return
         }
         // Mark consumed before the cross-process mutation. Never retry on uncertainty.
@@ -232,7 +295,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
                     PackageManager.PERMISSION_GRANTED
             ) {
-                overlay?.showMessage("Allow the microphone in Altiro first.")
+                overlay?.showMessage("Microphone not allowed", "Open Altiro", ::openApp)
                 return
             }
             val id = controller.begin(explicit = false) ?: return
@@ -241,22 +304,19 @@ class DictationAccessibilityService : AccessibilityService() {
                     DictationRecordingService.intent(this, DictationRecordingService.START, id)
                 )
             } catch (_: ForegroundServiceStartNotAllowedException) {
-                controller.event(
-                    SessionEvent.Fail(
-                        id,
-                        "Recording here was blocked. Open Altiro and tap Open recording screen.",
-                    )
-                )
+                controller.event(SessionEvent.Fail(id, "Recording blocked here"))
+                // The specified visible-Activity fallback, started only by an explicit tap.
+                overlay?.showMessage("Recording blocked here", "Open recorder", ::openRecorder)
             } catch (_: SecurityException) {
-                controller.event(
-                    SessionEvent.Fail(
-                        id,
-                        "Microphone access was denied. Open Altiro and tap Open recording screen.",
-                    )
-                )
+                controller.event(SessionEvent.Fail(id, "Microphone access denied"))
+                overlay?.showMessage("Microphone access denied", "Open Altiro", ::openApp)
             }
             return
         }
+        openRecorder()
+    }
+
+    private fun openRecorder() {
         controller.editor.invalidate()
         try {
             startActivity(
@@ -265,7 +325,17 @@ class DictationAccessibilityService : AccessibilityService() {
         } catch (_: RuntimeException) {
             // System background-activity restrictions may suppress or reject the launch.
             // The launcher always retains the visible recording path.
-            overlay?.showMessage("Open Altiro and tap Open recording screen.")
+            overlay?.showMessage("Couldn't open the recorder · open Altiro")
+        }
+    }
+
+    private fun openApp() {
+        try {
+            startActivity(
+                Intent(this, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            )
+        } catch (_: RuntimeException) {
+            overlay?.showMessage("Open Altiro from your launcher")
         }
     }
 

@@ -43,8 +43,8 @@ recording-screen fallback while the remaining evidence is collected.
 
 ## Install and use
 
-Install a debug APK built from this repository. Open **Setup** (the settings
-icon), allow the microphone and enable Altiro in Android Accessibility settings.
+Install a debug APK built from this repository. Open **Settings**, allow the
+microphone and enable Altiro in Android Accessibility settings.
 This adds the floating control without replacing your keyboard. Accessibility
 is used for the selected editor, cursor/composition and one insertion attempt;
 Altiro does not collect screen or clipboard contents.
@@ -66,15 +66,17 @@ Keep your keyboard and tap the floating mic in your text field. Tap its language
 control to switch EN/ES before recording; Auto and French are available in the
 app. Speak and tap the square Stop action. The microphone is released before
 recognition; a separate Cancel discards the session. Drag a control to move the
-bubble; hold the language control to reveal an explicit Hide action for the current app. Setup can restore
-hidden apps. The idle control is translucent, with legible backed glyphs.
+bubble; while idle, drop it on the dismiss target to hide it in that app. Undo
+is briefly available, and Settings can restore one or all hidden apps with
+confirmation. TalkBack exposes a Hide action. The idle control is translucent;
+its material softens at rest while text and glyphs stay opaque.
 
 An unchanged eligible destination receives one automatic insertion attempt.
 Changed field/cursor/composition, lock or a password field blocks insertion.
 Recovery exposes Insert/Copy/Discard; uncertain delivery never triggers a retry
 or whole-field replacement. After dispatch, another dictation can start directly.
 If Android blocks overlay microphone startup, record from Home and return to
-your editor for explicit insertion. Setup retains the separate-screen fallback.
+your editor for explicit insertion. Settings retains the separate-screen fallback.
 
 The padded dynamic encoder window is enabled and capped at 30 seconds; longer
 recordings retain the normal full-window path. Language stays fixed during
@@ -83,18 +85,24 @@ cancels. Overlay behavior and visual fit need physical-device confirmation.
 
 **Console** provides live/final phase timings, runtime details, aggregate window
 event counts, model-acquisition state and a saved content-free checkpoint.
-Copy/Share exports diagnostics; Clear removes them. **Runtime & comparisons**
-contains the reversible CPU/Vulkan, Flash Attention and full/dynamic experiments,
-plus same-recording model comparison. Comparisons never insert automatically.
+Copy/Share exports diagnostics; Clear removes them. Settings contains processor,
+Flash Attention and dynamic-window controls. **Compare a recording** in Console
+offers same-audio model, processor and window comparisons; extra raw logs stay
+secondary. Comparisons never insert automatically.
 CPU remains the default; Vulkan compatibility and performance are device-specific.
 
-**Setup → Names & terms** offers optional local spelling hints: one per line,
+If the bubble is missing, focus the failing field and open Settings to inspect
+the last-editor reason. Console exports the fixed reason codes without editor
+identifiers. Restoring hidden apps does not establish editor compatibility.
+
+**Settings → Names & terms** offers optional local spelling hints: one per line,
 up to 100 terms and 4 KiB. Save applies the list to the next recording; Clear
 followed by Save turns hints off. The same saved list is used in every comparison
 pass. Hints guide recognition rather than replacing transcript text, and do not
 guarantee spelling. Console reports only the configured count, never the words.
 
 See the [product interface checks](docs/testing/everyday-interface.md),
+[rewrite checks](docs/testing/interface-rewrite.md),
 [Gate A](docs/testing/gate-a.md), [Gate B](docs/testing/gate-b.md), and
 [recognition diagnostics](docs/testing/recognition-diagnostics.md).
 

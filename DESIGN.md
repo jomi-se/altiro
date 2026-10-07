@@ -36,15 +36,14 @@ typography:
     fontFamily: "sans-serif-medium"
     fontSize: "14sp"
     fontWeight: 500
+  overlay-phase:
+    fontFamily: "Android system sans-serif"
+    fontSize: "11sp"
   overlay-status:
     fontFamily: "Android system sans-serif"
     fontSize: "12sp"
-  overlay-hide:
-    fontFamily: "Android system sans-serif"
-    fontSize: "13sp"
 rounded:
-  status: "12dp"
-  cancel: "24dp"
+  status: "16dp"
   overlay: "26dp"
   model-status: "32dp"
   disc: "50%"
@@ -96,29 +95,22 @@ components:
     padding: "12dp 16dp"
   overlay-capsule:
     rounded: "{rounded.overlay}"
-    width: "104dp"
     height: "52dp"
   overlay-primary:
     width: "52dp"
     height: "52dp"
-    padding: "12dp"
   overlay-language:
     typography: "{typography.overlay-language}"
-    width: "52dp"
     height: "52dp"
+    padding: "0dp 14dp 0dp 10dp"
   overlay-cancel:
-    rounded: "{rounded.cancel}"
+    rounded: "{rounded.disc}"
     size: "48dp"
-    padding: "12dp"
-  overlay-hide:
-    typography: "{typography.overlay-hide}"
-    rounded: "{rounded.cancel}"
-    size: "48dp"
+    padding: "13dp"
   overlay-status:
     typography: "{typography.overlay-status}"
     rounded: "{rounded.status}"
-    width: "168dp"
-    padding: "2dp 6dp"
+    padding: "6dp 12dp"
 ---
 
 # Design System: Altiro
@@ -128,299 +120,288 @@ components:
 **Creative North Star: "The quiet microphone"**
 
 Sage ground, chalk surfaces and charcoal controls give Altiro a calm, tactile
-native identity. A forest activity marker and fine circular rules carry the
-expression. The microphone is the visual center; native controls keep model
-management, setup and diagnosis readable.
+native identity. Forest marks recording and work; fine circular rules carry
+expression without adding decoration. The actual cross-app microphone has the
+highest polish priority, followed by Settings, then Console. Preserve this
+approved world while reducing visible prose.
 
-The actual floating accessibility overlay over another app has the highest
-polish priority. Its translucent idle capsule preserves the surrounding editor,
-while backed glyphs remain legible. The app's larger concentric dial belongs to
-the same world without making the overlay equally large.
+The overlay uses one translucent capsule and one faint mic backing. The app's
+larger concentric dial shares its icon family; ordinary configuration uses
+compact native rows and controls. No new imagery or shipping image assets are
+part of the rewrite.
 
-This document records the implemented Kotlin design system. Phone visual and
-interaction acceptance is pending: source inspection does not establish rendered
-fidelity, overlay legibility over arbitrary apps, font-scale fit, or hardware
-gates. Generated concept images are direction references, not shipping assets.
+This is a record of implemented Kotlin source, aligned with
+[decision 0012](docs/decisions/0012-interface-rewrite.md). Source review found no
+remaining material findings after the identified fixes. No native screenshot,
+Android runtime capture or web detector ran for this documentation pass. The
+rejected phone rendering remains the available visual evidence; the approved
+concept establishes direction. Visual fidelity, ChatGPT/Termux compatibility,
+TalkBack and affected hardware gates remain unverified. Follow the
+[phone checks](docs/testing/interface-rewrite.md) before claiming acceptance.
 
 **Key Characteristics:**
 
-- Native Material 3 controls and system Roboto typography.
-- Shared authored icon geometry across Compose and Android Views.
-- Identical dial geometry in light and dark themes.
-- Motion tied to recording or recognition, with a static idle state.
-- Transparent idle overlay, explicit Stop and separate Cancel.
+- Native Material 3 controls and system typography.
+- Shared authored Canvas icon geometry in light and dark themes.
+- One quiet capsule, one backed primary and unbacked language.
+- Progress replaces the overlay mic during recognition.
+- Four peer destinations; detail appears only on request.
+- Separate Stop and Cancel, with non-focusable cross-app controls.
 
 ## Colors
 
-The static light and dark palettes preserve a muted green family rather than
-deriving colors from wallpaper. Frontmatter owns the exact color values.
+The static light/dark palettes preserve a muted green family rather than
+following wallpaper. Frontmatter owns exact palette values; opacity below is
+applied by native drawing code.
 
 ### Primary
 
-- **Forest** (`light-forest` / `dark-forest`): Material `primary`, recording
-  discs, work arcs, completed setup marks and diagnostic timing values.
-- **Forest foreground** (`light-chalk` / `dark-on-forest`): Material `onPrimary`
-  for ordinary filled controls. The custom dial uses its chalk surface token
-  for the glyph instead.
+- **Forest** (`light-forest` / `dark-forest`): Material primary, recording
+  controls, work rings and timing values.
+- **Forest foreground** (`light-chalk` / `dark-on-forest`): Material onPrimary.
+  Custom Stop glyphs use the corresponding chalk surface instead.
 
 ### Secondary
 
-- **Selected sage** (`light-selected` / `dark-selected`): Material
-  `secondaryContainer`, including the active navigation indicator.
-- **Selected ink** (`light-on-selected` / `dark-on-selected`): Material
-  `onSecondaryContainer`.
+- **Selected sage** (`light-selected` / `dark-selected`): secondaryContainer,
+  including the active bottom-navigation indicator.
+- **Selected ink** (`light-on-selected` / `dark-on-selected`):
+  onSecondaryContainer.
 
 ### Neutral
 
-- **Ground** (`light-sage` / `dark-ground`): Material `background` and `surface`.
-- **Chalk layer** (`light-chalk` / `dark-chalk`): Material `surfaceVariant`;
-  dial plate, model status capsule, navigation background and trace containers.
-- **Ink** (`light-charcoal` / `dark-ink`): Material `onSurface`; ordinary text
-  and the resting central microphone disc.
-- **Muted ink** (`light-muted-ink` / `dark-muted-ink`): Material
-  `onSurfaceVariant`; secondary explanations and trace labels.
-- **Outline** (`light-outline` / `dark-outline`): Material `outline`; circular
-  rules and subtle dividers. Setup/model dividers use alpha 0.2, ordinary
-  content dividers 0.25, and the dial's outer rule 0.3.
-- **Overlay chalk and ink**: the light overlay shares the light chalk and
-  charcoal tokens; its dark counterpart uses `dark-overlay-chalk` and
-  `dark-overlay-ink`. These are intentional separate source values, not exact
-  matches to the dark Compose surface tokens. The overlay reapplies its native
-  backgrounds and foregrounds when the system night configuration changes.
+- **Ground** (`light-sage` / `dark-ground`): background and surface.
+- **Chalk layer** (`light-chalk` / `dark-chalk`): surfaceVariant; dial plate,
+  model capsule, navigation and disclosed trace container.
+- **Ink** (`light-charcoal` / `dark-ink`): onSurface; text and resting dial disc.
+- **Muted ink** (`light-muted-ink` / `dark-muted-ink`): onSurfaceVariant;
+  secondary state and metadata.
+- **Outline** (`light-outline` / `dark-outline`): dividers and circular rules.
+  Settings/model dividers use alpha 0.2, Console/content dividers 0.25, and the
+  dial outer rule 0.3.
+- **Overlay chalk and ink**: light uses the light chalk/charcoal pair; dark
+  uses `dark-overlay-chalk` / `dark-overlay-ink`. The dark overlay intentionally
+  differs from Compose. Native colors reapply on night-configuration changes.
 
-Unspecified Material roles, including error colors, remain library defaults;
-they are not additional Altiro palette tokens.
+Unspecified Material roles, including error colors, retain library defaults.
 
-**The Backed Glyph Rule.** Idle translucency belongs to the overlay capsule;
-the mic and language rest on more opaque circular backing. Do not make the
-glyph itself almost transparent.
+**The One Backing Rule.** The overlay's primary alone receives a faint circular
+backing at rest. Keep language on the capsule material; do not rebuild two discs.
+Quiet rest changes material opacity, preserving opaque idle glyphs and text.
 
 ## Typography
 
-**Display and body font:** native system Roboto. Compose keeps the Material 3
-type scale; Altiro does not install a custom `Typography` or font asset.
-**Diagnostic font:** Android system monospace for numeric timing values,
-runtime traces and saved checkpoints.
+Compose uses the native Material 3 type scale and system Roboto, without a custom
+Typography or font asset. Android system monospace distinguishes timing values,
+runtime logs and checkpoints. Library-owned sizes and line heights remain native.
 
-### Hierarchy
+- **Headline:** headlineLarge, semibold with the frontmatter tracking override,
+  for all four destination headings; headlineMedium on the recording fallback.
+- **Title:** titleMedium for sections and models; titleLarge for recording state.
+- **Body:** bodyLarge for Settings row names and latest outcome; bodyMedium for
+  row values and phase names; bodySmall for concise rationale and disclosed logs.
+- **Label:** labelLarge/labelMedium in the model capsule; labelSmall for phase
+  metadata. Bottom-navigation labels appear on the selected destination.
+- **Overlay language:** nominal frontmatter size at idle, reduced to 12 sp when
+  phase text is present. Native sans-serif-medium, one line, no font padding.
+- **Overlay phase:** frontmatter size, one line, tabular numerals; elapsed time,
+  preparation, cancellation or inference percentage sit below language.
+- **Overlay notice:** frontmatter size, at most two lines with end ellipsis.
+  Routine phase text stays inside the capsule; exceptional feedback uses this
+  separate note. These native sizes use sp; no autosizing is configured.
 
-- **Headline:** `headlineLarge` for app/page headings; the main app applies
-  semibold weight and the frontmatter's tighter tracking. The standalone
-  Console uses the unmodified role; Recording uses `headlineMedium`.
-- **Title:** `titleLarge` for the recording state and the setup introduction;
-  `titleMedium` for model names and console sections.
-- **Body:** `bodyLarge` for a result or latest outcome, `bodyMedium` for
-  explanations and trace row names, `bodySmall` for supporting details and
-  monospaced traces.
-- **Label:** `labelLarge` for the current model, `labelMedium` for its
-  installation state, `labelSmall` for experimental and trace metadata.
-- **Overlay language/status/Hide:** the frontmatter records nominal text sizes.
-  Language uses Android `sans-serif-medium` and autosizes from 10 to 14 sp in
-  1 sp increments; the explicit Hide action uses ordinary system sans-serif
-  and autosizes from 10 to 13 sp in 1 sp increments. These compact-control
-  ranges are local exceptions, not a general body-text scale. Status keeps its
-  scalable native size, allows two lines and ellipsizes at the end.
-
-Material role sizes, line heights and default tracking remain owned by the
-pinned Material library, rather than being guessed or frozen here.
-
-**The Native Type Rule.** Keep system typography and `sp` scaling. Wrap
-supporting action groups when space is constrained; never replace native type
-with image labels or fixed pixel text.
+**The Native Type Rule.** Keep scalable system text, accessible action names and
+wrapping action groups. Native font-scale fit still requires device evidence.
 
 ## Layout
 
-The main app is a vertically scrolling single column with Scaffold insets,
-screen-token horizontal padding, regular vertical padding and section-token
-spacing. Scroll state is keyed by destination and Setup state, keeping a Console
-scroll offset from carrying into Home. Its header places the title and Setup
-action at opposite ends. The
-standalone Recording and Console screens use safe drawing insets, screen-token
-padding and regular vertical spacing.
+Home, Models, Settings and Console are four direct destinations in one Activity.
+The native bottom bar uses authored icons and shows the selected label. Android
+Back returns other destinations to Home; there is no Setup toggle or second
+Console Activity. The separate visible recording Activity remains the fallback.
 
-The main dial is centered within a column, with section-token padding above,
-tight padding below, and regular spacing between dial, state, Cancel and
-language controls. Row spacing usually uses small or compact tokens; setup
-steps use regular spacing. Language choices use `FlowRow` with compact
-horizontal and tight vertical spacing; Home result actions and model links use
-compact horizontal spacing and wrap. Console actions wrap with small horizontal spacing, and trace rows
-wrap with compact horizontal and tight vertical spacing.
+Each destination scrolls in a single column with Scaffold insets consumed and
+IME padding. Horizontal padding is 24 dp, vertical padding 16 dp; Home has 20 dp
+section spacing and other destinations 8 dp. Scroll state is keyed by destination
+so a Console offset does not transfer to Home. There is no implemented tablet
+rail, breakpoint or expanded-width layout.
 
-The overlay has a tight outer row inset. The mic and language each occupy half
-the capsule and retain left-to-right order. Cancel, Copy, Discard and Hide are
-separate 48 dp targets with a small-token start margin. On the right dock the
-outer row reverses direction so extra actions grow left into the available
-space; the root and status follow the chosen dock edge. Status sits beneath the
-row and grows vertically to fit up to two lines. System-bar and IME insets constrain
-the whole overlay; vertical clamping reserves the larger of the current layout
-height or 60 dp plus two status line heights and 4 dp. Dock side and vertical
-position persist separately by orientation. Dragging crosses Android touch slop
-before moving and snaps to the nearest horizontal edge only on release of an
-actual drag.
+Settings action/switch rows have a 56 dp minimum height and 16 dp internal gap.
+Recognition/language chips have a 48 dp minimum height. Actions and label/value
+rows wrap in FlowRow; Console rows use 12 dp horizontal and 4 dp vertical gaps.
+The Names & terms field expands in place; IME padding keeps the form scrollable.
 
-The current implementation uses a bottom navigation bar and fixed dial/overlay
-geometry; no expanded-width navigation rail or layout breakpoint is implemented.
-Treat tablet adaptation and narrow-screen/font-scale fit as acceptance work,
-not as established responsive behavior.
+The overlay capsule is 52 dp high with a 52 dp primary and a content-sized
+language/phase slot (48 dp minimum width, 10 dp start/14 dp end padding). An 8 dp
+outer row inset leaves room for its shadow. Cancel/Copy/Discard are separate
+48 dp circles with 8 dp gaps. The capsule and extras mirror with the dock: the
+primary stays at the screen edge and phase text grows toward the interior.
+
+Dock side and vertical position persist per orientation. Dragging crosses
+Android touch slop before moving and cancels the child click. Ordinary drag
+release snaps to the nearest edge. System-bar and IME insets clamp the whole
+window, reserving the larger of its measured height or 64 dp plus two notice
+line heights and 16 dp. Notes follow the dock, up to 232 dp wide, with a 32 dp
+minimum height or 48 dp when actionable. Narrow-screen fit, rotation and actual
+target reachability remain phone checks.
 
 ## Elevation & Depth
 
-Chalk layers, translucent material and thin outlines carry most depth. The
-Compose dial alone has a soft native circular shadow: 10 dp elevation, black
-ambient alpha 0.05 and black spot alpha 0.1. The bottom navigation bar explicitly
-uses zero tonal elevation. The overlay draws its material and rules directly;
-it has no authored shadow.
+Tonal layers and fine outlines provide ordinary depth. The Compose dial has
+10 dp native elevation with black ambient alpha 0.05 and spot alpha 0.1; bottom
+navigation has zero tonal elevation. The overlay draws an outside-only soft
+shadow (8 dp blur, 2 dp downward offset; black alpha 40/255 light, 110/255 dark).
+The inset prevents authored shadow clipping in source; native rendering still
+needs inspection.
 
-**The Quiet Depth Rule.** Preserve subtle dial elevation and tonal separation.
-Do not add hard offset shadows or make every section a raised card.
+Awake idle capsule chalk alpha is 172/255 light and 216/255 dark; quiet rest
+reduces it to 150/255 light and 192/255 dark. Busy/feedback fill is 242/255.
+Its ink rim uses alpha 26/255 light and 40/255 dark; the white inner rim uses
+120/255 light and 18/255 dark. The idle mic backing is ink alpha 20/255,
+increasing to 46/255 while pressed. Language has no circular backing; its pressed
+slot uses ink alpha 22/255. Notices and extra controls use chalk alpha 240/255.
+
+After four seconds of quiet idle, the capsule material transitions to its rest
+fill over 240 ms and reduces its shadow alpha by 30%. Idle glyph/text alpha stays
+1; the whole layout does not fade. A touch or state change cancels/resets the
+material animation; editor events alone do not wake it. With system animations
+disabled, rest material applies immediately after the delay. Close/dispose also
+cancel/reset it. Rendered contrast over arbitrary editors remains unverified,
+especially in this resting state.
+
+**The Quiet Depth Rule.** Preserve soft dial/capsule depth and tonal separation.
+Do not turn every section into a raised card or add hard offset shadows.
 
 ## Shapes
 
-The circle is the signature: dial, mic disc, backed overlay controls and
-round-ended activity arcs. The dial's canvas is inset 14 dp; concentric rules
-use 0.7 dp strokes at radius offsets 2 and 9 dp, with the inner rule at alpha
-0.14. Eight evenly spaced radial ticks use 0.8 dp strokes. The active arc uses
-a round-ended 5 dp stroke.
+Circles and round-ended activity rings form the signature. The app dial remains
+248 dp with a 116 dp central disc and 46 dp glyph. Its canvas is inset 14 dp;
+concentric 0.7 dp rules sit at radius offsets 2 and 9 dp, the inner at alpha 0.14.
+Eight radial ticks use 0.8 dp strokes; the active arc uses a round-ended 5 dp stroke.
 
-The model status capsule, overlay capsule, Cancel and status use their named
-frontmatter radii. Generic buttons, chips, switches, radio buttons and dialogs
-retain native Material shapes. The overlay capsule uses a 0.7 dp white rule
-(alpha 85/255 idle, 110/255 busy) and a 0.7 dp ink separator (alpha 48/255).
+The overlay capsule radius is half its height. Its rims use 0.8 dp strokes and
+the inset separator is 22 dp high, at least one physical pixel wide. The sole
+primary backing has a 20 dp radius; progress uses a 17 dp radius and 2.5 dp stroke.
+Model capsule and note use their frontmatter radii. Other controls retain native
+Material shapes; do not invent a web component shape system for this Android UI.
 
 ## Components
 
 ### Floating microphone
 
-Small enough to live in the editor, with work and recovery stated plainly.
+- **Idle:** mic glyph over faint ink backing, unbacked language and no phase
+  text. Idle settles as described above; no continuous idle animation runs.
+- **Recording:** forest-backed Stop with chalk glyph and a faint surrounding
+  forest rule. Elapsed time appears in the language slot; Cancel stays separate.
+- **Working:** a progress ring replaces the mic. Preparation uses a 90-degree
+  indeterminate arc rotating linearly every 1,400 ms; inference uses a percentage
+  arc with a minimum 8-degree sweep. The primary is disabled but stays at full
+  local alpha; language is disabled and its text alpha is 0.5. The job retains
+  its start-time language/settings snapshot. Cancel remains available while busy.
+- **Pending result:** ink-backed insertion arrow; Copy/Discard appear for an
+  eligible destination. Feedback may request an explicit field selection. No
+  dictated text appears on the overlay. Other disabled primary states use alpha
+  0.42; consuming an attempt prevents another insertion of that result.
+- **Missing model:** download glyph opens Altiro, with a concise installation
+  note. This is a distinct state, not a recognition action.
+- **Failure:** persistent content-free feedback includes recognition failure or
+  “Insertion uncertain · check the field.” Consumed uncertain insertion cannot
+  be retried. Ordinary consumed dispatch stays quiet.
+- **Hide:** idle/no-model dragging reveals a non-touchable drop target above the
+  IME. Releasing over it hides the current app and leaves “Hidden in this app ·
+  Undo” for five seconds. The primary also exposes the custom accessibility
+  action “Hide in this app.” No language hold or separate Hide button remains.
+  Undo restores the preference without reviving an insertion token.
+- **Feedback and accessibility:** note is a polite live region. Phase changes
+  and the 4:30 warning announce once; elapsed/progress ticks stay silent. Primary
+  and language slot expose Button semantics, named actions and state descriptions.
+  The language slot switches English/Spanish; broader choices remain in Settings.
+  No primary long-press handler intercepts a slow Stop/Insert press.
+- **Lifecycle:** windows/controls stay non-focusable. Root-owned dragging works
+  over disabled controls and cannot trigger their click. Ordinary destination
+  invalidation retains Stop/Cancel during work; lock closes/cancels. Indeterminate
+  rotation stops on detach, idle or system-disabled animation; delayed callbacks
+  and rest animation are cleared during disposal. Window repositioning is immediate.
 
-- **Idle:** capsule chalk alpha 86/255; mic and language circular backing
-  alpha 212/255, radius 20 dp. The glyph stays ink-colored. Empty status is
-  hidden, and no animation runs.
-- **Recording:** mic becomes a forest-backed Stop glyph with chalk foreground.
-  Busy capsule alpha rises to 238/255; a round-ended forest arc uses a 2 dp
-  stroke and a 38-degree sweep. Cancel appears as its own target.
-- **Recognizing:** mic is disabled, the active arc widens to a 100-degree sweep,
-  and status reports the current phase. Disabled mic alpha is 0.42; busy
-  language alpha is 0.55 and switching is disabled. Language is fixed for the
-  recording rather than silently changing the active job.
-- **Recovery:** an unconsumed result changes the mic to an insertion arrow and
-  shows Copy/Discard when an eligible destination exists. The status describes
-  recovery; the overlay never displays dictated text. A consumed insertion
-  permits a new recording without reviving the previous insertion attempt.
-  Ordinary consumed dispatch remains quiet on the bubble; a typed dispatch
-  failure shows "Insertion uncertain · check the field" without permitting a
-  retry of the consumed result.
-- **Hide:** holding the language target reveals a separate explicit Hide action
-  for five seconds when idle with no pending result. Only tapping that action
-  hides the mic in the current app; holding or dragging never hides it directly.
-  The primary has no long-press action, so slow Stop/Insert presses still click.
-- **Feedback:** Cancel, Copy, Discard, Hide and status have chalk alpha 235/255.
-  Primary/language backgrounds become opaque chalk while pressed; their
-  resting touch backgrounds are transparent. Messages last five seconds.
-  Status is a polite live region when the phase or a recovery message changes;
-  the 4:30 recording-limit warning is announced once; later countdown,
-  elapsed-time and progress ticks stay silent. The primary's
-  state description reports its phase without announcing each elapsed second.
-- **Motion:** the active arc rotates linearly once every 1,400 ms while busy.
-  It stops and resets when idle or detached, and does not start when Android
-  animators are disabled. Disposal removes pending delayed message redraws.
-  Window resizing/repositioning is immediate.
-- **Authority:** the accessibility window and controls remain non-focusable.
-  The window root handles dragging even over disabled controls. A drag cancels
-  the child click before movement, so moving the bubble does not
-  start or stop recording. Lock closes the overlay; Stop/Cancel remain
-  available during work even if the destination becomes ineligible.
+### Microphone dial and shared icons
 
-Home shows a brief dismissible interruption notice only when the previous
-process left a RUNNING checkpoint. Dismissal preserves Console evidence; the
-next accepted session resets the notice. At 4:30, Home and overlay show the
-remaining time until automatic Stop at 5:00, with the recording notification
-carrying the same warning. These are recovery feedback, not transcript history.
+The Home/fallback dial retains its approved concentric geometry. Recording uses
+Stop and a 28-degree arc; recognition disables the mic action and uses a
+48-degree arc. Its angle advances 8 degrees every 32 ms only during work when
+system animators are enabled; otherwise it rests at zero. Cancel stays separate.
 
-### Microphone dial
+AltiroVisuals.kt shares a 24-unit icon coordinate system between native and
+Compose Canvas. Rounded strokes are usually 1.7 units; Stop is a filled rounded
+square. Ordinary Compose icons are 24 dp. Use this family with accessibility
+names rather than emoji, icon fonts or raster controls.
 
-A chalk circular plate surrounds the central disc and shared authored glyph
-(46 dp). Idle is still; recording changes the mic to Stop, uses the primary
-disc and a 28-degree arc. Recognition retains the mic silhouette, disables
-the action and uses a 48-degree arc. The canvas advances the angle by 8 degrees
-every 32 ms only during recording/recognition when system animators are enabled.
-Otherwise the arc rests at its initial angle. Cancel stays separate from Stop.
+### Settings and native controls
 
-### Shared icons
+Access rows expose microphone permission, accessibility connection, the last
+external-editor reason and hidden-app count. Per-app Restore stays directly
+available; Restore all produces confirmation feedback, including the empty
+state. Local app labels belong only in Settings, never diagnostic export.
 
-`AltiroVisuals.kt` authors a single 24-unit icon coordinate system for native
-Canvas and Compose Canvas. Most strokes are 1.7 units with rounded caps and
-joins; Stop is a filled rounded square. The family covers microphone, Stop,
-Close, Home, Model, Console, Settings, Globe, Check, Download, Copy, Share,
-Delete, forward and back. Ordinary Compose icons render at 24 dp. Keep this
-family consistent rather than mixing emoji, text glyphs, icon fonts or raster
-controls. Accessibility names are carried by the controls.
+Recognition contains language chips, CPU/GPU chips, Flash Attention, dynamic
+window and Names & terms. Switch rows carry Role.Switch; model rows carry
+Role.RadioButton. Recognition chips and runtime switches disable during
+session/native/model work; Flash
+Attention additionally requires Vulkan. Concise permission rationale appears
+when access is missing; longer guidance appears under “About these settings.”
+Native press, keyboard focus, error and disabled treatments remain library-owned.
 
-### Native actions and selections
+Names & terms expands a multiline Material outlined field with explicit Save,
+Clear and Cancel, validation and count/UTF-8 budget feedback. Saving empty text
+clears the saved list; Cancel preserves it. The field and actions lock during
+session/native work. No vocabulary enters diagnostic export.
 
-Filled buttons use primary/onPrimary for explicit acquisition; outlined buttons
-serve Cancel, Import and Copy; text buttons serve supporting links and setup
-actions. Filter chips expose EN/ES, with Auto/FR revealed by the globe or the
-current selection; their minimum height is 48 dp. Model choices use whole-row
-radio semantics. Native switches express settings, and controls disable during
-conflicting model/session work. Native press, focus and disabled treatments
-remain library-owned unless an overlay treatment is specified above.
+### Models and acquisition
 
-### Model status and acquisition
+Home's model capsule shows name and Offline/Install state. Models uses native
+radio rows with size, installation and experimental state. Stock download,
+verified import, transfer progress/cancel and Source/License/Delete are explicit.
+Long description, attribution and storage need appear only under Details.
+Experimental Chilean binaries remain import-only until audited distribution exists.
 
-The model capsule pairs the shared Model icon, model name, Check/Download and
-Offline/Install text. Models lists verified installation state and experimental
-status, then selected-model description, attribution, source host and storage
-need. Explicit stock downloads show progress and cancellation; file import
-remains available. Experimental Chilean conversions offer import until exact
-audited binaries have a distribution location. Source and License links stay
-beside supporting model actions and wrap rather than being squeezed away;
-opening either link is separate from choosing a download.
+### Console and comparisons
 
-### Names and terms
+Console leads with current outcome, post-Stop duration and phase timing rows.
+Copy/Share export the full content-free diagnostic report; Clear disables during
+work. Named Stop/Cancel actions remain reachable for ordinary dictation as well
+as comparisons. “Startup & saved logs” reveals startup verification, fixed
+visibility reason codes, aggregate window events, acquisition state and one
+selectable monospace current/saved report at a time.
 
-Setup has a quiet outlined Names & terms action with the saved count. It expands
-an ordinary multiline Material text field in place, with one term per line,
-validation and count/UTF-8 budget feedback. Save is explicit; Clear edits the
-draft and Save commits the empty list. Cancel preserves the saved vocabulary.
-The field and Save/Clear disable during recording or native work. The main
-scroll container consumes system insets and adds IME padding so the form and
-actions remain reachable when the keyboard opens. Native rendered validation
-at increased font scale remains pending.
+One inline “Compare a recording” panel offers Models, CPU/GPU and Windows modes,
+order/experimental-model choices and an explicit recording action. Same audio
+runs sequentially without automatic insertion; result Copy stays explicit.
+Recording entry requires installed models, microphone access and no conflicting
+work or pending text. Configuration lives in Settings rather than separate
+experiment-specific forms.
 
-### Navigation and Console
-
-Home, Models and Console use a native bottom navigation bar with chalk layer
-and selected-sage indicator. Setup is a header icon action; Android Back returns
-to Home from Setup or another destination. Experiments live in Console, with
-ordinary recognition separated from processor/window/model comparisons.
-
-Console uses title sections, wrapping label/value rows, forest timing values
-and chalk-backed selectable monospace traces. Copy, Share and Clear are explicit
-actions. Acquisition phase, startup checks, current recognition phases, aggregate
-overlay event counts and saved checkpoint are visible without speech, audio or
-editor identifiers. The standalone Console and Recording screens share the
-same theme and icon/dial components.
+Reason codes and hidden count do not establish editor support. The last external
+reason survives opening Altiro. The input-focused-window probe is diagnostic
+only; it never selects an insertion destination or weakens focus, identity,
+visibility, composition, selection, password or consumed-attempt safeguards.
 
 ## Do's and Don'ts
 
 ### Do:
 
-- **Do** prioritize the real floating overlay over concept-screen previews.
-- **Do** keep the shared geometry in both themes and preserve distinct busy,
-  disabled and pending-result states.
-- **Do** retain accessible names, scalable native text and separate Stop/Cancel.
-- **Do** keep language within reach on the bubble and advanced controls in Console.
-- **Do** verify native phone output in light/dark and scaled text, including the
-  overlay over another app with the keyboard visible, before claiming acceptance.
+- **Do** prioritize the actual overlay, then Settings, then Console.
+- **Do** preserve sage/chalk/charcoal, shared geometry and native scalable text.
+- **Do** keep the primary at the dock edge and progress distinct from a mic action.
+- **Do** use concise values and phase rows, with longer detail explicitly revealed.
+- **Do** retain accessible names, separate Stop/Cancel and explicit recovery.
+- **Do** capture light/dark, rest, enlarged text, animation-off and IME states on
+  the phone before claiming visual or interaction acceptance.
 
 ### Don't:
 
-- **Don't** ship generated concept images as interactive raster controls.
-- **Don't** steal editor focus, turn dragging into a recording action, or animate
-  idle material continuously.
-- **Don't** substitute an imitation waveform for the circular activity marker.
-- **Don't** turn an insertion attempt into a delivered-success claim or offer a
-  second insertion of an already consumed result.
-- **Don't** document untested large-screen adaptation, phone fidelity or hardware
-  behavior as a completed design rule.
+- **Don't** rebuild two backed overlay discs, a Setup toggle or a second Console Activity.
+- **Don't** ship concept images as interactive controls or add imitation waveforms.
+- **Don't** steal editor focus or turn a drag into a recording/insertion click.
+- **Don't** revive an invalid token, retry uncertain insertion or claim delivery
+  from dispatch.
+- **Don't** claim ChatGPT/Termux support, contrast, TalkBack, tablet adaptation or
+  hardware gates from source inspection or compilation.

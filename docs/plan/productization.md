@@ -46,6 +46,15 @@ silently download an incompatible training checkpoint or a different model.
 
 ## Information architecture
 
+The maintainer's first review rejects the layered configuration/console surfaces
+and excessive explanatory text. The rewrite must put controls, current values
+and actionable status ahead of prose. Settings use direct rows; Console opens
+on the latest timings/logs, with compact export actions. Longer explanations
+belong behind contextual Info, except concise permission and error/recovery
+instructions needed to make a decision. Do not duplicate the same report as
+both a long formatted trace and a second full export on the default surface.
+Keep everyday runtime settings out of nested experiment panels.
+
 - **Daily use:** readiness, selected model/language and one recording action.
 - **Setup:** permission/accessibility steps and the essential first model.
 - **Models:** selection, size, download/import, verification and deletion.

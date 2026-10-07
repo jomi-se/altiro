@@ -22,7 +22,6 @@
             </intent-filter>
         </activity>
         <activity android:name=".RecordingActivity" android:exported="false" />
-        <activity android:name=".DiagnosticsActivity" android:exported="false" />
         <service
             android:name=".DictationAccessibilityService"
             android:exported="true"

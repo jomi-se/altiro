@@ -4,6 +4,31 @@ Updated: 2026-10-07.
 
 ## Productization direction
 
+The maintainer has rejected the tested floating control and the layered
+configuration/console navigation. A chat-field bubble is missing, and restoring
+hidden apps appears ineffective. See [the reported defect](../issues/0002-overlay-visibility-and-recovery.md).
+The next increment is compatibility diagnosis and a structural design revision,
+with fresh native acceptance; the previous implementation is not an accepted
+visual or interaction baseline.
+
+Version 0.5.4 rewrites the real overlay around one translucent capsule, one mic
+backing and progress replacing the mic while recognizing; idle drag-to-hide has
+Undo and a TalkBack action. Home, Models, Settings and Console are peers.
+Routine runtime controls move to Settings, restoration has count/confirmation,
+and Console leads with phase timings rather than repeated explanatory text.
+The old Setup toggle, duplicate Console Activity and verbose experiment controls
+are removed. Fixed current/last editor reason codes support the missing-bubble
+diagnosis without weakening insertion authority. See
+[decision 0012](../decisions/0012-interface-rewrite.md) and the
+[new phone checks](../testing/interface-rewrite.md). Build and native acceptance
+are tracked separately; this paragraph is source implementation evidence.
+
+Full host verification passes for 0.5.4: 35 core/8 acquisition tests, Android
+assemblies/lint, native packaging, runtime notices and instrumentation compilation.
+An independent source review resolved Console Stop/Cancel access, stale external
+editor reason retention and calculated idle contrast. The actual native captures
+and ChatGPT/Termux compatibility remain pending; the identity gate is unchanged.
+
 The owner now prioritizes everyday product use over adding recognition models.
 The accepted [productization brief](productization.md) captures the maintainer
 as primary user, one-tap model downloads including the Chilean fine-tune, a
