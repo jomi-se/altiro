@@ -11,6 +11,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -36,7 +41,6 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import org.altiro.core.Phase
 import org.altiro.core.SessionEvent
 import org.altiro.core.Vocabulary
@@ -420,16 +424,17 @@ internal fun MicrophoneDial(
     enabled: Boolean,
     onClick: () -> Unit,
 ) {
-    var angle by remember { mutableFloatStateOf(0f) }
     val animate = android.animation.ValueAnimator.areAnimatorsEnabled()
-    LaunchedEffect(recording, working, animate) {
+    val angle: State<Float> =
         if (animate && (recording || working)) {
-            while (true) {
-                delay(32)
-                angle = (angle + 8f) % 360f
-            }
-        } else angle = 0f
-    }
+            val transition = rememberInfiniteTransition(label = "Dictation dial")
+            transition.animateFloat(
+                initialValue = 0f,
+                targetValue = 360f,
+                animationSpec = infiniteRepeatable(tween(1440, easing = LinearEasing)),
+                label = "Dial rotation",
+            )
+        } else remember { mutableFloatStateOf(0f) }
     val colors = MaterialTheme.colorScheme
     val accent = colors.primary
     val rule = colors.outline.copy(alpha = 0.3f)
@@ -469,7 +474,7 @@ internal fun MicrophoneDial(
             if (recording || working)
                 drawArc(
                     accent,
-                    angle - 90,
+                    angle.value - 90,
                     if (recording) 28f else 48f,
                     false,
                     topLeft = androidx.compose.ui.geometry.Offset(3.dp.toPx(), 3.dp.toPx()),

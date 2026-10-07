@@ -2,6 +2,24 @@
 
 Updated: 2026-10-07.
 
+Version 0.5.5 corrects the active-window-only editor lookup after the maintainer
+reports missing controls in ChatGPT, Termux and Reddit even after fresh setup.
+It uses global input focus and the focused application window, adds one bounded
+settle sequence per input and records 48 content-free visibility transitions.
+Content events are coalesced into five checks over 1.5 seconds; streaming app
+content does not perpetually probe. Visual ticks redraw cached editor state,
+while actual editor events and recording/insertion checks refresh authority.
+Copy works before recording and preserves the last matched external input.
+Current installed model count/readiness is separate from startup timing rows.
+Home's reported jumpy recording arc now uses Compose's frame clock rather than
+32 ms timer steps, with angle read only during drawing. See
+[decision 0013](../decisions/0013-focused-editor-lookup.md). Android compilation
+and actual editor/motion acceptance are separate; phone confirmation is pending.
+Full host verification passes for 0.5.5: 38 core and 8 acquisition tests,
+Android debug assemblies/lint, native packaging/runtime notices and
+instrumentation APK compilation. The update retains the preview's signing
+identity. No device tests or frame-pacing measurements were executed here.
+
 ## Productization direction
 
 The maintainer has rejected the tested floating control and the layered

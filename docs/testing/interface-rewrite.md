@@ -24,6 +24,15 @@ Git, and use synthetic text instead of personal chat content.
   diagnostics and record the precise build/version separately.
 - Repeat with Termux's terminal view and its separate text input box. Record the
   difference without assuming both implement ordinary text-field semantics.
+- On 0.5.5, also focus Reddit search. Copy includes a visibility transition
+  timeline even with no dictation. Compare input-start/settled lookup, node and
+  focused-window facts, then return to Altiro: the last external input snapshot
+  must remain intact. Clear must remove that snapshot and timeline. Never export
+  app/node names, dictated content or offsets.
+- Stream a reply or terminal output after the 1.5-second settle budget. There
+  must be no continuing CONTENT/SETTLED probe loop. Recording/native progress
+  ticks must not generate repeated STATE tree probes. Normal editor focus/text/
+  selection/window changes must still invalidate an old insertion destination.
 - Intentionally hide an eligible app, restore that one app, and restore all.
   Check the count and visible confirmation. With no hidden apps, check the
   explicit empty-state feedback. Revisit the editor to confirm actual visibility.
@@ -41,6 +50,9 @@ Git, and use synthetic text instead of personal chat content.
 - Recognition must use the work indicator without a misleading enabled mic.
   Insertion still requires the original valid destination and one consumed
   attempt; the ordinary keyboard stays selected.
+- In Home, observe recording motion through several revolutions and Stop.
+  The arc must run smoothly at the device's display cadence, preserve phase
+  into recognition and stop when idle/offscreen. Repeat with animations disabled.
 - Console opens on the latest phase timings. Copy/Share include runtime details,
   current/last editor reason codes and hidden count without editor identifiers,
   speech, vocabulary, audio or private paths. Extra logs stay secondary.

@@ -327,7 +327,8 @@ Material shapes; do not invent a web component shape system for this Android UI.
 
 The Home/fallback dial retains its approved concentric geometry. Recording uses
 Stop and a 28-degree arc; recognition disables the mic action and uses a
-48-degree arc. Its angle advances 8 degrees every 32 ms only during work when
+48-degree arc. Its angle follows Compose's display frame clock with a linear
+1440 ms revolution, read only in the Canvas draw phase, during work when
 system animators are enabled; otherwise it rests at zero. Cancel stays separate.
 
 AltiroVisuals.kt shares a 24-unit icon coordinate system between native and

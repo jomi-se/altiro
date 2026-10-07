@@ -29,6 +29,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
     val context = androidx.compose.ui.platform.LocalContext.current
     val overlay by controller.overlayStatus.collectAsState()
     val lastEditor by controller.lastEditorStatus.collectAsState()
+    val visibility by controller.editorVisibility.report.collectAsState()
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         if (session.phase in setOf(Phase.STARTING, Phase.RECORDING)) {
             IconButton(
@@ -143,6 +144,20 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
             "Window events: $ownEvents owned · $otherEvents invalidated",
             style = MaterialTheme.typography.bodySmall,
         )
+        if (visibility.events.isNotEmpty()) {
+            Surface(color = MaterialTheme.colorScheme.surfaceVariant) {
+                SelectionContainer {
+                    Text(
+                        visibility.export(),
+                        Modifier.padding(16.dp),
+                        style =
+                            MaterialTheme.typography.bodySmall.copy(
+                                fontFamily = FontFamily.Monospace
+                            ),
+                    )
+                }
+            }
+        }
         acquisition?.let {
             Text(
                 "Download: ${it.phase} · ${it.percent}%",
@@ -222,9 +237,13 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
         appendLine(
             "Overlay status: ${controller.overlayStatus.value}; last editor: ${controller.lastEditorStatus.value}; hidden apps: ${controller.hiddenApps.value.size}"
         )
+        append(controller.editorVisibility.report.value.export())
         appendLine("App startup checks (separate from dictation):")
         appendLine(
             "Total: ${controller.models.startupMillis.value?.let {DiagnosticReport.seconds(it)+" s"} ?: "RUNNING"}"
+        )
+        appendLine(
+            "Installed models now: ${controller.models.installed.value.size}; selected ready: ${controller.models.ready.value}"
         )
         for (check in controller.models.startupChecks.value) appendLine(
             "${check.modelId}: ${DiagnosticReport.seconds(check.elapsedMillis)} s; verified: ${check.verified}"

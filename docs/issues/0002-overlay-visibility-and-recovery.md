@@ -19,17 +19,24 @@ uses a custom input connection with `TYPE_NULL` in one mode, and ordinary text
 input metadata for the alternate view. This supports an input-surface difference;
 it does not identify the actual failed Altiro gate on the maintainer's version.
 
+On 0.5.4 the maintainer reports that resetting storage, completing setup and
+reimporting models does not restore the bubble in ChatGPT's composer, Termux's
+terminal or Reddit search. A supplied export has connected accessibility,
+zero hidden apps and last reason `NO_FOCUS_NODE`. This establishes persistence
+after fresh setup; it does not establish an identical failed gate in all three
+editors. Imports performed after startup are absent from startup timing rows.
+
 ## Source evidence and uncertainty
 
-At the current source baseline, idle overlay visibility requires both a connected
+At the reported 0.5.4 source baseline, idle overlay visibility requires both a connected
 accessibility input method and a stable `EditorIdentity`. Identity requires a
 focused, visible, editable accessibility node matching the input method package,
 and either a nonzero field ID or an exposed node identifier. A field missing any
 of these properties can hide the control. No device trace yet identifies which
 condition failed in the reported chat editor.
 
-Restore clears the stored hidden-app set and refreshes the editor, but provides
-no confirmation or visible count. It cannot resolve missing editor identity or
+The earlier Restore action clears the stored hidden-app set and refreshes the
+editor without confirmation or a visible count; 0.5.4 adds both. It cannot resolve missing editor identity or
 input-connection support. Clearing hidden preferences is not proof that a bubble
 appeared, and the reported failure must not be dismissed as a successful write.
 
@@ -54,3 +61,9 @@ appeared, and the reported failure must not be dismissed as a successful write.
 The maintainer requests a new design consultation and a rewrite of the app's
 configuration and console surfaces. Track that structural proposal separately;
 navigation simplification alone does not fix editor compatibility.
+
+Version 0.5.5 corrects the active-window-only lookup and adds bounded delayed
+checks plus a content-free visibility timeline. See
+[decision 0013](../decisions/0013-focused-editor-lookup.md). Termux still needs
+positive focused/editable identity; no insertion guard is relaxed. Physical
+execution and the three reported editor results remain pending.

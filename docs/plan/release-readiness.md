@@ -31,7 +31,7 @@ different evidence. A generated concept is not a native screen capture.
 
 ## Verified host baseline
 
-The 0.5.4 debug artifact passed 35 core and 8 acquisition JVM tests, Android
+The 0.5.5 debug artifact passed 38 core and 8 acquisition JVM tests, Android
 assemblies, lint, native packaging, runtime notice graph/APK checks and
 instrumentation APK compilation. Production JNI checks on the unchanged 0.5.2
 native source used the real runtime and verified multilingual Base, including
@@ -39,6 +39,12 @@ empty/Unicode hints, speech, exact digital silence, cancellation, all-audio
 processing and invalid prompt bytes. An unavailable requested GPU fails without
 automatic CPU inference. Artifact hashes, signing inspection, test XML and review
 reports are retained outside Git. Source changes require appropriate revalidation.
+
+The focused-editor correction preserves insertion guards, adds a bounded
+content-free visibility timeline before recording and removes focused-node
+queries from routine visual updates. Home motion uses Compose's frame clock.
+These are source/host results; ChatGPT, Reddit, Termux and actual frame pacing
+still require the [phone checks](../testing/interface-rewrite.md).
 
 Instrumentation APK compilation does not execute framework tests. This baseline
 does not establish Pixel appearance, general editor compatibility, real-noise

@@ -16,6 +16,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.altiro.core.DiagnosticOutcome
 import org.altiro.core.EditorAuthority
+import org.altiro.core.EditorVisibilityDiagnostics
 import org.altiro.core.Phase
 import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
@@ -41,6 +42,7 @@ class DictationController(private val context: Context) {
     // Fixed content-free reason codes only; never editor names or identifiers.
     val overlayStatus = MutableStateFlow("DISCONNECTED")
     val lastEditorStatus = MutableStateFlow("NONE")
+    val editorVisibility = EditorVisibilityDiagnostics()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
     val checkpoint = RuntimeCheckpoint(context)
@@ -449,6 +451,8 @@ class DictationController(private val context: Context) {
     fun clearDiagnostics() {
         if (session.value.busy || recognition.busy.value) return
         diagnostics.clear()
+        editorVisibility.clear()
+        lastEditorStatus.value = "NONE"
         checkpoint.clear()
     }
 
