@@ -39,6 +39,16 @@ checks that a host token cannot gain automatic insertion when a real field appea
 Physical compatibility remains pending; no device tests were executed. The update
 preserves the signing identity and native runtime.
 
+The 0.5.6 phone follow-up confirms Termux terminal mic visibility but unavailable
+insertion. ChatGPT still lacks the mic with its keyboard open. Repeated matching
+TEXT/connection/keyboard evidence is rejected by a fallback host's `focused=false`
+bit. At the maintainer's request, [upstream source research](../research/android-overlay-compatibility.md)
+now compares four pinned Android dictation implementations and Termux's typing/
+paste paths before more compatibility patches. Next: remove this recording-only
+focus veto while preserving strict insertion authority, add compact copied logs
+and complete file export, then capability-test terminal paste separately. No
+new implementation or device acceptance is claimed by this research increment.
+
 ## Productization direction
 
 The maintainer has rejected the tested floating control and the layered

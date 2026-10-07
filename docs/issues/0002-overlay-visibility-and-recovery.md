@@ -84,3 +84,19 @@ input with a connection or visible keyboard can show the ordinary mic; positive
 window/package and password/lock/hidden gates remain. There is no extra Copy UI.
 A race remains possible, but the repeated node/editability gate itself explains
 persistent absence. Phone visibility/startup confirmation is pending.
+
+The 0.5.6 follow-up confirms that the mic appears in Termux's main terminal,
+while insertion there is unavailable. ChatGPT's supplied capture has the keyboard
+open without a mic. The Reddit search capture has no visible keyboard, so that
+image alone does not establish a keyboard-up failure. The new trace repeatedly
+rejects a matching, visible TEXT input with a connection and visible keyboard
+because its fallback node reports `OTHER`, `focused=false`. The recording-host
+focus requirement remains too strict; it is distinct from insertion authority.
+The exported report is truncated when pasted; the responsible clipboard or
+receiving-editor limit is not yet identified.
+
+At the maintainer's request, investigate upstream implementations before another
+patch. [Pinned source research](../research/android-overlay-compatibility.md)
+finds independent keyboard/focus visibility signals, bounded pre-dispatch
+recovery, and explicit terminal limitations. Apply the useful patterns within
+Altiro's insertion contract; upstream source does not pass our phone gates.
