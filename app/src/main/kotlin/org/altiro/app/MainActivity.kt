@@ -18,7 +18,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -398,17 +397,6 @@ internal fun HomeContent(
                 TextButton(onClick = controller::discard) { Text("Clear") }
             }
         }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = models).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        AltiroIcon(Glyph.MODEL)
-        Text("Chilean Small", modifier = Modifier.weight(1f))
-        Text("Experimental", style = MaterialTheme.typography.labelSmall)
-        AltiroIcon(Glyph.ARROW)
-    }
     if (connected)
         Text(
             "The floating mic follows your editor.",

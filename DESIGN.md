@@ -375,7 +375,9 @@ session/native work. No vocabulary enters diagnostic export.
 
 ### Models and acquisition
 
-Home's model capsule shows name and Offline/Install state. Models uses native
+Home has one model capsule showing the selected name and Offline/Install state;
+it opens Models. A fixed Chilean recommendation row was removed because it
+looked like a second, contradictory selection. Models uses native
 radio rows with size, installation and experimental state. Stock download,
 verified import, transfer progress/cancel and Source/License/Delete are explicit.
 Long description, attribution and storage need appear only under Details.

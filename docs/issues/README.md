@@ -5,6 +5,9 @@
 - [0002 — Overlay visibility and recovery](0002-overlay-visibility-and-recovery.md):
   maintainer reports a missing chat-field bubble and ineffective restore action;
   compatibility diagnosis and native design correction are pending.
+- [0003 — Misleading model selection](0003-misleading-model-selection.md):
+  remove Home's fixed Chilean shortcut; selected and recorded model identifiers
+  are separate in diagnostic exports. Phone confirmation remains pending.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.

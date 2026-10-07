@@ -2,6 +2,18 @@
 
 Updated: 2026-10-07.
 
+Version 0.5.9 removes Home's hardcoded “Chilean Small” shortcut, reported as a
+second model selector stuck on Chilean. The remaining capsule and Models radio
+picker share the saved selection. Diagnostics add `Selected model now` while
+preserving the recording trace's frozen `Models` identifier. Source tracing
+finds no model substitution between selection, verified catalog file and native
+load. Phone persistence/selection acceptance and the reported decline in Chilean
+idiom recognition remain unverified; see
+[defect 0003](../issues/0003-misleading-model-selection.md).
+Host verification passes: 50 core and 8 acquisition tests, Android builds/lint,
+native packaging/notices and instrumentation APK compilation. No device model
+selection or speech-quality test ran on this host.
+
 Immediate acceptance priority: basic automatic text delivery and bubble recovery.
 The maintainer reports false “Finish typing” blocks in empty ordinary fields
 and rejects 0.5.7's removal of bubble Copy. Version 0.5.8 selects ordinary paste

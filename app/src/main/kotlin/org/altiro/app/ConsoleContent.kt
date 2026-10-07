@@ -226,6 +226,7 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
             "Overlay status: ${controller.overlayStatus.value}; last editor: ${controller.lastEditorStatus.value}; hidden apps: ${controller.hiddenApps.value.size}"
         )
         appendLine("Delivery: ${controller.deliveryStatus.value}")
+        appendLine("Selected model now: ${controller.models.selected.value.spec.id}")
         append(controller.editorVisibility.report.value.export())
         appendLine("App startup checks (separate from dictation):")
         appendLine(
@@ -253,6 +254,7 @@ internal fun compactDiagnostics(controller: DictationController, microphone: Boo
             "Microphone=$microphone; connected=${controller.connected.value}; overlay=${controller.overlayStatus.value}; hidden=${controller.hiddenApps.value.size}"
         )
         appendLine("Delivery: ${controller.deliveryStatus.value}")
+        appendLine("Selected model now: ${controller.models.selected.value.spec.id}")
         appendLine(
             "Models: ${controller.models.installed.value.size}; selected ready=${controller.models.ready.value}"
         )
