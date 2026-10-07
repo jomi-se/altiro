@@ -40,27 +40,26 @@ Git, and use synthetic text instead of personal chat content.
   must remain distinguishable from a manually hidden app. Restoration must not
   revive an old insertion token or cause a delayed insertion.
 
-## Copy recovery in 0.5.6
+## Bubble visibility in 0.5.6
 
 - Update without clearing storage. Models and settings must remain installed.
-- Focus ChatGPT search/composer, Reddit search/comment and Termux terminal/input
-  box. Allow the existing two-second settle period. An identifiable editor keeps
-  automatic insertion; unavailable or RAW editors show a small Copy label.
-- In each Copy surface record a short synthetic sentence, Stop, then tap the
-  primary Copy icon. No text may appear in the host before the user explicitly
-  pastes. Copy clears the completed session and permits another recording.
-- Start in Termux's terminal, switch to a normal comment field while processing,
-  and confirm the result still offers Copy and never inserts. Repeat after using
-  the visible recorder fallback; delivery mode must remain Copy-only.
-- Hide a Copy-only host with the idle drag action. Undo and Settings Restore must
-  recover visibility, without granting an insertion destination.
-- In the fixture (API 34+), test the explicit sensitive editor and obscured-touch
-  filtering parent. A live connection may show Copy while the node is withheld.
-  Compare with the ordinary native and Compose fields. This is a mechanism test,
-  not proof of third-party implementation details.
-- Verify a password, lock, lost input connection, another app window or unsupported
-  display cannot offer a recording host. Clear and Console Copy must still work
-  before recording; `COPY_ONLY` plus node/input/window facts identifies recovery.
+- Focus ChatGPT search/composer, Reddit search/comments, Twitter comments and
+  Termux terminal/input box. The ordinary mic should appear for started matching
+  TEXT/RAW input even without an editable node. No new Copy-mode UI should appear.
+- Tap the mic in each surface, verify the microphone indicator, then Cancel.
+  Repeat recording/Stop separately; startup must stay in place when permitted.
+- Switch apps, close/reopen the keyboard and move between fields rapidly.
+  The bubble must follow the live recording host without retaining stale insertion
+  authority. Returning to Altiro preserves the external visibility snapshot.
+- Export Console diagnostics if the mic stays absent: keyboardVisible and
+  recordingHost are separate from lookup/node/connection facts. Allow the bounded
+  settle period, and confirm it does not become continuous content polling.
+- Hide an idle recording host, Undo and Restore in Settings. Verify real visibility.
+- Check native/Compose fixtures and the API 34+ sensitive/filtering fields.
+  Password, lock, contradictory app/window and unsupported display must hide it.
+- Verify recording begun without insertion identity never inserts automatically
+  after moving to a different field. RAW terminal input must never receive an
+  automatic commit. Existing explicit result recovery remains unchanged.
 - Recheck Home recording smoothness; the 0.5.5 frame-clock change remains in place.
 
 ## Overlay and Console

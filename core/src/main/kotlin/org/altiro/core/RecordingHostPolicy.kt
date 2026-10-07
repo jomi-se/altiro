@@ -4,6 +4,7 @@ package org.altiro.core
 data class RecordingHostEvidence(
     val input: EditorInputKind,
     val connection: Boolean,
+    val keyboardVisible: Boolean,
     val focusedAppMatches: Boolean,
     val defaultDisplay: Boolean,
     val appVisible: Boolean,
@@ -14,10 +15,10 @@ data class RecordingHostEvidence(
     val hidden: Boolean,
 )
 
-fun supportsCopyOnlyRecording(evidence: RecordingHostEvidence): Boolean =
+fun supportsRecordingHost(evidence: RecordingHostEvidence): Boolean =
     with(evidence) {
         input in setOf(EditorInputKind.TEXT, EditorInputKind.RAW) &&
-            connection &&
+            (connection || keyboardVisible) &&
             focusedAppMatches &&
             defaultDisplay &&
             appVisible &&

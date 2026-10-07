@@ -25,7 +25,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import org.altiro.core.Phase
-import org.altiro.core.ResultDelivery
 import org.altiro.core.SessionEvent
 
 class RecordingActivity : ComponentActivity() {
@@ -138,9 +137,6 @@ class RecordingActivity : ComponentActivity() {
         val id =
             controller.begin(
                 explicit = true,
-                delivery =
-                    if (intent.getBooleanExtra("copy-only", false)) ResultDelivery.COPY_ONLY
-                    else ResultDelivery.INSERT,
                 compareIds = intent.getStringArrayListExtra("compare-models"),
                 gpuCompare = intent.getBooleanExtra("compare-backends", false),
                 gpuFirst = intent.getBooleanExtra("gpu-first", false),

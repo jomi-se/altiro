@@ -104,7 +104,7 @@ class FixtureActivity : ComponentActivity() {
                     )
                     var composeText by remember { mutableStateOf("") }
                     if (Build.VERSION.SDK_INT >= 34) {
-                        Text("Sensitive editor · expect Copy mic, never automatic insertion")
+                        Text("Sensitive editor · expect mic, never automatic insertion")
                         AndroidView(
                             factory = { context ->
                                 EditText(context).apply {
@@ -118,7 +118,7 @@ class FixtureActivity : ComponentActivity() {
                             },
                             modifier = Modifier.fillMaxWidth(),
                         )
-                        Text("Obscured-touch filtering on parent · expect Copy mic")
+                        Text("Obscured-touch filtering on parent · expect mic")
                         AndroidView(
                             factory = { context ->
                                 FrameLayout(context).apply {

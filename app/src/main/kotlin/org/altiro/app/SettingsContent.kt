@@ -135,7 +135,7 @@ internal fun SettingsContent(
 private fun overlayReasonLabel(code: String): String =
     when (code) {
         "NONE" -> "Open a text field to check"
-        "COPY_ONLY" -> "Mic available · Copy here"
+        "RECORDING_AVAILABLE",
         "SHOWN",
         "ELIGIBLE",
         "VISIBLE" -> "Mic available"

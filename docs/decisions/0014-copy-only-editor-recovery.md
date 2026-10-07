@@ -1,6 +1,8 @@
 # 0014: Copy-only recovery for unavailable and raw editors
 
-Status: accepted implementation direction; phone acceptance pending.
+Status: superseded by decision 0015. The maintainer rejected the additional
+Copy-mode interface before the proposed APK was offered. Preserve this record
+as the abandoned direction, not the current product behavior.
 
 ## Evidence and scope
 

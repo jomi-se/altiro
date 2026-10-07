@@ -2,11 +2,6 @@ package org.altiro.core
 
 @JvmInline value class SessionId(val value: Long)
 
-enum class ResultDelivery {
-    INSERT,
-    COPY_ONLY,
-}
-
 enum class Phase {
     IDLE,
     STARTING,
@@ -28,7 +23,6 @@ data class Session(
     val dispatchFailed: Boolean = false,
     val message: String? = null,
     val elapsedSeconds: Int = 0,
-    val delivery: ResultDelivery = ResultDelivery.INSERT,
 ) {
     val busy: Boolean
         get() =
@@ -41,7 +35,6 @@ sealed interface SessionEvent {
     data class Start(
         override val id: SessionId,
         val destination: DestinationToken?,
-        val delivery: ResultDelivery = ResultDelivery.INSERT,
     ) : SessionEvent
 
     data class FirstFrame(override val id: SessionId) : SessionEvent
@@ -86,12 +79,7 @@ fun reduce(
         return if (session.busy || session.phase in setOf(Phase.READY, Phase.AWAITING_USER)) {
             session
         } else {
-            Session(
-                id = event.id,
-                phase = Phase.STARTING,
-                destination = event.destination.takeIf { event.delivery == ResultDelivery.INSERT },
-                delivery = event.delivery,
-            )
+            Session(id = event.id, phase = Phase.STARTING, destination = event.destination)
         }
     }
     if (event.id != session.id) return session
@@ -134,9 +122,7 @@ fun reduce(
             }
         is SessionEvent.Dispatch ->
             if (
-                session.phase in setOf(Phase.READY, Phase.AWAITING_USER) &&
-                    !session.attemptConsumed &&
-                    session.delivery == ResultDelivery.INSERT
+                session.phase in setOf(Phase.READY, Phase.AWAITING_USER) && !session.attemptConsumed
             ) {
                 session.copy(
                     phase = Phase.DISPATCHED_UNCONFIRMED,

@@ -28,9 +28,8 @@ import org.altiro.core.EditorWindowKind
 import org.altiro.core.Phase
 import org.altiro.core.RecordingHost
 import org.altiro.core.RecordingHostEvidence
-import org.altiro.core.ResultDelivery
 import org.altiro.core.SessionEvent
-import org.altiro.core.supportsCopyOnlyRecording
+import org.altiro.core.supportsRecordingHost
 import org.altiro.core.windowChangeInvalidatesDestination
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -259,15 +258,19 @@ class DictationAccessibilityService : AccessibilityService() {
         val connectionAvailable = ::method.isInitialized && method.currentInputConnection != null
         val password = node?.isPassword == true || isPassword(editorInfo?.inputType ?: 0)
         val blocked = packageName?.let(controller::isDisabled) ?: false
+        val keyboardVisible = currentWindows.any {
+            it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && it.displayId == 0
+        }
         val recordingHost =
             if (
-                identity == null &&
+                (identity == null || !connectionAvailable) &&
                     packageName != null &&
                     focusedApp != null &&
-                    supportsCopyOnlyRecording(
+                    supportsRecordingHost(
                         RecordingHostEvidence(
                             input = inputKind(editorInfo?.inputType),
                             connection = connectionAvailable,
+                            keyboardVisible = keyboardVisible,
                             focusedAppMatches = focusedPackage == packageName,
                             defaultDisplay = focusedApp.displayId == 0,
                             appVisible = focusedRoot?.isVisibleToUser == true,
@@ -313,7 +316,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 editorInfo == null -> EditorVisibilityReason.NO_INPUT_START
                 state.password -> EditorVisibilityReason.PASSWORD
                 state.blocked -> EditorVisibilityReason.HIDDEN_APP
-                recordingHost != null -> EditorVisibilityReason.COPY_ONLY
+                recordingHost != null -> EditorVisibilityReason.RECORDING_AVAILABLE
                 node == null -> EditorVisibilityReason.NO_FOCUS_NODE
                 !node.isEditable -> EditorVisibilityReason.NOT_EDITABLE
                 !node.isFocused -> EditorVisibilityReason.NOT_FOCUSED
@@ -350,7 +353,9 @@ class DictationAccessibilityService : AccessibilityService() {
                 packageMatches = node != null && node.packageName?.toString() == packageName,
                 fieldKey = editorInfo != null && (editorInfo.fieldId != 0 || !name.isNullOrBlank()),
                 windowFocused = window?.isFocused == true,
-                copyOnly = recordingHost != null,
+                recordingHost = recordingHost != null,
+                keyboardVisible = keyboardVisible,
+                appVisible = focusedRoot?.isVisibleToUser == true,
             )
         // Only a positively matched, started external input can replace this snapshot.
         // INPUT_FINISH/returning to Altiro remain in the timeline but cannot erase it.
@@ -437,7 +442,6 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun dispatch(explicit: Boolean) {
         refreshEditor()
         val session = controller.session.value
-        if (session.delivery == ResultDelivery.COPY_ONLY) return
         val id = session.id ?: return
         val text = session.text?.takeIf(String::isNotBlank) ?: return
         if (session.attemptConsumed || session.phase !in setOf(Phase.READY, Phase.AWAITING_USER))
@@ -454,6 +458,11 @@ class DictationAccessibilityService : AccessibilityService() {
                         )
                 ) {
                     "Finish the word, then tap Insert"
+                } else if (
+                    controller.editor.current.identity == null &&
+                        controller.editor.current.recordingHost != null
+                ) {
+                    "Insertion unavailable here"
                 } else {
                     "Tap a text field, then Insert"
                 }
@@ -487,9 +496,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 overlay?.showMessage("Microphone not allowed", "Open Altiro", ::openApp)
                 return
             }
-            val delivery =
-                if (current.identity == null) ResultDelivery.COPY_ONLY else ResultDelivery.INSERT
-            val id = controller.begin(explicit = false, delivery = delivery) ?: return
+            val id = controller.begin(explicit = false) ?: return
             try {
                 startForegroundService(
                     DictationRecordingService.intent(this, DictationRecordingService.START, id)
@@ -511,9 +518,7 @@ class DictationAccessibilityService : AccessibilityService() {
         controller.editor.invalidate()
         try {
             startActivity(
-                Intent(this, RecordingActivity::class.java)
-                    .putExtra("copy-only", controller.editor.current.identity == null)
-                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(this, RecordingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         } catch (_: RuntimeException) {
             // System background-activity restrictions may suppress or reject the launch.

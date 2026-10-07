@@ -10,6 +10,7 @@ class RecordingHostPolicyTest {
         RecordingHostEvidence(
             EditorInputKind.TEXT,
             connection = true,
+            keyboardVisible = false,
             focusedAppMatches = true,
             defaultDisplay = true,
             appVisible = true,
@@ -31,7 +32,7 @@ class RecordingHostPolicyTest {
                     nodeMatches = true,
                 ),
             )) {
-            assertTrue(supportsCopyOnlyRecording(evidence))
+            assertTrue(supportsRecordingHost(evidence))
             val state =
                 EditorState(
                     null,
@@ -59,11 +60,51 @@ class RecordingHostPolicyTest {
                 missingNode.copy(input = EditorInputKind.NONE),
                 missingNode.copy(input = EditorInputKind.NUMBER),
             )
-        rejected.forEach { assertFalse(it.toString(), supportsCopyOnlyRecording(it)) }
+        rejected.forEach { assertFalse(it.toString(), supportsRecordingHost(it)) }
     }
 
     @Test
-    fun `cached copy host stays unavailable after lock hide or connection loss`() {
+    fun `keyboard window permits recording during late connection but never insertion`() {
+        assertTrue(
+            supportsRecordingHost(missingNode.copy(connection = false, keyboardVisible = true))
+        )
+        assertFalse(
+            supportsRecordingHost(missingNode.copy(connection = false, keyboardVisible = false))
+        )
+        val state = EditorState(null, recordingHost = RecordingHost("org.example.editor", 1, 0))
+        assertTrue(state.recordingAvailable)
+        val authority = EditorAuthority().apply { start(state) }
+        assertEquals(InsertionBlockReason.NO_EDITOR, authority.blockReason(authority.capture()))
+    }
+
+    @Test
+    fun `a recording host cannot gain automatic insertion after a real field appears`() {
+        val authority =
+            EditorAuthority().apply {
+                start(
+                    EditorState(
+                        null,
+                        connectionAvailable = true,
+                        recordingHost = RecordingHost("org.example.editor", 1, 0),
+                    )
+                )
+            }
+        val token = authority.capture()
+        authority.start(
+            EditorState(
+                EditorIdentity("org.example.editor", 1, 2, "field", 0),
+                selectionStart = 0,
+                selectionEnd = 0,
+                compositionKnown = true,
+                connectionAvailable = true,
+            )
+        )
+        assertEquals(InsertionBlockReason.DESTINATION_CHANGED, authority.blockReason(token))
+        assertEquals(null, authority.blockReason(authority.capture()))
+    }
+
+    @Test
+    fun `cached recording host stays unavailable after lock hide or host loss`() {
         val state =
             EditorState(
                 null,
@@ -74,7 +115,6 @@ class RecordingHostPolicyTest {
                 state.copy(locked = true),
                 state.copy(password = true),
                 state.copy(blocked = true),
-                state.copy(connectionAvailable = false),
                 state.copy(recordingHost = null),
                 state.copy(recordingHost = state.recordingHost!!.copy(displayId = 1)),
             )

@@ -29,8 +29,7 @@ data class EditorState(
             !locked &&
                 !password &&
                 !blocked &&
-                connectionAvailable &&
-                (identity?.displayId == 0 || recordingHost?.displayId == 0)
+                ((connectionAvailable && identity?.displayId == 0) || recordingHost?.displayId == 0)
 
     val composing: Boolean
         get() = composingStart >= 0 || composingEnd >= 0

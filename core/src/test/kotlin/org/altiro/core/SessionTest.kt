@@ -23,43 +23,6 @@ class SessionTest {
     }
 
     @Test
-    fun `copy only never retains destination or dispatches even after a normal field opens`() {
-        val authority =
-            EditorAuthority().apply {
-                start(
-                    EditorState(
-                        EditorIdentity("org.example.editor", 1, 2, "field", 0),
-                        selectionStart = 0,
-                        selectionEnd = 0,
-                        compositionKnown = true,
-                        connectionAvailable = true,
-                    )
-                )
-            }
-        var session =
-            reduce(Session(), SessionEvent.Start(id, authority.capture(), ResultDelivery.COPY_ONLY))
-        assertEquals(null, session.destination)
-        for (event in
-            listOf(
-                SessionEvent.FirstFrame(id),
-                SessionEvent.Stop(id),
-                SessionEvent.AudioReady(id),
-                SessionEvent.Result(id, "echo hello\n"),
-            )) session = reduce(session, event)
-        authority.start(
-            authority.current.copy(identity = authority.current.identity!!.copy(fieldId = 3))
-        )
-        assertEquals(null, authority.blockReason(authority.capture()))
-        assertEquals(ResultDelivery.COPY_ONLY, session.delivery)
-        assertEquals(session, reduce(session, SessionEvent.Dispatch(id)))
-        val pending = reduce(session, SessionEvent.AwaitUser(id, "Copy"))
-        assertEquals(pending, reduce(pending, SessionEvent.Dispatch(id)))
-        assertFalse(pending.attemptConsumed)
-        assertEquals("echo hello\n", pending.text)
-        assertEquals(Session(), reduce(pending, SessionEvent.Cancel(id)))
-    }
-
-    @Test
     fun `cancel invalidates before stale recognition result arrives`() {
         val cancelled = reduce(ready(), SessionEvent.Cancel(id))
         assertEquals(Session(), reduce(cancelled, SessionEvent.Result(id, "late")))

@@ -76,9 +76,11 @@ Termux's terminal still fails. The limited ring cannot assign each timestamp to
 an app. All five models are now verified, so further storage resets are not a
 recovery step.
 
-Version 0.5.6 adds a Copy-only recording path, separate from insertion authority.
-See [decision 0014](../decisions/0014-copy-only-editor-recovery.md). A matching
-connected input can record while a destination remains unavailable. RAW delivery
-is always Copy-only, including after changing fields. Clipboard write is explicit;
-Altiro never pastes or sends terminal text. Phone visibility and usable Copy
-recovery still need confirmation, so this issue remains in progress.
+The maintainer adds Twitter comments to the failed surfaces and rejects the
+proposed Copy-mode direction. Version 0.5.6 instead corrects mic visibility and
+startup independently of insertion identity. See
+[decision 0015](../decisions/0015-recording-bubble-visibility.md). Matching started
+input with a connection or visible keyboard can show the ordinary mic; positive
+window/package and password/lock/hidden gates remain. There is no extra Copy UI.
+A race remains possible, but the repeated node/editability gate itself explains
+persistent absence. Phone visibility/startup confirmation is pending.

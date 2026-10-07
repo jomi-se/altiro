@@ -289,6 +289,12 @@ Material shapes; do not invent a web component shape system for this Android UI.
 
 ### Floating microphone
 
+Visibility follows the live recording host, separately from insertion identity.
+Missing or noneditable accessibility nodes must not hide a mic for a positively
+matching active input. Keep the ordinary mic and existing result controls;
+no Copy-mode label or additional primary action. A result's insertion arrow stays
+disabled when no insertion identity/connection exists.
+
 - **Idle:** mic glyph over faint ink backing, unbacked language and no phase
   text. Idle settles as described above; no continuous idle animation runs.
 - **Recording:** forest-backed Stop with chalk glyph and a faint surrounding
@@ -302,12 +308,6 @@ Material shapes; do not invent a web component shape system for this Android UI.
   eligible destination. Feedback may request an explicit field selection. No
   dictated text appears on the overlay. Other disabled primary states use alpha
   0.42; consuming an attempt prevents another insertion of that result.
-  For Copy-only hosts, the primary uses the same ink backing with the existing
-  Copy glyph and a small “Copy” phase label; no redundant second Copy button or
-  explanatory note. The idle mic also shows “Copy”, and its accessible name says
-  “Record text to copy”. Successful explicit Copy clears the session and briefly
-  confirms “Copied · paste here”. Ordinary editors retain the insertion arrow.
-
 - **Missing model:** download glyph opens Altiro, with a concise installation
   note. This is a distinct state, not a recognition action.
 - **Failure:** persistent content-free feedback includes recognition failure or

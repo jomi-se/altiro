@@ -20,27 +20,24 @@ Android debug assemblies/lint, native packaging/runtime notices and
 instrumentation APK compilation. The update retains the preview's signing
 identity. No device tests or frame-pacing measurements were executed here.
 
-Version 0.5.6 separates recording availability from insertion authority. The
-maintainer's 0.5.5 phone trace confirms that ChatGPT search/composer and Reddit
-search/comments fail. The trace includes a matching connected TEXT input with
-no focused node; it does not map every timestamp to an app. Termux's raw terminal exposes a focused noneditable host. All five models
-are verified. A matching visible focused application window and started TEXT/RAW
-connection can now show a Copy mic without an insertion identity. Contradictory
-nodes, password/lock/hidden/display failures remain closed. Raw inputs never
-receive automatic insertion. Copy-only delivery is frozen at start and rejected
-by both reducer and final dispatch; switching to a normal field cannot upgrade it.
-Copy is an explicit clipboard action, and the user pastes. The visible recorder
-fallback preserves Copy-only delivery. See
-[decision 0014](../decisions/0014-copy-only-editor-recovery.md).
-Sensitive-view fixture fields exercise a plausible Android withholding mechanism;
-this does not diagnose ChatGPT's implementation. No hierarchy walk or permission
-workaround was added. Physical compatibility remains pending in the
-[updated phone checks](../testing/interface-rewrite.md).
-Full host verification passes: 42 core and 8 acquisition JVM tests, Android
-assemblies/lint, native packaging/notices and instrumentation APK compilation.
-The update keeps the previous signing certificate and all four native libraries
-are byte-identical to 0.5.5. Device tests were not executed. An independent
-read-only source review found no blockers in the delivery and recovery guards.
+Version 0.5.6 corrects bubble visibility independently of insertion identity.
+The reported missing surfaces are ChatGPT search/composer, Reddit search/comments,
+Twitter comments and Termux terminal. Started TEXT/RAW input in a positively
+matching, visible focused application window can show the ordinary mic with a
+connection or visible keyboard. A present contradictory node and password/lock/
+hidden/display gates still reject it. Mic startup and Hide/Restore use this
+recording host; insertion keeps its stricter identity and lifecycle checks.
+The maintainer rejected the proposed Copy-mode UI, which is removed. No added
+Copy button, label, clipboard behavior or recording delivery mode is shipped.
+See [decision 0015](../decisions/0015-recording-bubble-visibility.md) and
+[phone checks](../testing/interface-rewrite.md). A race is not confirmed; the
+persistent identity gate explains the observed absence. Keyboard and recording
+host facts are now exported to distinguish late metadata from insertion failure.
+Full host verification passes: 43 core and 8 acquisition tests, Android builds/
+lint, native packaging/notices and instrumentation APK compilation. A regression
+checks that a host token cannot gain automatic insertion when a real field appears.
+Physical compatibility remains pending; no device tests were executed. The update
+preserves the signing identity and native runtime.
 
 ## Productization direction
 
