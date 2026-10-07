@@ -15,7 +15,7 @@ case "${1:-}" in
 esac
 # Format before compilation so parallel Gradle tasks never race source edits.
 ./gradlew --no-daemon spotlessApply "$@"
-exec ./gradlew --no-daemon :core:test :network:test checkNativePages \
+exec ./gradlew --no-daemon :core:test :network:test checkNativePages checkRuntimeNotices \
   :app:assembleDebug :editor-fixture:assembleDebug :inference-whisper:assembleDebug \
   :app:lintDebug :editor-fixture:lintDebug \
   :app:assembleDebugAndroidTest :editor-fixture:assembleDebugAndroidTest "$@"

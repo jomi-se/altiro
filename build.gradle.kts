@@ -33,6 +33,17 @@ spotless {
 }
 
 if (findProject(":app") != null) {
+    tasks.register<Exec>("checkRuntimeNotices") {
+        dependsOn(":app:exportRuntimeInventory", ":app:assembleDebug")
+        val selected =
+            providers.gradleProperty("runtimeConfiguration").orElse("debugRuntimeClasspath")
+        commandLine(
+            "python3",
+            "scripts/check-runtime-notices.py",
+            "${outputRoot.get()}/app/reports/dependencies/${selected.get()}.json",
+            "${outputRoot.get()}/app/outputs/apk/debug/app-debug.apk",
+        )
+    }
     tasks.register<Exec>("checkNativePages") {
         dependsOn(":app:assembleDebug", ":editor-fixture:assembleDebug")
         commandLine(

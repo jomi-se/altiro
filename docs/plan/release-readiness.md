@@ -13,7 +13,7 @@ different evidence. A generated concept is not a native screen capture.
 
 | Requirement | Current evidence | Remaining acceptance |
 | --- | --- | --- |
-| Clear install/setup; preserve existing models and keyboard | Native Setup and Models; 0.5.2 update APK has matching debug signing identity | Fresh install and update on Pixel; microphone, notifications, accessibility and restricted-setting recovery |
+| Clear install/setup; preserve existing models and keyboard | Native Setup and Models; 0.5.3 update APK has matching debug signing identity | Fresh install and update on Pixel; microphone, notifications, accessibility and restricted-setting recovery |
 | One-tap verified model acquisition | Stock Base/Small HTTPS downloads, exact size/hash checks, progress, Cancel, atomic install; 8 acquisition JVM tests | Phone interruption, low storage, relaunch and failed replacement; installed model works in airplane mode |
 | Chilean Small choices and one-tap installation | Both converted precision variants are allowlisted with source/license metadata; verified import works in source | Compatible public binary assets and verified direct URLs; currently import-only, so this requirement is incomplete |
 | Approved centered-mic native interface | Sage/chalk/charcoal Home, Models, Setup and Console implemented | Actual native light/dark captures, font scaling and review; concepts and compilation do not establish polish |
@@ -27,13 +27,14 @@ different evidence. A generated concept is not a native screen capture.
 | Ephemeral audio and disclosed resource limit | Owned temporary audio, no default transcript history, cancellation cleanup; 4:30 warning and 5:00 automatic Stop | Kill/reopen, audio interruption, service disable and memory-pressure checks; two-minute and five-minute physical runs |
 | Free, local operation | No account, billing, quota, mandatory server or automatic model download; networking restricted to explicit acquisition in source | Airplane-mode capture/recognition/insertion and traffic inspection; 10/30/120-second EN/FR/ES, natural Chilean speech, silence and noise |
 | Portable public repository and security | Initial source public; ignored local skills/artifacts; pinned read-only CI, grouped Dependabot and secret scans | Operator push of newer commits; corrected Android CI execution and required checks green |
-| Runtime, model and dependency provenance | Pinned runtime/catalog, retained native/model notices and conversion metadata; all bundled native libraries pass 16 KiB packaging checks | API 33/37 framework execution including 16 KiB image; complete release dependency/model redistribution review |
+| Runtime, model and dependency provenance | Pinned runtime/catalog and conversion metadata; reviewed runtime-input inventory, Apache/BSD/attribution assets verified inside APK; debug/release graphs match; native libraries pass 16 KiB packaging checks | API 33/37 execution including 16 KiB image; signed-artifact/native/model redistribution qualification |
 
 ## Verified host baseline
 
-The 0.5.2 debug artifact passed 35 core and 8 acquisition JVM tests, Android
-assemblies, lint, native packaging and instrumentation APK compilation. Production
-JNI checks used the real runtime and verified multilingual Base, including
+The 0.5.3 debug artifact passed 35 core and 8 acquisition JVM tests, Android
+assemblies, lint, native packaging, runtime notice graph/APK checks and
+instrumentation APK compilation. Production JNI checks on the unchanged 0.5.2
+native source used the real runtime and verified multilingual Base, including
 empty/Unicode hints, speech, exact digital silence, cancellation, all-audio
 processing and invalid prompt bytes. An unavailable requested GPU fails without
 automatic CPU inference. Artifact hashes, signing inspection, test XML and review

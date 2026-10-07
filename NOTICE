@@ -44,7 +44,18 @@ accompany converted model files. The card identifies OpenSLR Chilean Spanish
 recordings. Dataset recordings are not bundled. Exact model-source provenance
 and redistribution obligations remain part of signed-release review.
 
-The APK uses Kotlin, coroutines, and AndroidX/Compose; their
-upstream licenses remain applicable. See docs/dependencies.md for the initial
-metadata review and signed-release inventory requirements.
+The APK uses Kotlin, coroutines, kotlinx.serialization, AndroidX/Compose, Guava ListenableFuture,
+JetBrains annotations and JSpecify. Their resolved runtime inputs declare
+Apache-2.0 in Maven metadata, including Guava's parent metadata. The reviewed
+component/metadata/artifact inventory is bundled in
+assets/licenses/android-runtime-components.json. The identical license texts
+found in the AndroidX inputs are retained without modification in
+assets/licenses/Android-runtime-Apache-2.0.txt. Existing upstream native/model
+notices remain separate. See docs/dependencies.md for scope and release review.
+Kotlin's standard-library time code includes ThreeTen-derived code under
+BSD-3-Clause. Its copyright, conditions and disclaimer are retained in
+assets/licenses/Kotlin-stdlib-ThreeTen-BSD-3-Clause.txt. Upstream Kotlin and
+coroutines attribution notices are retained in Kotlin-distribution-NOTICE.txt
+and Coroutines-NOTICE.txt in that directory. The Kotlin compiler is build tooling;
+retaining its upstream distribution attribution does not bundle that compiler.
 The app license does not relicense those artifacts.

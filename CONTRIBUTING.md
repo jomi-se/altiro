@@ -20,6 +20,9 @@ Use `--core-only` without an Android SDK, or `--docs-only` for documentation.
 Full verification needs JDK 21 and the pinned SDK and compiles Android/test APKs,
 runs core tests/lint, and checks formatting. Connected tests and the physical
 Gate A procedure are separate; do not call compiled tests executed tests.
+Full checks also compare actual runtime inputs against the bundled
+[reviewed notice inventory](docs/dependencies.md); dependency changes need
+metadata/notice review before updating its hashes.
 
 For workflow changes, also install the checksum-pinned validator with
 `./scripts/install-actionlint.sh` and run `./scripts/check-workflows.sh`.

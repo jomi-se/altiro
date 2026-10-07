@@ -7,3 +7,5 @@
 gradlew text eol=lf
 *.bat text eol=crlf
 *.jar binary
+# Preserve upstream notice bytes; their whitespace is not our source formatting.
+inference-whisper/src/main/assets/licenses/*.txt -text -whitespace

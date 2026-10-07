@@ -80,6 +80,17 @@ The [first-release checklist](release-readiness.md) separates source/host
 verification from native appearance, physical editor/lifecycle/quality gates,
 public Chilean binaries and release qualification. It is not a completed release.
 
+Version 0.5.3 adds a reviewed runtime-input inventory and explicit license text
+assets: 96 external graph components, 62 unique AAR/JAR inputs and 43 embedded
+license records, distinct from native/model notices. Maven metadata declares
+Apache-2.0, including Guava's inherited declaration; source review additionally
+identified Kotlin's BSD-licensed time code and retained its exact notice plus
+upstream attribution texts. Full verification exports the real graph and rejects
+inventory/artifact/text drift, including APK contents. Debug/release input graphs
+match. The final Android build/lint/packaging checks and 35 core/8 acquisition
+tests pass. Release graph parity does not validate a signed release APK; physical
+and signed-artifact acceptance remain pending.
+
 The owner selected concepts before implementation, approved the refined centered
 mic in misty sage/chalk/charcoal, and emphasized the actual floating accessibility
 overlay. The rejected palettes are not product authority. Generated concept

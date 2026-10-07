@@ -12,8 +12,36 @@ Required Apache-2.0/MIT notices are bundled in APK assets; see NOTICE. The host
 shader compiler generates Whisper's shaders and is not an APK executable.
 Android supplies the Vulkan loader/driver; this does not prove GPU compatibility.
 
-The current app bundles Kotlin, coroutines, and AndroidX/Compose components.
-The following upstream Maven metadata was inspected for the resolved build:
+The current app bundles Kotlin, coroutines, kotlinx.serialization, AndroidX/Compose, Guava's
+ListenableFuture, JetBrains annotations and JSpecify. The complete external
+runtime-input graph is recorded in the bundled
+[inventory](../inference-whisper/src/main/assets/licenses/android-runtime-components.json):
+96 resolved components, including metadata-only platform/forwarding components,
+and 62 unique AAR/JAR inputs. Test libraries, Gradle/plugin tooling and local
+project outputs are excluded. The component count is not a count of APK binaries.
+
+Each component records its declared Apache-2.0 license, exact Maven metadata URL
+and SHA-256. Guava's declaration is inherited from its pinned parent POM. Binary
+inputs have exact hashes. All 43 embedded license records share one identical
+Apache-2.0 text, retained without alteration in
+[the runtime license asset](../inference-whisper/src/main/assets/licenses/Android-runtime-Apache-2.0.txt).
+Some AAR copies are stripped during Android packaging; the explicit asset retains
+that text independently. Metadata classification does not relicense upstream
+work or establish model redistribution rights.
+
+POM metadata is not the whole notice review. Kotlin's pinned source identifies
+ThreeTen-derived standard-library time code under BSD-3-Clause. Its exact
+copyright/conditions/disclaimer are retained in
+[the BSD notice](../inference-whisper/src/main/assets/licenses/Kotlin-stdlib-ThreeTen-BSD-3-Clause.txt).
+Pinned Kotlin and coroutines attribution files are retained as well; the upstream
+Kotlin distribution notice labels the compiler, which remains build tooling.
+The inventory records exact notice source commits and hashes. The AndroidX
+graphics-path native helper source carries AOSP/Filament Apache-2.0 headers;
+source review is not a reproducible-build match of its Maven binary.
+Bundled upstream texts bypass checkout line-ending conversion and whitespace
+lint so their original bytes are preserved.
+
+Representative upstream Maven metadata:
 
 | Component | Version | Declared license |
 | --- | --- | --- |
@@ -21,10 +49,23 @@ The following upstream Maven metadata was inspected for the resolved build:
 | [Coroutines JVM](https://repo.maven.apache.org/maven2/org/jetbrains/kotlinx/kotlinx-coroutines-core-jvm/1.11.0/kotlinx-coroutines-core-jvm-1.11.0.pom) | 1.11.0 | Apache-2.0 |
 | [Compose UI Android](https://dl.google.com/dl/android/maven2/androidx/compose/ui/ui-android/1.12.1/ui-android-1.12.1.pom) | 1.12.1 | Apache-2.0 |
 
-This is an initial dependency review, not the complete signed-release inventory.
-Before distribution release, inventory every resolved runtime/native dependency,
-retain required notices, and audit the exact inference runtime and model weights
-separately. Test/build tooling is distinct from APK dependencies.
+`checkRuntimeNotices` exports the actual Gradle graph through a component-filtered
+artifact view, avoiding generated project artifacts, and checks it against the
+reviewed inventory. It rejects new/removed components, changed artifact hashes
+and missing/changed retained text, including the actual debug APK asset bytes.
+Full verification includes this offline check.
+For a separate release-classpath review:
+
+```sh
+./gradlew --no-daemon -PruntimeConfiguration=releaseRuntimeClasspath checkRuntimeNotices
+```
+
+Reports stay in the external build root's `app/reports/dependencies/` directory.
+When dependencies change, re-export the graph, inspect exact Maven POMs including
+inherited declarations, inspect AAR/JAR license/notice entries, retain new texts
+and update the inventory. Never accept a changed graph by copying hashes without
+review. Signed-release qualification still needs the actual release artifact,
+native/model provenance and appropriate redistribution review separately.
 
 The debug APKs include AndroidX graphics path native libraries for arm64-v8a
 and x86_64; Altiro additionally includes its JNI library with statically linked
