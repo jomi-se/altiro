@@ -1,6 +1,5 @@
 package org.altiro.app
 
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -49,7 +48,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
             }
         }
         OutlinedButton(
-            onClick = { controller.copyText(exportDiagnostics(controller, microphoneAllowed)) }
+            onClick = { controller.copyText(compactDiagnostics(controller, microphoneAllowed)) }
         ) {
             AltiroIcon(Glyph.COPY)
             Spacer(Modifier.width(6.dp))
@@ -57,18 +56,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
         }
         OutlinedButton(
             onClick = {
-                context.startActivity(
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                exportDiagnostics(controller, microphoneAllowed),
-                            )
-                        },
-                        "Share diagnostics",
-                    )
-                )
+                shareDiagnostics(context, exportDiagnostics(controller, microphoneAllowed))
             }
         ) {
             AltiroIcon(Glyph.SHARE)
@@ -237,6 +225,7 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
         appendLine(
             "Overlay status: ${controller.overlayStatus.value}; last editor: ${controller.lastEditorStatus.value}; hidden apps: ${controller.hiddenApps.value.size}"
         )
+        appendLine("Delivery: ${controller.deliveryStatus.value}")
         append(controller.editorVisibility.report.value.export())
         appendLine("App startup checks (separate from dictation):")
         appendLine(
@@ -254,3 +243,25 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
             appendLine(it)
         }
     }
+
+internal fun compactDiagnostics(controller: DictationController, microphone: Boolean): String {
+    val report = buildString {
+        appendLine(
+            "Altiro ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}); ${Build.MODEL}; Android ${Build.VERSION.RELEASE}/API ${Build.VERSION.SDK_INT}"
+        )
+        appendLine(
+            "Microphone=$microphone; connected=${controller.connected.value}; overlay=${controller.overlayStatus.value}; hidden=${controller.hiddenApps.value.size}"
+        )
+        appendLine("Delivery: ${controller.deliveryStatus.value}")
+        appendLine(
+            "Models: ${controller.models.installed.value.size}; selected ready=${controller.models.ready.value}"
+        )
+        append(controller.editorVisibility.report.value.compactExport())
+        append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+    }
+    return if (report.length <= 8000) report
+    else
+        report.take(5800) +
+            "\n[Copy shortened; Share contains the full log.]\n" +
+            report.takeLast(2000)
+}

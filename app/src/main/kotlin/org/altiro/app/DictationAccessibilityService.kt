@@ -7,7 +7,11 @@ import android.app.ForegroundServiceStartNotAllowedException
 import android.app.KeyguardManager
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.os.SystemClock
 import android.text.InputType
+import android.view.InputDevice
+import android.view.KeyCharacterMap
+import android.view.KeyEvent
 import android.view.accessibility.AccessibilityEvent
 import android.view.accessibility.AccessibilityNodeInfo
 import android.view.accessibility.AccessibilityWindowInfo
@@ -29,7 +33,10 @@ import org.altiro.core.Phase
 import org.altiro.core.RecordingHost
 import org.altiro.core.RecordingHostEvidence
 import org.altiro.core.SessionEvent
+import org.altiro.core.TextDelivery
+import org.altiro.core.supportsConnectedTextDestination
 import org.altiro.core.supportsRecordingHost
+import org.altiro.core.terminalPasteText
 import org.altiro.core.windowChangeInvalidatesDestination
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -38,11 +45,13 @@ class DictationAccessibilityService : AccessibilityService() {
 
     private lateinit var method: DictationInputMethod
     private var overlay: DictationOverlay? = null
+    private val pasteClipboard by lazy { PasteClipboard(this, controller.scope) }
     private var observer: Job? = null
     private var languageObserver: Job? = null
     private var settleJob: Job? = null
     private var settledInput: EditorMetadata? = null
     private var settleContentChanged = false
+    private var knownWindowTypes: Map<Int, Int> = emptyMap()
 
     private data class EditorMetadata(
         val packageName: String?,
@@ -71,7 +80,6 @@ class DictationAccessibilityService : AccessibilityService() {
                 this,
                 controller,
                 ::openRecording,
-                { dispatch(explicit = true) },
                 ::openApp,
             )
         observer =
@@ -123,17 +131,32 @@ class DictationAccessibilityService : AccessibilityService() {
                     controller.editor.invalidate()
             }
             AccessibilityEvent.TYPE_WINDOWS_CHANGED -> {
-                if (windowChangeInvalidatesDestination(event.windowId, overlay?.windowId)) {
-                    controller.otherWindowEvents.value++
-                    controller.editor.invalidate()
-                } else {
+                if (!windowChangeInvalidatesDestination(event.windowId, overlay?.windowId)) {
                     controller.overlayWindowEvents.value++
                     return
+                }
+                val type =
+                    windows.firstOrNull { it.id == event.windowId }?.type
+                        ?: knownWindowTypes[event.windowId]
+                if (
+                    windowChangeInvalidatesDestination(
+                        event.windowId,
+                        overlay?.windowId,
+                        knownNonApplicationWindow =
+                            type != null && type != AccessibilityWindowInfo.TYPE_APPLICATION,
+                    )
+                ) {
+                    controller.otherWindowEvents.value++
+                    controller.editor.invalidate()
                 }
             }
             AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED,
             AccessibilityEvent.TYPE_VIEW_FOCUSED -> {
-                if (windowChangeInvalidatesDestination(event.windowId, overlay?.windowId))
+                if (
+                    windowChangeInvalidatesDestination(event.windowId, overlay?.windowId) &&
+                        (event.packageName?.toString() == info?.packageName ||
+                            event.windowId == controller.editor.current.identity?.windowId)
+                )
                     controller.editor.invalidate()
             }
             else -> Unit
@@ -200,6 +223,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val locked = getSystemService(KeyguardManager::class.java).isKeyguardLocked
         val editorInfo = info
         val currentWindows = if (!locked) windows else emptyList()
+        knownWindowTypes = currentWindows.associate { it.id to it.type }
         val focusedApp = currentWindows.firstOrNull {
             it.isFocused && it.type == AccessibilityWindowInfo.TYPE_APPLICATION
         }
@@ -243,52 +267,93 @@ class DictationAccessibilityService : AccessibilityService() {
                 window.type == AccessibilityWindowInfo.TYPE_APPLICATION &&
                 node.packageName?.toString() == packageName &&
                 (editorInfo.fieldId != 0 || !name.isNullOrBlank())
-        val identity =
-            if (identifiable && window != null) {
-                EditorIdentity(
-                    packageName!!,
-                    node.windowId,
-                    editorInfo!!.fieldId,
-                    name,
-                    window.displayId,
-                )
-            } else {
-                null
-            }
         val connectionAvailable = ::method.isInitialized && method.currentInputConnection != null
         val password = node?.isPassword == true || isPassword(editorInfo?.inputType ?: 0)
         val blocked = packageName?.let(controller::isDisabled) ?: false
         val keyboardVisible = currentWindows.any {
             it.type == AccessibilityWindowInfo.TYPE_INPUT_METHOD && it.displayId == 0
         }
-        val recordingHost =
-            if (
-                (identity == null || !connectionAvailable) &&
-                    packageName != null &&
-                    focusedApp != null &&
-                    supportsRecordingHost(
-                        RecordingHostEvidence(
-                            input = inputKind(editorInfo?.inputType),
-                            connection = connectionAvailable,
-                            keyboardVisible = keyboardVisible,
-                            focusedAppMatches = focusedPackage == packageName,
-                            defaultDisplay = focusedApp.displayId == 0,
-                            appVisible = focusedRoot?.isVisibleToUser == true,
-                            nodePresent = node != null,
-                            nodeMatches =
-                                node?.isFocused == true &&
-                                    node.isVisibleToUser &&
-                                    node.packageName?.toString() == packageName &&
-                                    window?.isFocused == true &&
-                                    window.id == focusedApp.id &&
-                                    window.type == AccessibilityWindowInfo.TYPE_APPLICATION,
-                            password = password,
-                            locked = locked,
-                            hidden = blocked,
-                        )
-                    )
+        // A provider's fallback host may be unfocused/noneditable. Only contradictory
+        // package/window evidence vetoes the started input; no hierarchy search is needed.
+        val evidence =
+            RecordingHostEvidence(
+                input = inputKind(editorInfo?.inputType),
+                connection = connectionAvailable,
+                keyboardVisible = keyboardVisible,
+                focusedAppMatches = packageName != null && focusedPackage == packageName,
+                defaultDisplay = focusedApp?.displayId == 0,
+                appVisible = focusedRoot?.isVisibleToUser == true,
+                nodePresent = node != null,
+                nodeMatches =
+                    node != null &&
+                        node.packageName?.toString() == packageName &&
+                        node.windowId == focusedApp?.id &&
+                        window?.type == AccessibilityWindowInfo.TYPE_APPLICATION,
+                password = password,
+                locked = locked,
+                hidden = blocked,
             )
-                RecordingHost(packageName, focusedApp.id, focusedApp.displayId)
+        val terminalCandidate =
+            packageName == "com.termux" &&
+                node != null &&
+                (editorInfo?.inputType == InputType.TYPE_NULL ||
+                    editorInfo?.inputType ==
+                        (InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD or
+                            InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS)) &&
+                !node.isEditable &&
+                node.isFocused &&
+                node.isVisibleToUser &&
+                evidence.nodeMatches &&
+                connectionAvailable &&
+                evidence.defaultDisplay &&
+                evidence.appVisible &&
+                evidence.focusedAppMatches &&
+                !password &&
+                !locked &&
+                !blocked
+        val terminal = terminalCandidate && RecordingPreferences(this).termuxPaste
+        val connectedText = supportsConnectedTextDestination(evidence)
+        val identity =
+            when {
+                terminal ->
+                    EditorIdentity(
+                        packageName!!,
+                        focusedApp!!.id,
+                        editorInfo!!.fieldId,
+                        "terminal-paste",
+                        0,
+                    )
+                connectedText ->
+                    EditorIdentity(
+                        packageName!!,
+                        focusedApp!!.id,
+                        editorInfo!!.fieldId,
+                        "input-method",
+                        0,
+                    )
+                identifiable && window != null ->
+                    EditorIdentity(
+                        packageName!!,
+                        node!!.windowId,
+                        editorInfo!!.fieldId,
+                        name,
+                        window.displayId,
+                    )
+                else -> null
+            }
+        val delivery =
+            when {
+                terminal -> TextDelivery.TERMUX_PASTE
+                connectedText &&
+                    node?.isFocused == true &&
+                    !node.isEditable &&
+                    node.actionList.any { it.id == AccessibilityNodeInfo.ACTION_PASTE } ->
+                    TextDelivery.PASTE
+                else -> TextDelivery.COMMIT
+            }
+        val recordingHost =
+            if (identity == null && (terminalCandidate || supportsRecordingHost(evidence)))
+                RecordingHost(packageName!!, focusedApp!!.id, focusedApp.displayId)
             else null
         val state =
             EditorState(
@@ -303,6 +368,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 locked = locked,
                 connectionAvailable = connectionAvailable,
                 recordingHost = recordingHost,
+                delivery = delivery,
             )
         controller.editor.observe(state)
         controller.editorLabel.value =
@@ -409,6 +475,10 @@ class DictationAccessibilityService : AccessibilityService() {
         // Class names stay local; only these fixed, generic categories are exported.
         val name = node.className?.toString().orEmpty()
         return when {
+            node.packageName?.toString() == "com.termux" &&
+                !node.isEditable &&
+                node.isFocused &&
+                info?.inputType == InputType.TYPE_NULL -> EditorNodeKind.TERMINAL
             name.endsWith("EditText") -> EditorNodeKind.EDIT_TEXT
             name == "androidx.compose.ui.platform.AndroidComposeView" -> EditorNodeKind.COMPOSE_HOST
             name == "android.webkit.WebView" -> EditorNodeKind.WEB
@@ -457,29 +527,102 @@ class DictationAccessibilityService : AccessibilityService() {
                             org.altiro.core.InsertionBlockReason.UNKNOWN_COMPOSITION,
                         )
                 ) {
-                    "Finish the word, then tap Insert"
+                    "Finish typing · text kept in Altiro"
                 } else if (
                     controller.editor.current.identity == null &&
                         controller.editor.current.recordingHost != null
                 ) {
-                    "Insertion unavailable here"
+                    if (
+                        info?.packageName == "com.termux" && !RecordingPreferences(this).termuxPaste
+                    )
+                        "Enable Termux paste in Altiro"
+                    else "Text kept in Altiro"
                 } else {
-                    "Tap a text field, then Insert"
+                    "Field changed · text kept in Altiro"
                 }
+            controller.deliveryStatus.value = "BLOCKED_${blocked?.name ?: "NO_DESTINATION"}"
             controller.event(SessionEvent.AwaitUser(id, reason))
             return
         }
         val connection = if (::method.isInitialized) method.currentInputConnection else null
         if (connection == null) {
-            controller.event(SessionEvent.AwaitUser(id, "Can't insert here · use Copy"))
+            controller.deliveryStatus.value = "BLOCKED_NO_CONNECTION"
+            controller.event(SessionEvent.AwaitUser(id, "Text kept in Altiro"))
+            return
+        }
+        val delivery = controller.editor.current.delivery
+        val payload = if (delivery == TextDelivery.TERMUX_PASTE) terminalPasteText(text) else text
+        if (payload.isBlank()) {
+            controller.event(SessionEvent.AwaitUser(id, "No pasteable text · kept in Altiro"))
+            return
+        }
+        val pasteNode =
+            if (delivery == TextDelivery.PASTE) findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
+            else null
+        if (
+            delivery == TextDelivery.PASTE &&
+                (pasteNode == null ||
+                    !pasteNode.isFocused ||
+                    !pasteNode.isVisibleToUser ||
+                    pasteNode.isPassword ||
+                    pasteNode.packageName?.toString() != token.editor.identity?.packageName ||
+                    pasteNode.windowId != token.editor.identity?.windowId ||
+                    pasteNode.actionList.none { it.id == AccessibilityNodeInfo.ACTION_PASTE })
+        ) {
+            controller.deliveryStatus.value = "BLOCKED_PASTE_TARGET"
+            controller.event(SessionEvent.AwaitUser(id, "Text kept in Altiro"))
+            return
+        }
+        // Prepare payload before consuming; recheck authority after the clipboard operation.
+        if (delivery != TextDelivery.COMMIT && !pasteClipboard.stage(payload)) {
+            controller.deliveryStatus.value = "BLOCKED_CLIPBOARD"
+            controller.event(SessionEvent.AwaitUser(id, "Paste unavailable · text kept in Altiro"))
+            return
+        }
+        refreshEditor()
+        if (controller.editor.blockReason(token) != null) {
+            controller.deliveryStatus.value = "BLOCKED_DESTINATION_CHANGED"
+            controller.event(SessionEvent.AwaitUser(id, "Field changed · text kept in Altiro"))
             return
         }
         // Mark consumed before the cross-process mutation. Never retry on uncertainty.
         controller.event(SessionEvent.Dispatch(id))
         if (!controller.session.value.attemptConsumed) return
+        controller.deliveryStatus.value = "${delivery.name}_DISPATCHED_UNCONFIRMED"
         try {
-            connection.commitText(text, 1, null)
+            when (delivery) {
+                TextDelivery.COMMIT -> connection.commitText(payload, 1, null)
+                TextDelivery.PASTE -> {
+                    if (pasteNode?.performAction(AccessibilityNodeInfo.ACTION_PASTE) != true)
+                        controller.event(SessionEvent.Fail(id, "Paste outcome unknown."))
+                }
+                TextDelivery.TERMUX_PASTE -> {
+                    val now = SystemClock.uptimeMillis()
+                    val modifiers =
+                        KeyEvent.META_CTRL_ON or
+                            KeyEvent.META_CTRL_LEFT_ON or
+                            KeyEvent.META_ALT_ON or
+                            KeyEvent.META_ALT_LEFT_ON
+                    for (action in listOf(KeyEvent.ACTION_DOWN, KeyEvent.ACTION_UP)) {
+                        connection.sendKeyEvent(
+                            KeyEvent(
+                                now,
+                                now,
+                                action,
+                                KeyEvent.KEYCODE_V,
+                                0,
+                                modifiers,
+                                KeyCharacterMap.VIRTUAL_KEYBOARD,
+                                0,
+                                KeyEvent.FLAG_SOFT_KEYBOARD or KeyEvent.FLAG_KEEP_TOUCH_MODE,
+                                InputDevice.SOURCE_KEYBOARD,
+                            )
+                        )
+                    }
+                }
+            }
         } catch (_: RuntimeException) {
+            controller.deliveryStatus.value = "${delivery.name}_OUTCOME_UNKNOWN"
             controller.event(SessionEvent.Fail(id, "Insertion outcome unknown."))
         }
     }

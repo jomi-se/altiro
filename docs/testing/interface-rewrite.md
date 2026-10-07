@@ -64,10 +64,42 @@ Git, and use synthetic text instead of personal chat content.
 
 ## Overlay and Console
 
+### Automatic delivery and bubble controls in 0.5.7
+
+- Focus an ordinary native/Compose field, dictate and Stop. Valid unchanged
+  destinations receive one automatic commit; the bubble returns to its mic
+  without Insert, Copy or Discard controls. Confirm text arrival separately
+  from the content-free `DISPATCHED_UNCONFIRMED` diagnostic.
+- Repeat on ChatGPT, Reddit and Twitter with blank fields and after typing.
+  Test same-window field switches, cursor changes, composition, keyboard close,
+  app switches and lock during recognition. Changed/unknown destinations retain
+  the transcript in Altiro; they must not receive an automatic mutation.
+- Tap language: a menu opens, with Auto/English/Español/Français and the current
+  choice marked. Only tapping a choice changes language. Mic is the larger
+  edge target. Menu opening must keep the keyboard and editor focus; recording
+  closes the menu and freezes language. Check font scale 1.3 and both docks.
+- Enable Settings → Termux paste only with Termux hardware shortcuts enabled.
+  In its focused main terminal, paste a synthetic multiline transcript.
+  Verify one paste, flattened newlines, no Enter and no commands sent. Test the
+  setting off: no shortcut may be sent. Do not enable it with Termux's hardware
+  shortcuts disabled, which would send control input instead of pasting.
+  Its alternate text box stays an ordinary editor.
+- Record and Cancel/Stop near both screen edges, open/close language choices,
+  rotate and move the keyboard. No left result sliver or clipped Cancel/menu
+  should appear during window resizing. Check minimum usable viewport sizes.
+- Console Copy is at most 8,000 characters and includes delivery reason,
+  visibility and timings. Share attaches a complete text file readable by the
+  selected receiving app. The provider must expose no recordings or models.
+- Clipboard-based delivery must leave a newer user clip alone; when both the
+  prior clip and staged ownership are readable, check best-effort restoration.
+  Verify ordinary commit delivery does not touch the clipboard.
+
+These are pending physical checks, not executed device results.
+
 - Capture idle, recording, recognition, cancellation, result recovery and failure
   over synthetic light/dark editors with the keyboard visible. Evaluate the
   actual control against the approved concept, not a generated screenshot.
-- Check one-touch EN/ES, 48 dp actions, dragging without accidental recording,
+- Check the language menu, 48 dp secondary actions, dragging without accidental recording,
   edge docking, rotation/insets, Stop versus Cancel and disabled animations.
 - Recognition must use the work indicator without a misleading enabled mic.
   Insertion still requires the original valid destination and one consumed

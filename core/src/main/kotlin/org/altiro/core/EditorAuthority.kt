@@ -11,6 +11,12 @@ data class EditorIdentity(
 /** A recording location, never an insertion destination. No editor contents. */
 data class RecordingHost(val packageName: String, val windowId: Int, val displayId: Int)
 
+enum class TextDelivery {
+    COMMIT,
+    PASTE,
+    TERMUX_PASTE,
+}
+
 data class EditorState(
     val identity: EditorIdentity?,
     val selectionStart: Int = -1,
@@ -23,6 +29,7 @@ data class EditorState(
     val locked: Boolean = false,
     val connectionAvailable: Boolean = false,
     val recordingHost: RecordingHost? = null,
+    val delivery: TextDelivery = TextDelivery.COMMIT,
 ) {
     val recordingAvailable: Boolean
         get() =
@@ -100,9 +107,12 @@ class EditorAuthority {
             state.blocked -> InsertionBlockReason.DISABLED_APP
             !state.connectionAvailable || state.identity == null -> InsertionBlockReason.NO_EDITOR
             state.identity.displayId != 0 -> InsertionBlockReason.UNSUPPORTED_DISPLAY
-            state.composing -> InsertionBlockReason.COMPOSING
-            !state.compositionKnown -> InsertionBlockReason.UNKNOWN_COMPOSITION
-            state.selectionStart < 0 || state.selectionEnd < 0 ->
+            state.delivery != TextDelivery.TERMUX_PASTE && state.composing ->
+                InsertionBlockReason.COMPOSING
+            state.delivery != TextDelivery.TERMUX_PASTE && !state.compositionKnown ->
+                InsertionBlockReason.UNKNOWN_COMPOSITION
+            state.delivery != TextDelivery.TERMUX_PASTE &&
+                (state.selectionStart < 0 || state.selectionEnd < 0) ->
                 InsertionBlockReason.UNKNOWN_SELECTION
             token != capture() -> InsertionBlockReason.DESTINATION_CHANGED
             else -> null

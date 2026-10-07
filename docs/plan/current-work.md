@@ -51,6 +51,25 @@ new implementation or device acceptance is claimed by this research increment.
 
 ## Productization direction
 
+Version 0.5.7 implements [automatic delivery and bubble controls](../decisions/0016-automatic-delivery-and-bubble-controls.md):
+connected TEXT identities use input-method epochs/window metadata when node
+focus is incomplete; ordinary selection/composition and stale-token gates stay
+in force. A positively focused Termux terminal has a distinct paste route using
+its documented shortcut after one-time Settings confirmation that Termux's
+hardware shortcuts are enabled, with line breaks flattened and controls stripped.
+Delivery is selected before one consumed attempt; no uncertain retry is added.
+The mic is a larger 76 dp target, language opens an explicit menu, and the old
+Copy/Insert/Discard result cluster is removed. The overlay measures before
+resizing at its dock. Console Copy is bounded; Share exports a complete private
+diagnostic file. Build verification and physical checks are tracked separately;
+the [updated phone procedure](../testing/interface-rewrite.md) remains pending.
+Full host verification passes: 48 core and 8 acquisition tests, Android builds/
+lint, native packaging/runtime notices and instrumentation APK compilation.
+An independent source review resolved terminal classification/shortcut gating,
+clipboard ownership, unrelated window invalidation and language-menu position.
+The file-provider instrumentation regression is compiled, not executed here.
+The signing identity is preserved; hardware compatibility remains unverified.
+
 The maintainer has rejected the tested floating control and the layered
 configuration/console navigation. A chat-field bubble is missing, and restoring
 hidden apps appears ineffective. See [the reported defect](../issues/0002-overlay-visibility-and-recovery.md).

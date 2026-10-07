@@ -33,4 +33,24 @@ class OverlayWindowPolicyTest {
         assertTrue(windowChangeInvalidatesDestination(42, null))
         assertTrue(windowChangeInvalidatesDestination(-1, -1))
     }
+
+    @Test
+    fun `known keyboard geometry preserves a token but a real editor change still invalidates`() {
+        val state =
+            EditorState(
+                EditorIdentity("org.example.editor", 9, 3, "field", 0),
+                4,
+                4,
+                compositionKnown = true,
+                connectionAvailable = true,
+            )
+        val authority = EditorAuthority().apply { start(state) }
+        val token = authority.capture()
+        if (windowChangeInvalidatesDestination(12, 42, knownNonApplicationWindow = true))
+            authority.invalidate()
+        assertNull(authority.blockReason(token))
+        authority.observe(state.copy(identity = state.identity!!.copy(windowId = 15)))
+        assertEquals(InsertionBlockReason.DESTINATION_CHANGED, authority.blockReason(token))
+        assertTrue(windowChangeInvalidatesDestination(-1, 42, knownNonApplicationWindow = true))
+    }
 }

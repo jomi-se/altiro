@@ -1,6 +1,6 @@
 package org.altiro.core
 
-/** Fixed metadata only. Missing accessibility focus grants recording, never insertion. */
+/** Fixed metadata only; nodeMatches checks package/window, not an unreliable host focus bit. */
 data class RecordingHostEvidence(
     val input: EditorInputKind,
     val connection: Boolean,
@@ -27,3 +27,7 @@ fun supportsRecordingHost(evidence: RecordingHostEvidence): Boolean =
             !locked &&
             !hidden
     }
+
+/** Input epochs and selection/composition are checked separately by EditorAuthority. */
+fun supportsConnectedTextDestination(evidence: RecordingHostEvidence): Boolean =
+    evidence.input == EditorInputKind.TEXT && evidence.connection && supportsRecordingHost(evidence)

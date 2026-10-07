@@ -386,7 +386,7 @@ internal fun HomeContent(
             Text(text, style = MaterialTheme.typography.bodyLarge)
             Text(
                 if (session.attemptConsumed) "Insertion attempted. Check your editor."
-                else "Return to your editor to insert, or copy here.",
+                else session.message ?: "Text retained here.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {

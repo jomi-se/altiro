@@ -42,6 +42,7 @@ class DictationController(private val context: Context) {
     // Fixed content-free reason codes only; never editor names or identifiers.
     val overlayStatus = MutableStateFlow("DISCONNECTED")
     val lastEditorStatus = MutableStateFlow("NONE")
+    val deliveryStatus = MutableStateFlow("NONE")
     val editorVisibility = EditorVisibilityDiagnostics()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
@@ -206,6 +207,7 @@ class DictationController(private val context: Context) {
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
+        deliveryStatus.value = "PENDING"
         diagnosticGeneration = id.value
         checkpoint.beginSession()
         diagnostics.begin(
@@ -343,12 +345,7 @@ class DictationController(private val context: Context) {
                             )
                         else -> {
                             event(SessionEvent.Result(id, text))
-                            val target = session.value.destination
-                            if (
-                                target != null &&
-                                    editor.blockReason(target) == null &&
-                                    insertion != null
-                            ) {
+                            if (session.value.destination != null && insertion != null) {
                                 insertion?.invoke()
                             } else {
                                 event(
@@ -359,7 +356,7 @@ class DictationController(private val context: Context) {
                                                 editor.current.recordingHost != null
                                         )
                                             "Insertion unavailable here"
-                                        else "Text ready. Focus a field and tap Insert.",
+                                        else "Text ready in Altiro.",
                                     )
                                 )
                             }

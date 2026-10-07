@@ -110,6 +110,16 @@ data class EditorVisibilityReport(
     val events: List<EditorVisibilityEvent> = emptyList(),
     val lastExternal: EditorVisibilitySnapshot? = null,
 ) {
+    fun compactExport(): String = buildString {
+        lastExternal?.let { appendLine("Last external input: ${it.export()}") }
+        for (event in events.takeLast(12)) {
+            val s = event.snapshot
+            appendLine(
+                "+${DiagnosticReport.seconds(event.elapsedMillis)}s ${event.trigger}: ${s.reason}; shown=${s.shown}; input=${s.input}; connection=${s.connection}; keyboard=${s.keyboardVisible}; host=${s.recordingHost}"
+            )
+        }
+    }
+
     fun export(): String = buildString {
         appendLine("Bubble visibility trace · content-free · latest ${events.size} transitions")
         lastExternal?.let { appendLine("Last external input: ${it.export()}") }

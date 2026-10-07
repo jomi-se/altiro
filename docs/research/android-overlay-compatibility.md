@@ -4,6 +4,12 @@ Checked: 2026-10-07. Source inspection, not execution of these apps. Revisions
 below pin the inspected implementations; they do not establish compatibility
 with the maintainer's installed chat apps or OS. No upstream code is imported.
 
+Follow-up: [decision 0016](../decisions/0016-automatic-delivery-and-bubble-controls.md)
+records the implemented connection-anchored text identity and the opt-in Termux
+paste shortcut. Source review additionally verified that Termux reports the
+base View accessibility class and that disabling its hardware shortcuts changes
+Ctrl+Alt+V into terminal control input. The route requires one-time confirmation.
+
 ## Closest implementations
 
 | Repository and checked revision | License file | Relevant implementation |

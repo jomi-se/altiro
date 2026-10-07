@@ -35,6 +35,8 @@ internal fun SettingsContent(
     val context = LocalContext.current
     val preferences = remember { RecordingPreferences(context) }
     var inPlace by remember { mutableStateOf(preferences.recordInPlace) }
+    var termuxPaste by remember { mutableStateOf(preferences.termuxPaste) }
+    var confirmTermux by remember { mutableStateOf(false) }
     var info by rememberSaveable { mutableStateOf(false) }
 
     SettingsSection("Access")
@@ -89,6 +91,37 @@ internal fun SettingsContent(
         inPlace = it
         preferences.recordInPlace = it
     }
+    SettingsToggle("Termux paste", termuxPaste, available) {
+        if (it) confirmTermux = true
+        else {
+            termuxPaste = false
+            preferences.termuxPaste = false
+            controller.refreshSettings?.invoke()
+        }
+    }
+    if (confirmTermux)
+        AlertDialog(
+            onDismissRequest = { confirmTermux = false },
+            title = { Text("Termux paste shortcut") },
+            text = {
+                Text(
+                    "Enable only if hardware keyboard shortcuts are enabled in Termux. Otherwise Ctrl+Alt+V sends control input to the terminal. Paste replaces the clipboard."
+                )
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        termuxPaste = true
+                        preferences.termuxPaste = true
+                        confirmTermux = false
+                        controller.refreshSettings?.invoke()
+                    }
+                ) {
+                    Text("Enable")
+                }
+            },
+            dismissButton = { TextButton(onClick = { confirmTermux = false }) { Text("Cancel") } },
+        )
 
     SettingsSection("Recognition")
     LanguageControls(controller)

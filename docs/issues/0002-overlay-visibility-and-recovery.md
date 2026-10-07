@@ -100,3 +100,19 @@ patch. [Pinned source research](../research/android-overlay-compatibility.md)
 finds independent keyboard/focus visibility signals, bounded pre-dispatch
 recovery, and explicit terminal limitations. Apply the useful patterns within
 Altiro's insertion contract; upstream source does not pass our phone gates.
+
+Version 0.5.7 applies the comparison in
+[decision 0016](../decisions/0016-automatic-delivery-and-bubble-controls.md).
+Matching connected TEXT input no longer depends on a fallback host's focus bit;
+input epochs/window metadata anchor delivery, with ordinary composition/selection
+and stale-destination checks retained. Known keyboard/system geometry no longer
+invalidates a healthy token by itself. Termux paste has a distinct route gated
+by one-time shortcut confirmation. Its default accessibility class is a base
+View, so the implementation class is not used as its identity check.
+
+The maintainer's new terminal capture also shows a clipped leftmost result
+control and misleading “Finish the word” feedback. Remove the bubble's result
+cluster, use terminal paste semantics separately from ordinary composition, and
+measure/clamp before window resizing. Language choices now open an explicit menu.
+Console copying is bounded and sharing uses a complete file. These are source
+corrections; physical visibility/delivery and native appearance remain pending.
