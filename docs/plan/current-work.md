@@ -2,6 +2,14 @@
 
 Updated: 2026-10-07.
 
+Immediate acceptance priority: basic automatic text delivery. The maintainer
+reports no working insertion in apps tried with the preceding build and has
+not tested 0.5.7. Use one normal notes-field dictation and the new `Delivery:`
+code to distinguish a pre-dispatch block from an ignored insertion call.
+Unknown composition waiting on an input-method selection callback is a source
+candidate, not a confirmed device cause. See
+[the active defect](../issues/0002-overlay-visibility-and-recovery.md).
+
 Version 0.5.5 corrects the active-window-only editor lookup after the maintainer
 reports missing controls in ChatGPT, Termux and Reddit even after fresh setup.
 It uses global input focus and the focused application window, adds one bounded

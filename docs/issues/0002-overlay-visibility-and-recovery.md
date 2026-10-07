@@ -116,3 +116,18 @@ cluster, use terminal paste semantics separately from ordinary composition, and
 measure/clamp before window resizing. Language choices now open an explicit menu.
 Console copying is bounded and sharing uses a complete file. These are source
 corrections; physical visibility/delivery and native appearance remain pending.
+
+The maintainer clarifies that insertion did not work in any app they tried in
+the previously tested build; 0.5.7 has not yet been tried. Treat basic delivery
+as an unresolved baseline, rather than assuming only terminal compatibility
+remains. Start with one short ordinary notes-field dictation and its fixed
+`Delivery:` diagnostic code before comparing more custom editors.
+
+Source inspection identifies a possible general blocker, not a confirmed phone
+cause: input start sets `compositionKnown=false`, and only an input-method
+selection update sets it true. Ordinary insertion rejects that unknown state.
+A provider that sends no update can therefore remain blocked without any word
+actually being composed. The current “Finish typing” notice conflates unknown
+composition with active composition; neither the notice nor compilation proves
+that the user had an unfinished word. Preserve composition protection while
+investigating a supported way to establish the initial state.
