@@ -8,6 +8,9 @@ data class EditorIdentity(
     val displayId: Int,
 )
 
+/** A recording location, never an insertion destination. No editor contents. */
+data class RecordingHost(val packageName: String, val windowId: Int, val displayId: Int)
+
 data class EditorState(
     val identity: EditorIdentity?,
     val selectionStart: Int = -1,
@@ -19,7 +22,16 @@ data class EditorState(
     val blocked: Boolean = false,
     val locked: Boolean = false,
     val connectionAvailable: Boolean = false,
+    val recordingHost: RecordingHost? = null,
 ) {
+    val recordingAvailable: Boolean
+        get() =
+            !locked &&
+                !password &&
+                !blocked &&
+                connectionAvailable &&
+                (identity?.displayId == 0 || recordingHost?.displayId == 0)
+
     val composing: Boolean
         get() = composingStart >= 0 || composingEnd >= 0
 }

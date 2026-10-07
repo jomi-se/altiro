@@ -23,6 +23,7 @@ import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
 import org.altiro.core.RecognitionWindow
+import org.altiro.core.ResultDelivery
 import org.altiro.core.Session
 import org.altiro.core.SessionEvent
 import org.altiro.core.SessionId
@@ -111,7 +112,10 @@ class DictationController(private val context: Context) {
     fun isDisabled(packageName: String): Boolean = packageName in mutableHiddenApps.value
 
     fun disableCurrentApp() {
-        val packageName = editor.current.identity?.packageName ?: return
+        val packageName =
+            editor.current.identity?.packageName
+                ?: editor.current.recordingHost?.packageName
+                ?: return
         val disabled = mutableHiddenApps.value + packageName
         preferences.edit().putStringSet("disabled", disabled).apply()
         mutableHiddenApps.value = disabled
@@ -151,6 +155,7 @@ class DictationController(private val context: Context) {
         gpuFirst: Boolean = false,
         windowCompare: Boolean = false,
         dynamicFirst: Boolean = false,
+        delivery: ResultDelivery = ResultDelivery.INSERT,
     ): SessionId? {
         checkMain()
         val state = session.value
@@ -226,7 +231,13 @@ class DictationController(private val context: Context) {
             delay(600_000)
             if (diagnosticGeneration == id.value && !recognition.busy.value) diagnostics.clear()
         }
-        event(SessionEvent.Start(id, if (explicit) null else editor.capture()))
+        event(
+            SessionEvent.Start(
+                id,
+                if (explicit || delivery == ResultDelivery.COPY_ONLY) null else editor.capture(),
+                delivery,
+            )
+        )
         return id
     }
 
@@ -343,6 +354,7 @@ class DictationController(private val context: Context) {
                             val target = session.value.destination
                             if (
                                 target != null &&
+                                    session.value.delivery == ResultDelivery.INSERT &&
                                     editor.blockReason(target) == null &&
                                     insertion != null
                             ) {
@@ -351,7 +363,9 @@ class DictationController(private val context: Context) {
                                 event(
                                     SessionEvent.AwaitUser(
                                         id,
-                                        "Text ready. Focus a field and tap Insert.",
+                                        if (session.value.delivery == ResultDelivery.COPY_ONLY)
+                                            "Copy to paste here"
+                                        else "Text ready. Focus a field and tap Insert.",
                                     )
                                 )
                             }

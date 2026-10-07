@@ -26,6 +26,7 @@ import android.widget.TextView
 import org.altiro.core.EditorState
 import org.altiro.core.Phase
 import org.altiro.core.RecognitionStage
+import org.altiro.core.ResultDelivery
 import org.altiro.core.Session
 import org.altiro.core.Wav
 
@@ -200,6 +201,7 @@ class DictationOverlay(
     private var notice: Notice? = null
     private var undoPackage: String? = null
     private var mode = Mode.IDLE
+    private var copyResult = false
     private var hideAllowed = false
     private var quiet = false
     private var restAnimation: ValueAnimator? = null
@@ -251,7 +253,7 @@ class DictationOverlay(
         primary.setOnClickListener {
             when (mode) {
                 Mode.RECORDING -> controller.stop()
-                Mode.PENDING -> insert()
+                Mode.PENDING -> if (copyResult) copyAndFinish() else insert()
                 Mode.NO_MODEL -> openApp()
                 Mode.IDLE -> record()
                 Mode.WORKING -> Unit
@@ -276,11 +278,11 @@ class DictationOverlay(
             undoPackage = null
             layout.removeCallbacks(clearNotice)
         }
-        val eligible =
-            editor.identity?.displayId == 0 &&
-                editor.connectionAvailable &&
-                !editor.password &&
-                !editor.blocked
+        val eligible = editor.recordingAvailable
+        copyResult =
+            editor.identity == null ||
+                ((session.busy || (session.text != null && !session.attemptConsumed)) &&
+                    session.delivery == ResultDelivery.COPY_ONLY)
         val pending = session.text != null && !session.attemptConsumed
         val now = SystemClock.uptimeMillis()
         val current = notice?.takeIf { now < it.until }
@@ -290,6 +292,7 @@ class DictationOverlay(
             editor.locked ||
                 editor.password ||
                 editor.identity?.displayId?.let { it != 0 } == true ||
+                editor.recordingHost?.displayId?.let { it != 0 } == true ||
                 (!busy && !eligible && !undoing)
         ) {
             close()
@@ -317,7 +320,7 @@ class DictationOverlay(
             when (mode) {
                 Mode.RECORDING -> Face.STOP
                 Mode.WORKING -> Face.PROGRESS
-                Mode.PENDING -> Face.ARROW
+                Mode.PENDING -> if (copyResult) Face.COPY else Face.ARROW
                 Mode.NO_MODEL -> Face.DOWNLOAD
                 Mode.IDLE -> Face.MIC
             }
@@ -334,19 +337,25 @@ class DictationOverlay(
         primary.contentDescription =
             when (mode) {
                 Mode.RECORDING -> "Stop and transcribe"
-                Mode.PENDING -> "Insert transcript in selected field"
+                Mode.PENDING ->
+                    if (copyResult) "Copy transcript to paste yourself"
+                    else "Insert transcript in selected field"
                 Mode.WORKING ->
                     if (modelBusy && !busy) "Preparing model" else "Microphone off; recognizing"
                 Mode.NO_MODEL -> "Install a model in Altiro"
-                Mode.IDLE -> "Start dictation. Drag to move or hide."
+                Mode.IDLE ->
+                    if (copyResult) "Record text to copy. Drag to move or hide."
+                    else "Start dictation. Drag to move or hide."
             }
         primary.stateDescription =
             when (mode) {
                 Mode.RECORDING -> "Recording"
                 Mode.WORKING -> "Processing"
-                Mode.PENDING -> "Text ready; insertion needs your action"
+                Mode.PENDING ->
+                    if (copyResult) "Text ready to copy"
+                    else "Text ready; insertion needs your action"
                 Mode.NO_MODEL -> "No model installed"
-                Mode.IDLE -> "Ready"
+                Mode.IDLE -> if (copyResult) "Copy only here" else "Ready"
             }
 
         val code = controller.language.value
@@ -370,7 +379,8 @@ class DictationOverlay(
                 session.phase == Phase.TRANSCRIBING -> "Preparing"
                 busy -> "Finishing"
                 modelBusy -> "Preparing"
-                mode == Mode.PENDING -> "Insert"
+                mode == Mode.PENDING -> if (copyResult) "Copy" else "Insert"
+                mode == Mode.IDLE && copyResult -> "Copy"
                 else -> ""
             }
         language.textSize = if (phaseText.isEmpty()) 14f else 12f
@@ -388,15 +398,16 @@ class DictationOverlay(
 
         cancel.visibility = if (busy) View.VISIBLE else View.GONE
         cancel.contentDescription = if (recording) "Cancel and discard recording" else "Cancel"
-        copy.visibility = if (mode == Mode.PENDING && eligible) View.VISIBLE else View.GONE
-        discard.visibility = copy.visibility
+        copy.visibility =
+            if (mode == Mode.PENDING && eligible && !copyResult) View.VISIBLE else View.GONE
+        discard.visibility = if (mode == Mode.PENDING && eligible) View.VISIBLE else View.GONE
 
         val persistent =
             when {
                 session.phase == Phase.DISPATCHED_UNCONFIRMED && session.dispatchFailed ->
                     "Insertion uncertain · check the field"
                 session.phase == Phase.FAILED -> session.message ?: "Recognition failed"
-                mode == Mode.PENDING -> session.message
+                mode == Mode.PENDING -> if (copyResult) null else session.message
                 mode == Mode.NO_MODEL && !modelBusy -> "Install a model in Altiro"
                 else -> null
             }
@@ -487,7 +498,10 @@ class DictationOverlay(
 
     /** Explicit hide for the current app with a short Undo; never revives a destination token. */
     private fun hideHere() {
-        val packageName = controller.editor.current.identity?.packageName ?: return
+        val packageName =
+            controller.editor.current.identity?.packageName
+                ?: controller.editor.current.recordingHost?.packageName
+                ?: return
         if (!hideAllowed) return
         // Set the Undo note first: disabling refreshes the editor and renders synchronously.
         notice =
@@ -497,6 +511,17 @@ class DictationOverlay(
         controller.disableCurrentApp()
         render(controller.editor.current, controller.session.value)
         layout.postDelayed(clearNotice, 5000)
+    }
+
+    private fun copyAndFinish() {
+        try {
+            controller.copy()
+        } catch (_: RuntimeException) {
+            showMessage("Couldn't copy · try again")
+            return
+        }
+        controller.discard()
+        showMessage("Copied · paste here")
     }
 
     private fun undoHide() {
@@ -780,6 +805,7 @@ class DictationOverlay(
         STOP,
         PROGRESS,
         ARROW,
+        COPY,
         DOWNLOAD,
     }
 
@@ -938,10 +964,11 @@ class DictationOverlay(
                     canvas.drawCircle(cx, cy, r, p)
                     glyph(canvas, if (face == Face.MIC) Glyph.MIC else Glyph.DOWNLOAD, ink)
                 }
-                Face.ARROW -> {
+                Face.ARROW,
+                Face.COPY -> {
                     p.color = withAlpha(ink, if (isPressed) 210 else 255)
                     canvas.drawCircle(cx, cy, r, p)
-                    glyph(canvas, Glyph.ARROW, chalk)
+                    glyph(canvas, if (face == Face.COPY) Glyph.COPY else Glyph.ARROW, chalk)
                 }
                 Face.STOP -> {
                     p.style = Paint.Style.STROKE

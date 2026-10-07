@@ -21,6 +21,7 @@ enum class EditorVisibilityReason {
     PASSWORD,
     HIDDEN_APP,
     ELIGIBLE,
+    COPY_ONLY,
 }
 
 enum class EditorLookup {
@@ -88,12 +89,13 @@ data class EditorVisibilitySnapshot(
     val packageMatches: Boolean = false,
     val fieldKey: Boolean = false,
     val windowFocused: Boolean = false,
+    val copyOnly: Boolean = false,
 ) {
     fun export(): String =
         "$reason; shown=$shown; lookup=$lookup; input=$input; connection=$connection; " +
             "active=$activeWindow; focusedApp=$focusedApp; appMatches=$focusedAppMatches; " +
             "node=$node; nodeKind=$nodeKind; editable=$editable; focused=$focused; visible=$visible; " +
-            "packageMatches=$packageMatches; fieldKey=$fieldKey; windowFocused=$windowFocused"
+            "packageMatches=$packageMatches; fieldKey=$fieldKey; windowFocused=$windowFocused; copyOnly=$copyOnly"
 }
 
 data class EditorVisibilityEvent(

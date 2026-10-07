@@ -67,3 +67,17 @@ checks plus a content-free visibility timeline. See
 [decision 0013](../decisions/0013-focused-editor-lookup.md). Termux still needs
 positive focused/editable identity; no insertion guard is relaxed. Physical
 execution and the three reported editor results remain pending.
+
+Version 0.5.5 phone feedback identifies two failures: connected TEXT input with
+no accessible focused node, and connected RAW input with a focused noneditable
+host. ChatGPT search/composer and Reddit search fail; Reddit comments work;
+Termux's terminal still fails. The limited ring cannot assign each timestamp to
+an app. All five models are now verified, so further storage resets are not a
+recovery step.
+
+Version 0.5.6 adds a Copy-only recording path, separate from insertion authority.
+See [decision 0014](../decisions/0014-copy-only-editor-recovery.md). A matching
+connected input can record while a destination remains unavailable. RAW delivery
+is always Copy-only, including after changing fields. Clipboard write is explicit;
+Altiro never pastes or sends terminal text. Phone visibility and usable Copy
+recovery still need confirmation, so this issue remains in progress.

@@ -26,7 +26,11 @@ import org.altiro.core.EditorVisibilityReason
 import org.altiro.core.EditorVisibilitySnapshot
 import org.altiro.core.EditorWindowKind
 import org.altiro.core.Phase
+import org.altiro.core.RecordingHost
+import org.altiro.core.RecordingHostEvidence
+import org.altiro.core.ResultDelivery
 import org.altiro.core.SessionEvent
+import org.altiro.core.supportsCopyOnlyRecording
 import org.altiro.core.windowChangeInvalidatesDestination
 
 class DictationAccessibilityService : AccessibilityService() {
@@ -231,6 +235,7 @@ class DictationAccessibilityService : AccessibilityService() {
         val identifiable =
             node != null &&
                 editorInfo != null &&
+                editorInfo.inputType != InputType.TYPE_NULL &&
                 node.isEditable &&
                 node.isFocused &&
                 node.isVisibleToUser &&
@@ -251,6 +256,37 @@ class DictationAccessibilityService : AccessibilityService() {
             } else {
                 null
             }
+        val connectionAvailable = ::method.isInitialized && method.currentInputConnection != null
+        val password = node?.isPassword == true || isPassword(editorInfo?.inputType ?: 0)
+        val blocked = packageName?.let(controller::isDisabled) ?: false
+        val recordingHost =
+            if (
+                identity == null &&
+                    packageName != null &&
+                    focusedApp != null &&
+                    supportsCopyOnlyRecording(
+                        RecordingHostEvidence(
+                            input = inputKind(editorInfo?.inputType),
+                            connection = connectionAvailable,
+                            focusedAppMatches = focusedPackage == packageName,
+                            defaultDisplay = focusedApp.displayId == 0,
+                            appVisible = focusedRoot?.isVisibleToUser == true,
+                            nodePresent = node != null,
+                            nodeMatches =
+                                node?.isFocused == true &&
+                                    node.isVisibleToUser &&
+                                    node.packageName?.toString() == packageName &&
+                                    window?.isFocused == true &&
+                                    window.id == focusedApp.id &&
+                                    window.type == AccessibilityWindowInfo.TYPE_APPLICATION,
+                            password = password,
+                            locked = locked,
+                            hidden = blocked,
+                        )
+                    )
+            )
+                RecordingHost(packageName, focusedApp.id, focusedApp.displayId)
+            else null
         val state =
             EditorState(
                 identity,
@@ -259,15 +295,15 @@ class DictationAccessibilityService : AccessibilityService() {
                 composingStart,
                 composingEnd,
                 compositionKnown = compositionKnown,
-                password = node?.isPassword == true || isPassword(editorInfo?.inputType ?: 0),
-                blocked = packageName?.let(controller::isDisabled) ?: false,
+                password = password,
+                blocked = blocked,
                 locked = locked,
-                connectionAvailable =
-                    ::method.isInitialized && method.currentInputConnection != null,
+                connectionAvailable = connectionAvailable,
+                recordingHost = recordingHost,
             )
         controller.editor.observe(state)
         controller.editorLabel.value =
-            if (identity != null) identity.packageName else "No eligible field"
+            identity?.packageName ?: recordingHost?.packageName ?: "No eligible field"
         if (locked && controller.session.value.busy) controller.cancel()
         overlay?.render(state, controller.session.value)
         // Fixed, content-free codes only: never package names, field ids or text.
@@ -277,6 +313,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 editorInfo == null -> EditorVisibilityReason.NO_INPUT_START
                 state.password -> EditorVisibilityReason.PASSWORD
                 state.blocked -> EditorVisibilityReason.HIDDEN_APP
+                recordingHost != null -> EditorVisibilityReason.COPY_ONLY
                 node == null -> EditorVisibilityReason.NO_FOCUS_NODE
                 !node.isEditable -> EditorVisibilityReason.NOT_EDITABLE
                 !node.isFocused -> EditorVisibilityReason.NOT_FOCUSED
@@ -313,6 +350,7 @@ class DictationAccessibilityService : AccessibilityService() {
                 packageMatches = node != null && node.packageName?.toString() == packageName,
                 fieldKey = editorInfo != null && (editorInfo.fieldId != 0 || !name.isNullOrBlank()),
                 windowFocused = window?.isFocused == true,
+                copyOnly = recordingHost != null,
             )
         // Only a positively matched, started external input can replace this snapshot.
         // INPUT_FINISH/returning to Altiro remain in the timeline but cannot erase it.
@@ -399,6 +437,7 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun dispatch(explicit: Boolean) {
         refreshEditor()
         val session = controller.session.value
+        if (session.delivery == ResultDelivery.COPY_ONLY) return
         val id = session.id ?: return
         val text = session.text?.takeIf(String::isNotBlank) ?: return
         if (session.attemptConsumed || session.phase !in setOf(Phase.READY, Phase.AWAITING_USER))
@@ -428,6 +467,7 @@ class DictationAccessibilityService : AccessibilityService() {
         }
         // Mark consumed before the cross-process mutation. Never retry on uncertainty.
         controller.event(SessionEvent.Dispatch(id))
+        if (!controller.session.value.attemptConsumed) return
         try {
             connection.commitText(text, 1, null)
         } catch (_: RuntimeException) {
@@ -438,14 +478,7 @@ class DictationAccessibilityService : AccessibilityService() {
     private fun openRecording() {
         refreshEditor()
         val current = controller.editor.current
-        if (
-            current.identity?.displayId != 0 ||
-                !current.connectionAvailable ||
-                current.password ||
-                current.blocked ||
-                current.locked
-        )
-            return
+        if (!current.recordingAvailable) return
         if (RecordingPreferences(this).recordInPlace) {
             if (
                 checkSelfPermission(Manifest.permission.RECORD_AUDIO) !=
@@ -454,7 +487,9 @@ class DictationAccessibilityService : AccessibilityService() {
                 overlay?.showMessage("Microphone not allowed", "Open Altiro", ::openApp)
                 return
             }
-            val id = controller.begin(explicit = false) ?: return
+            val delivery =
+                if (current.identity == null) ResultDelivery.COPY_ONLY else ResultDelivery.INSERT
+            val id = controller.begin(explicit = false, delivery = delivery) ?: return
             try {
                 startForegroundService(
                     DictationRecordingService.intent(this, DictationRecordingService.START, id)
@@ -476,7 +511,9 @@ class DictationAccessibilityService : AccessibilityService() {
         controller.editor.invalidate()
         try {
             startActivity(
-                Intent(this, RecordingActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                Intent(this, RecordingActivity::class.java)
+                    .putExtra("copy-only", controller.editor.current.identity == null)
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             )
         } catch (_: RuntimeException) {
             // System background-activity restrictions may suppress or reject the launch.
