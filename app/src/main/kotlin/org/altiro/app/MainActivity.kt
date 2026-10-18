@@ -176,6 +176,13 @@ class MainActivity : ComponentActivity() {
                                                 )
                                         )
                                     },
+                                    { first ->
+                                        launchComparison(
+                                            "compare-precision-backends",
+                                            "gpu-first",
+                                            first,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -331,7 +338,7 @@ internal fun HomeContent(
                         Spacer(Modifier.width(8.dp))
                         Text("Download · ${(selected.spec.bytes+500_000)/1_000_000} MB")
                     }
-                else TextButton(onClick = models) { Text("Import Chilean model") }
+                else TextButton(onClick = models) { Text("Import model") }
             }
         }
     }
@@ -502,6 +509,11 @@ internal fun MicrophoneDial(
 
 @Composable
 internal fun LanguageControls(controller: DictationController) {
+    val selected by controller.models.selected.collectAsState()
+    if (selected.engine == org.altiro.core.RecognitionEngine.TRANSCRIBEPSY) {
+        Text("Auto · EN, ES, FR +5", style = MaterialTheme.typography.labelLarge)
+        return
+    }
     val language by controller.language.collectAsState()
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
@@ -634,7 +646,7 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
             Modifier.fillMaxWidth()
                 .selectable(
                     profile.spec.id == selected.spec.id,
-                    enabled = available,
+                    enabled = available && controller.models.supported(profile),
                     role = Role.RadioButton,
                 ) {
                     controller.selectModel(profile.spec.id)
@@ -643,7 +655,11 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RadioButton(profile.spec.id == selected.spec.id, onClick = null, enabled = available)
+            RadioButton(
+                profile.spec.id == selected.spec.id,
+                onClick = null,
+                enabled = available && controller.models.supported(profile),
+            )
             Column(Modifier.weight(1f)) {
                 Text(profile.name, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -655,7 +671,7 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     }
     var info by rememberSaveable { mutableStateOf(false) }
-    if (selected.experimental && selected.spec.id !in installed)
+    if (selected.experimental && selected.download == null && selected.spec.id !in installed)
         Text("Experimental · verified file import only", style = MaterialTheme.typography.bodySmall)
     Text(Uri.parse(selected.sourceUrl).host.orEmpty(), style = MaterialTheme.typography.bodySmall)
     if (selected.download != null && selected.spec.id !in installed)
@@ -710,7 +726,10 @@ internal fun ResultControls(controller: DictationController) {
             "${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop",
             style = MaterialTheme.typography.bodySmall,
         )
-        if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE)
+        if (
+            diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE &&
+                diagnostic?.engines?.all { it == org.altiro.core.RecognitionEngine.WHISPER } == true
+        )
             LinearProgressIndicator(progress = { progress / 100f })
         else LinearProgressIndicator()
         OutlinedButton(onClick = controller::cancel) { Text("Cancel") }

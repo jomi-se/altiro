@@ -59,6 +59,7 @@ class WorkerIsolationTest {
             assertTrue(connected.await(20, TimeUnit.SECONDS))
             remote!!.run(
                 1,
+                "WHISPER",
                 "missing-model",
                 "missing-audio",
                 "es",

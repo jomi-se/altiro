@@ -31,6 +31,7 @@ internal fun SettingsContent(
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
     val modelBusy by controller.models.busy.collectAsState()
+    val selected by controller.models.selected.collectAsState()
     val available = !session.busy && !nativeBusy && !modelBusy
     val context = LocalContext.current
     val preferences = remember { RecordingPreferences(context) }
@@ -136,19 +137,21 @@ internal fun SettingsContent(
             )
         }
     }
-    SettingsToggle(
-        "Flash Attention",
-        flash,
-        available && backend == RecognitionBackend.VULKAN,
-        controller::selectFlashAttention,
-    )
-    SettingsToggle(
-        "Dynamic window · up to 30s",
-        dynamic,
-        available,
-        controller::selectDynamicWindow,
-    )
-    VocabularyContent(controller)
+    if (selected.engine == org.altiro.core.RecognitionEngine.WHISPER) {
+        SettingsToggle(
+            "Flash Attention",
+            flash,
+            available && backend == RecognitionBackend.VULKAN,
+            controller::selectFlashAttention,
+        )
+        SettingsToggle(
+            "Dynamic window · up to 30s",
+            dynamic,
+            available,
+            controller::selectDynamicWindow,
+        )
+        VocabularyContent(controller)
+    }
     if (!available)
         Text("Settings locked during dictation.", style = MaterialTheme.typography.bodySmall)
 
@@ -244,6 +247,7 @@ internal fun ComparisonTools(
     compareBackends: (Boolean) -> Unit,
     compareWindows: (Boolean) -> Unit,
     compareModels: (List<String>) -> Unit,
+    comparePrecisions: (Boolean) -> Unit,
 ) {
     var expanded by rememberSaveable { mutableStateOf(false) }
     var mode by rememberSaveable { mutableIntStateOf(0) }
@@ -254,6 +258,11 @@ internal fun ComparisonTools(
     val modelBusy by controller.models.busy.collectAsState()
     val installed by controller.models.installed.collectAsState()
     val selected by controller.models.selected.collectAsState()
+    val psy = selected.engine == org.altiro.core.RecognitionEngine.TRANSCRIBEPSY
+    LaunchedEffect(selected.engine) {
+        extraIds = emptySet()
+        if (psy && mode == 2) mode = 0
+    }
     val available = !session.busy && !nativeBusy && !modelBusy && session.text == null
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     TextButton(onClick = { expanded = !expanded }) {
@@ -261,31 +270,42 @@ internal fun ComparisonTools(
     }
     if (!expanded) return
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-        for ((index, label) in listOf("Models", "CPU / GPU", "Windows").withIndex()) {
+        for ((index, label) in listOf("Formats", "CPU / GPU", "Windows", "4-way").withIndex()) {
             FilterChip(
                 selected = mode == index,
-                enabled = available,
+                enabled = available && !(psy && index == 2),
                 onClick = { mode = index },
                 label = { Text(label) },
                 modifier = Modifier.heightIn(min = 48.dp),
             )
         }
     }
-    val ids = listOf(ModelStore.SMALL_Q8, ModelStore.SMALL_FP16) + extraIds.sorted()
+    val ids =
+        controller.models.precisionIds() + if (psy || mode == 3) emptyList() else extraIds.sorted()
     if (mode == 0) {
-        Text("Small Q8 + FP16", style = MaterialTheme.typography.bodyMedium)
-        for (profile in controller.models.profiles.filter { it.experimental }) {
+        Text(
+            if (psy) "TranscribePsy Q8 + FP16" else "Small Q8 + FP16",
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        for (profile in
+            controller.models.profiles.filter {
+                !psy && it.experimental && it.engine == org.altiro.core.RecognitionEngine.WHISPER
+            }) {
             SettingsToggle(profile.name, profile.spec.id in extraIds, available) {
                 extraIds = if (it) extraIds + profile.spec.id else extraIds - profile.spec.id
             }
         }
     } else {
-        Text(selected.name, style = MaterialTheme.typography.bodyMedium)
-        SettingsToggle(if (mode == 1) "GPU first" else "Dynamic first", reverse, available) {
+        Text(
+            if (mode == 3) "${selected.engine.label} · Q8 / FP16 × CPU / GPU" else selected.name,
+            style = MaterialTheme.typography.bodyMedium,
+        )
+        SettingsToggle(if (mode == 2) "Dynamic first" else "GPU first", reverse, available) {
             reverse = it
         }
     }
-    val modelsReady = if (mode == 0) ids.all { it in installed } else selected.spec.id in installed
+    val modelsReady =
+        if (mode == 0 || mode == 3) ids.all { it in installed } else selected.spec.id in installed
     if (!modelsReady)
         Text("Install the selected models first.", style = MaterialTheme.typography.bodySmall)
     Text(
@@ -298,6 +318,7 @@ internal fun ComparisonTools(
             when (mode) {
                 0 -> compareModels(ids)
                 1 -> compareBackends(reverse)
+                3 -> comparePrecisions(reverse)
                 else -> compareWindows(reverse)
             }
         },

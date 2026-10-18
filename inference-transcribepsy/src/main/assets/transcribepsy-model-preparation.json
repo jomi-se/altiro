@@ -1,0 +1,49 @@
+{
+  "schemaVersion": 1,
+  "runtimeRevision": "364ec36130dc87d2cd46e596598268a6e3313751",
+  "runtimeArchiveSha256": "1d90e51ac738cd08a57625e228be6094a2dfc8b27a1edf431e065031cd71dcdb",
+  "checkpointRevision": "ccf70de9ff9848f5cd5975adda1370ce4addf6f1",
+  "checkpointSha256": "0acdaf1e1ebf09094400263006d134d33b0ebb871ebb064253cfd3a7c528903c",
+  "checkpointBytes": 1016791040,
+  "conversion": {
+    "torch": "2.9.1",
+    "gguf": "0.17.1",
+    "sentencepiece": "0.2.1",
+    "description": "TranscribePsy-250M-EU-sub, FastConformer-TDT speech recognition",
+    "numpy": "2.5.1",
+    "PyYAML": "6.0.1"
+  },
+  "q8ReproducesPublishedBytes": true,
+  "outputs": [
+    {
+      "id": "transcribepsy-q8",
+      "filename": "transcribepsy-250m-eu-sub.gguf",
+      "bytes": 304879584,
+      "sha256": "a93ef324d38e410b5e49389db95d06364eddbb890b74a69f311e482d2fda6f4b"
+    },
+    {
+      "id": "transcribepsy-fp16",
+      "filename": "transcribepsy-250m-eu-sub-f16.gguf",
+      "bytes": 569843744,
+      "sha256": "8f7979ea43009169708acb2d4489a3e7f7c2197f63c8b8cee03c060fe69815f3"
+    }
+  ],
+  "licenseTexts": [
+    {
+      "asset": "TranscribePsy-NOTICE.txt",
+      "sha256": "fbbbe7c71170cacd9c5c5c1baffb9403d0f24d7ce56ff7f3b9296a7693c89327"
+    },
+    {
+      "asset": "TranscribePsy-dr_wav-MIT-0.txt",
+      "sha256": "c490065ca56eaead018846ea37efdda18c69184440a4d922652e5fbdc0130dfc"
+    },
+    {
+      "asset": "TranscribePsy-ggml-MIT.txt",
+      "sha256": "94f29bbed6a22c35b992c5c6ebf0e7c92f13b836b90f36f461c9cf2f0f1d010d"
+    },
+    {
+      "asset": "TranscribePsy-runtime-Apache-2.0.txt",
+      "sha256": "b3d93544983502f226707a106525dd81127839d41591fa0fdac5e82068515648"
+    }
+  ]
+}

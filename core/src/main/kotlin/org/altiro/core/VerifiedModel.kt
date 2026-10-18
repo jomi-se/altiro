@@ -13,7 +13,7 @@ data class ModelSpec(
     val sha256: String,
 ) {
     init {
-        require(bytes in 1..500_000_000)
+        require(bytes in 1..1_073_741_824)
         require(sha256.matches(Regex("[0-9a-f]{64}")))
     }
 }

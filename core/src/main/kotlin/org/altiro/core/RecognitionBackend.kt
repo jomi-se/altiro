@@ -35,6 +35,9 @@ enum class RuntimeFailure {
     OUT_OF_MEMORY,
     DEVICE_LOST,
     VOCABULARY_INVALID,
+    CPU_UNSUPPORTED,
+    GRAPH_UNSUPPORTED,
+    ENGINE_OPTIONS_UNSUPPORTED,
 }
 
 enum class WorkerExitReason {
@@ -74,6 +77,19 @@ data class RuntimeDetails(
     val window: RecognitionWindow = RecognitionWindow.FULL,
     val audioContextFrames: Int? = null,
     val languageDetectionContextFrames: Int? = null,
+    val engine: RecognitionEngine = RecognitionEngine.WHISPER,
+    val nativeBackend: String? = null,
+    val encoderBackend: String? = null,
+    val decoderBackend: String? = null,
+    val cpuFp16: Boolean? = null,
+    val cpuDotprod: Boolean? = null,
+    val cpuI8mm: Boolean? = null,
+    val graphChecks: Int? = null,
+    val unsupportedOps: Int? = null,
+    val preprocessMillis: Long? = null,
+    val totalMillis: Long? = null,
+    val sampledPeakPssKiB: Long? = null,
+    val unsupportedOp: String? = null,
 ) {
     init {
         require(modelId.matches(Regex("[a-z0-9-]{1,80}")))
@@ -86,9 +102,26 @@ data class RuntimeDetails(
         require(audioContextFrames == null || audioContextFrames in 1..1500)
         require(languageDetectionContextFrames == null || languageDetectionContextFrames in 0..1500)
         require(
-            listOf(encodeMillis, decodeMillis, batchMillis, promptMillis, sampleMillis).all {
-                it == null || it in 0..3_600_000
+            listOf(nativeBackend, encoderBackend, decoderBackend).all {
+                it == null || it.matches(Regex("[A-Za-z0-9 ._()+:-]{1,96}"))
             }
+        )
+        require(unsupportedOp == null || unsupportedOp.matches(Regex("[A-Za-z0-9 ._()+:-]{1,96}")))
+        require(listOf(graphChecks, unsupportedOps).all { it == null || it in 0..1_000_000 })
+        require(sampledPeakPssKiB == null || sampledPeakPssKiB in 0..67_108_864)
+        require(
+            listOf(
+                    encodeMillis,
+                    decodeMillis,
+                    batchMillis,
+                    promptMillis,
+                    sampleMillis,
+                    preprocessMillis,
+                    totalMillis,
+                )
+                .all {
+                    it == null || it in 0..3_600_000
+                }
         )
     }
 
@@ -102,7 +135,30 @@ data class RuntimeDetails(
             )
         }
         vulkanResult?.let { appendLine("Vulkan result code: $it") }
-        gpuActive?.let { appendLine("GPU backend initialized in Whisper context: $it") }
+        gpuActive?.let { appendLine("GPU backend initialized in ${engine.label} context: $it") }
+        if (engine == RecognitionEngine.TRANSCRIBEPSY) {
+            appendLine(
+                "Native backend: $nativeBackend; encoder: $encoderBackend; decoder: $decoderBackend"
+            )
+            appendLine(
+                "CPU features: FP16=$cpuFp16; dotprod=$cpuDotprod; i8mm=$cpuI8mm (not required by this build)"
+            )
+            appendLine(
+                "Graph support checks: $graphChecks; unsupported operations: $unsupportedOps"
+            )
+            sampledPeakPssKiB?.let { appendLine("Sampled peak process PSS: $it KiB") }
+            unsupportedOp
+                ?.takeIf { it != "NONE" }
+                ?.let { appendLine("First unsupported operation (type and shape): $it") }
+            appendLine("Completed graphs: encoder=$encodeCalls; decoder=$decodeCalls")
+            appendLine(
+                "TranscribePsy window cap: 30s; short audio uses native length; language detection automatic"
+            )
+            if (preprocessMillis != null)
+                appendLine(
+                    "TranscribePsy timings (ms): preprocess=$preprocessMillis; encode=$encodeMillis; decode=$decodeMillis; inference total=$totalMillis"
+                )
+        }
         flashAttention?.let { appendLine("Flash Attention enabled in Whisper context: $it") }
         audioContextFrames?.let {
             appendLine(
@@ -125,8 +181,9 @@ data class RuntimeDetails(
                 "Vulkan devices: $deviceCount; storage16: $storage16; shaderFloat16: $shaderFloat16; shaderInt8: $shaderInt8"
             )
         }
-        encodeCalls?.let { appendLine("Whisper calls: encoder=$it; decoder=$decodeCalls") }
-        if (encodeMillis != null) {
+        if (engine == RecognitionEngine.WHISPER)
+            encodeCalls?.let { appendLine("Whisper calls: encoder=$it; decoder=$decodeCalls") }
+        if (engine == RecognitionEngine.WHISPER && encodeMillis != null) {
             appendLine(
                 "Whisper counters (ms): encode=$encodeMillis; decode=$decodeMillis; batch=$batchMillis; " +
                     "prompt=$promptMillis; sample=$sampleMillis"

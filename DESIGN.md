@@ -116,6 +116,13 @@ components:
 
 # Design System: Altiro
 
+The TranscribePsy experiment uses the existing model rows and Settings processor
+control. Engine selection stays in Models; Console exposes format/processor
+comparisons. Its language slot reads Auto and does not offer unsupported fixed
+languages; Whisper-only controls disappear for that selection. Processing uses
+indeterminate motion because this runtime has no trustworthy percentage signal.
+The overlay geometry, recording target and insertion interaction stay unchanged.
+
 ## Overview
 
 **Creative North Star: "The quiet microphone"**

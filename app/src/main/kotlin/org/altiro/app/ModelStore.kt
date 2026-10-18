@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import org.altiro.core.ModelSpec
+import org.altiro.core.RecognitionEngine
 import org.altiro.core.RecognitionInput
 import org.altiro.core.VerifiedModel
 import org.altiro.network.DownloadCancellation
@@ -31,6 +32,7 @@ data class ModelProfile(
     val download: java.net.URI? = null,
     val licenseUrl: String = "",
     val attribution: String = "",
+    val engine: RecognitionEngine = RecognitionEngine.WHISPER,
 ) {
     val downloadHost: String?
         get() = download?.host
@@ -60,33 +62,34 @@ data class ModelCheckTiming(
 
 class ModelStore(private val context: Context) {
     val profiles: List<ModelProfile> =
-        JSONObject(
-                context.assets.open("whisper-models.json").bufferedReader().use { it.readText() }
-            )
-            .getJSONArray("models")
-            .let { models ->
-                List(models.length()) { index ->
-                    val item = models.getJSONObject(index)
-                    ModelProfile(
-                        ModelSpec(
-                            item.getString("id"),
-                            item.getLong("bytes"),
-                            item.getString("sha256"),
-                        ),
-                        item.getString("displayName"),
-                        item.getString("filename"),
-                        item.getString("sourceUrl"),
-                        item.getString("description"),
-                        item.getBoolean("experimental"),
-                        ModelSourcePolicy.directDownload(
-                            item.getString("sourceUrl"),
+        listOf("whisper-models.json", "transcribepsy-models.json").flatMap { asset ->
+            JSONObject(context.assets.open(asset).bufferedReader().use { it.readText() })
+                .getJSONArray("models")
+                .let { models ->
+                    List(models.length()) { index ->
+                        val item = models.getJSONObject(index)
+                        ModelProfile(
+                            ModelSpec(
+                                item.getString("id"),
+                                item.getLong("bytes"),
+                                item.getString("sha256"),
+                            ),
+                            item.getString("displayName"),
                             item.getString("filename"),
-                        ),
-                        item.getString("licenseUrl"),
-                        item.getString("attribution"),
-                    )
+                            item.getString("sourceUrl"),
+                            item.getString("description"),
+                            item.getBoolean("experimental"),
+                            ModelSourcePolicy.directDownload(
+                                item.getString("sourceUrl"),
+                                item.getString("filename"),
+                            ),
+                            item.getString("licenseUrl"),
+                            item.getString("attribution"),
+                            RecognitionEngine.valueOf(item.optString("engine", "WHISPER")),
+                        )
+                    }
                 }
-            }
+        }
     private val preferences = context.getSharedPreferences("preferences", Context.MODE_PRIVATE)
     private val initialId =
         preferences.getString("model", null)
@@ -170,7 +173,15 @@ class ModelStore(private val context: Context) {
         context.filesDir.resolve("models/${profile.filename}")
 
     fun snapshot(profile: ModelProfile): RecognitionInput =
-        RecognitionInput(profile.spec, file(profile))
+        RecognitionInput(profile.spec, file(profile), engine = profile.engine)
+
+    fun supported(profile: ModelProfile): Boolean =
+        profile.engine == RecognitionEngine.WHISPER ||
+            "arm64-v8a" in android.os.Build.SUPPORTED_ABIS
+
+    fun precisionIds(): List<String> =
+        if (selected.value.engine == RecognitionEngine.TRANSCRIBEPSY) listOf(PSY_Q8, PSY_FP16)
+        else listOf(SMALL_Q8, SMALL_FP16)
 
     fun select(id: String) {
         checkMain()
@@ -342,7 +353,7 @@ class ModelStore(private val context: Context) {
         }
 
     private fun updateReady() {
-        mutableReady.value = selected.value.spec.id in installed.value
+        mutableReady.value = selected.value.spec.id in installed.value && supported(selected.value)
     }
 
     private fun checkMain() {
@@ -350,6 +361,8 @@ class ModelStore(private val context: Context) {
     }
 
     companion object {
+        const val PSY_Q8 = "transcribepsy-q8"
+        const val PSY_FP16 = "transcribepsy-fp16"
         const val SMALL_Q8 = "whisper-small-q8"
         const val SMALL_FP16 = "whisper-small-fp16"
     }

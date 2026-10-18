@@ -3,6 +3,13 @@ Copyright 2026 Altiro contributors
 
 Repository-owned content is licensed under Apache License 2.0.
 
+The experimental TranscribePsy runtime is pinned to QVAC's commit
+364ec36130dc87d2cd46e596598268a6e3313751 (Apache-2.0), with its vendored ggml
+(MIT) and dr_wav (MIT-0, chosen from its dual license). Exact upstream license
+and notice texts ship in assets/licenses/TranscribePsy-*.
+TranscribePsy EU-sub model weights are separately acquired under the publisher's
+declared Apache-2.0 license. Local FP16 conversion preserves that provenance.
+
 The Android implementation specification was supplied as project guidance and
 adopted into docs/plan/android-dictation/spec.md. Its cited platform documentation
 and upstream projects retain their own licenses.

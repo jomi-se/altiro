@@ -17,6 +17,7 @@
 | NDK | 30.0.16248370 |
 | CMake | 4.1.2 |
 | whisper.cpp | 1.9.4; exact commit/archive SHA-256 pinned in CMake |
+| TranscribePsy | Experimental revision `364ec36130dc87d2cd46e596598268a6e3313751` |
 | Spotless / ktfmt | 8.0.0 / 0.63 |
 
 Pins live in [the version catalog](../gradle/libs.versions.toml). AGP 9 supplies
@@ -87,6 +88,13 @@ They supplement the [physical Gate A procedure](testing/gate-a.md).
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`. Core is pure
 Kotlin. Inference builds the JNI library; the network module implements only explicit model acquisition; remote recognition remains reserved.
+
+`inference-transcribepsy` adds a separate statically linked JNI library for ARM64.
+Its CPU target is `armv8.2-a+dotprod+fp16`, with I8MM/native-host detection and
+dynamic backend loading disabled. Its pinned source receives explicit graph
+support/cancellation hooks through `scripts/patch-transcribepsy.py`; changing
+upstream anchors fails configuration. It shares the pinned Vulkan shader tools,
+but its backend symbols are hidden to avoid interposing on Whisper's ggml fork.
 
 For a host smoke test of the actual production JNI bridge, supply the verified
 base model and a canonical mono PCM16/16 kHz copy of upstream's JFK sample:
@@ -186,3 +194,38 @@ header (strip optional source metadata chunks before supplying it):
 
 These are compatibility checks, not Chilean speech accuracy or Pixel latency
 benchmarks. Real phone validation and release provenance qualification remain.
+
+## Prepare TranscribePsy models
+
+Python 3.12+ and a CPU conversion environment are sufficient; no GPU or training
+is needed. The pinned original checkpoint is approximately 1 GB. Allow several
+GB for weights, dependencies and outputs outside the checkout.
+
+```sh
+python3 -m venv /path/outside/checkout/convert-env
+/path/outside/checkout/convert-env/bin/pip install torch==2.9.1 gguf==0.17.1 sentencepiece==0.2.1 numpy==2.5.1 PyYAML==6.0.1
+/path/outside/checkout/convert-env/bin/python scripts/prepare-transcribepsy.py --output /path/outside/checkout/transcribepsy
+python3 scripts/check-model-manifest.py /path/outside/checkout/transcribepsy/transcribepsy-250m-eu-sub.gguf /path/outside/checkout/transcribepsy/transcribepsy-250m-eu-sub-f16.gguf
+```
+
+The script verifies the runtime archive and original checkpoint, invokes the
+pinned converter and checks exact output sizes/hashes. `--quant f16` or
+`--quant q8_0` limits conversion. Reproduced Q8 is byte-identical to the public
+Q8; FP16 is generated directly from original weights. The preparation manifest
+under `inference-transcribepsy/src/main/assets` records pins and provenance.
+FP16 is import-only until an audited public converted binary is distributed.
+
+To build the production JNI bridge on an ARM64 host supporting dot-product and
+FP16, with JDK 21 and CMake installed:
+
+```sh
+cmake -S inference-transcribepsy/src/main/cpp -B /path/outside/checkout/psy-host -DALTIRO_VULKAN=OFF -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16 -DCMAKE_BUILD_TYPE=Release
+cmake --build /path/outside/checkout/psy-host -j4
+scripts/check-transcribepsy-native.sh /path/outside/checkout/psy-host /path/to/transcribepsy-250m-eu-sub.gguf /path/to/transcribepsy-250m-eu-sub-f16.gguf /path/to/jfk-canonical.wav 'ask not'
+```
+
+This calls the real JNI bridge with both precisions, a reference phrase,
+malformed audio and cancellation. It does not establish Pixel latency or GPU
+support. See [phone acceptance](testing/transcribepsy.md) for the four-way
+same-recording experiment. The existing fail-fast comparison stops on the first
+failed pass, retaining diagnostics rather than partial transcript results.

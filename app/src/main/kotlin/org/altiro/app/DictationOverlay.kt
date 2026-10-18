@@ -367,15 +367,20 @@ class DictationOverlay(
                 Mode.IDLE -> "Ready"
             }
 
-        val code = controller.language.value
+        val code = controller.recognitionLanguage()
         language.text = if (code == "auto") "Auto" else code.uppercase(java.util.Locale.ROOT)
-        slot.isEnabled = mode == Mode.IDLE || mode == Mode.NO_MODEL
+        val automaticLanguage =
+            controller.models.selected.value.engine ==
+                org.altiro.core.RecognitionEngine.TRANSCRIBEPSY
+        slot.isEnabled = !automaticLanguage && (mode == Mode.IDLE || mode == Mode.NO_MODEL)
         slot.layoutParams.width =
             if (slot.isEnabled) dp(48) else LinearLayout.LayoutParams.WRAP_CONTENT
         language.alpha = if (slot.isEnabled) 1f else 0.5f
         slot.contentDescription = "Dictation language ${language.text}"
         slot.stateDescription =
-            if (slot.isEnabled) "Choose dictation language" else "Language fixed for this recording"
+            if (automaticLanguage) "TranscribePsy detects language automatically"
+            else if (slot.isEnabled) "Choose dictation language"
+            else "Language fixed for this recording"
 
         val recordingWarning = recording && session.elapsedSeconds >= Wav.MAX_SECONDS - 30
         val phaseText =

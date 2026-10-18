@@ -1,6 +1,27 @@
 # Current work
 
-Updated: 2026-10-07.
+Updated: 2026-10-18.
+
+Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
+ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen
+four-pass same-recording comparison. Q8 has a pinned in-app download; FP16 is
+reproduced from original weights and imported after exact byte/hash verification.
+Existing Whisper selection and recording/insertion paths stay in place.
+Language detection is automatic for this engine; unsupported Whisper controls
+are hidden. Diagnostics include actual graph backends, unsupported operation
+type/shape, CPU features, completed graph counts and sampled process memory.
+Comparison retains the runner's fail-fast behavior; a failed pass prevents the
+remaining passes and discards comparison transcripts, while timings remain.
+See [the test procedure](../testing/transcribepsy.md). Host JNI smoke tests
+have exercised both precisions on CPU, a reference phrase, malformed audio and
+cancellation. Full host verification passes: 52 core and 8 acquisition tests, Android app/fixture
+builds and lint, instrumentation APK compilation, native page alignment and
+packaged notices. Pixel CPU/GPU performance, memory, cancellation and
+multilingual quality remain unverified.
+
+The maintainer reports improved ordinary insertion before this experiment.
+The earlier comprehensive editor/resource gates remain open. Current work
+targets recognition speed without changing delivery authority.
 
 Version 0.5.9 removes Home's hardcoded “Chilean Small” shortcut, reported as a
 second model selector stuck on Chilean. The remaining capsule and Models radio

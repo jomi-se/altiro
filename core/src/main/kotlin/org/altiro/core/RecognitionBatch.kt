@@ -11,6 +11,7 @@ data class RecognitionInput(
     val flashAttention: Boolean = false,
     val window: RecognitionWindow = RecognitionWindow.FULL,
     val vocabulary: Vocabulary = Vocabulary.EMPTY,
+    val engine: RecognitionEngine = RecognitionEngine.WHISPER,
 )
 
 data class TimedTranscript(

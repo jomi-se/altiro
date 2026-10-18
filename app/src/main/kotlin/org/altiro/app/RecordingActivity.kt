@@ -48,7 +48,10 @@ class RecordingActivity : ComponentActivity() {
                 val compareIds = intent.getStringArrayListExtra("compare-models")
                 val gpuCompare = intent.getBooleanExtra("compare-backends", false)
                 val windowCompare = intent.getBooleanExtra("compare-windows", false)
-                val allReady = if (compareIds != null) compareIds.all { it in installed } else ready
+                val precisionCompare = intent.getBooleanExtra("compare-precision-backends", false)
+                val allReady =
+                    if (precisionCompare) controller.models.precisionIds().all { it in installed }
+                    else if (compareIds != null) compareIds.all { it in installed } else ready
                 Column(
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -57,7 +60,9 @@ class RecordingActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
-                        if (windowCompare) {
+                        if (precisionCompare) {
+                            "Compare precision and processor"
+                        } else if (windowCompare) {
                             "Compare audio windows"
                         } else if (gpuCompare) {
                             "Compare CPU and GPU"
@@ -69,7 +74,9 @@ class RecordingActivity : ComponentActivity() {
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        if (windowCompare) {
+                        if (precisionCompare) {
+                            "Q8 and FP16 on CPU and GPU. Four sequential passes, one recording, no insertion."
+                        } else if (windowCompare) {
                             "One recording uses full and dynamic windows with the same model, processor and attention setting. Record less than 30 seconds. Compare the text, especially sentence endings. Nothing is inserted automatically."
                         } else if (gpuCompare) {
                             "The same ${selected.name} model processes one recording on CPU and Vulkan GPU, sequentially. Nothing is inserted automatically. Keep this screen open while testing."
@@ -142,6 +149,7 @@ class RecordingActivity : ComponentActivity() {
                 gpuFirst = intent.getBooleanExtra("gpu-first", false),
                 windowCompare = intent.getBooleanExtra("compare-windows", false),
                 dynamicFirst = intent.getBooleanExtra("dynamic-first", false),
+                precisionCompare = intent.getBooleanExtra("compare-precision-backends", false),
             ) ?: return
         try {
             startForegroundService(

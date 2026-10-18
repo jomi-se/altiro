@@ -62,7 +62,13 @@ class LocalRecognition(
 
         @Volatile private var bound = false
         private var status = 2
-        private var details = RuntimeDetails(input.spec.id, input.backend, window = input.window)
+        private var details =
+            RuntimeDetails(
+                input.spec.id,
+                input.backend,
+                window = input.window,
+                engine = input.engine,
+            )
         private val text = StringBuilder()
         private val startedWall = System.currentTimeMillis()
         private val death = IBinder.DeathRecipient {
@@ -235,6 +241,7 @@ class LocalRecognition(
                 if (!operation.cancelled.get()) {
                     remote!!.run(
                         1,
+                        input.engine.name,
                         input.file.absolutePath,
                         audio.absolutePath,
                         language,

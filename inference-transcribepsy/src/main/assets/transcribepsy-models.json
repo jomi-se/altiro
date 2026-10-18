@@ -1,0 +1,43 @@
+{
+  "schemaVersion": 1,
+  "models": [
+    {
+      "engine": "TRANSCRIBEPSY",
+      "runtimeFamily": "transcribepsy",
+      "runtimeVersion": "0.1.0",
+      "runtimeRevision": "364ec36130dc87d2cd46e596598268a6e3313751",
+      "languageScope": "8-language multilingual",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "Tether AI Research, TranscribePsy; distilled from NVIDIA Parakeet; QVAC ggml engine",
+      "experimental": true,
+      "id": "transcribepsy-q8",
+      "displayName": "TranscribePsy \u00b7 Q8",
+      "filename": "transcribepsy-250m-eu-sub.gguf",
+      "modelRevision": "92460e0a8e7dc20f2fb126198bdd9eebb9ba2dc7",
+      "sourceUrl": "https://huggingface.co/qvac/TranscribePsy-250M-EU-sub-gguf/resolve/92460e0a8e7dc20f2fb126198bdd9eebb9ba2dc7/transcribepsy-250m-eu-sub.gguf",
+      "bytes": 304879584,
+      "sha256": "a93ef324d38e410b5e49389db95d06364eddbb890b74a69f311e482d2fda6f4b",
+      "description": "Experimental ARM64. English, French, Spanish and five other languages; automatic language detection. CPU or Vulkan. Published Q8 conversion."
+    },
+    {
+      "engine": "TRANSCRIBEPSY",
+      "runtimeFamily": "transcribepsy",
+      "runtimeVersion": "0.1.0",
+      "runtimeRevision": "364ec36130dc87d2cd46e596598268a6e3313751",
+      "languageScope": "8-language multilingual",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://www.apache.org/licenses/LICENSE-2.0",
+      "attribution": "Tether AI Research, TranscribePsy; distilled from NVIDIA Parakeet; QVAC ggml engine",
+      "experimental": true,
+      "id": "transcribepsy-fp16",
+      "displayName": "TranscribePsy \u00b7 FP16",
+      "filename": "transcribepsy-250m-eu-sub-f16.gguf",
+      "modelRevision": "ccf70de9ff9848f5cd5975adda1370ce4addf6f1",
+      "sourceUrl": "https://huggingface.co/qvac/TranscribePsy-250M-EU-sub/tree/ccf70de9ff9848f5cd5975adda1370ce4addf6f1",
+      "bytes": 569843744,
+      "sha256": "8f7979ea43009169708acb2d4489a3e7f7c2197f63c8b8cee03c060fe69815f3",
+      "description": "Experimental ARM64. English, French, Spanish and five other languages; automatic language detection. CPU or Vulkan. Converted from original weights; verified file import."
+    }
+  ]
+}

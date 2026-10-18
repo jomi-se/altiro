@@ -20,6 +20,7 @@ import org.altiro.core.EditorVisibilityDiagnostics
 import org.altiro.core.Phase
 import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
+import org.altiro.core.RecognitionEngine
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
 import org.altiro.core.RecognitionWindow
@@ -155,6 +156,7 @@ class DictationController(private val context: Context) {
         gpuFirst: Boolean = false,
         windowCompare: Boolean = false,
         dynamicFirst: Boolean = false,
+        precisionCompare: Boolean = false,
     ): SessionId? {
         checkMain()
         val state = session.value
@@ -169,13 +171,28 @@ class DictationController(private val context: Context) {
             return null
         if (gpuCompare && (!explicit || compareIds != null)) return null
         if (windowCompare && (!explicit || compareIds != null || gpuCompare)) return null
+        if (precisionCompare && (!explicit || compareIds != null || gpuCompare || windowCompare))
+            return null
+        if (windowCompare && models.selected.value.engine != RecognitionEngine.WHISPER) return null
         val profiles =
-            (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
-                models.profiles.firstOrNull { it.spec.id == id } ?: return null
-            }
-        if (profiles.any { it.spec.id !in models.installed.value }) return null
+            (if (precisionCompare) models.precisionIds()
+                else compareIds ?: listOf(models.selected.value.spec.id))
+                .map { id ->
+                    models.profiles.firstOrNull { it.spec.id == id } ?: return null
+                }
+        if (profiles.any { it.spec.id !in models.installed.value || !models.supported(it) })
+            return null
+        if (profiles.map { it.engine }.distinct().size != 1) return null
         val inputs =
-            if (windowCompare) {
+            if (precisionCompare) {
+                val order =
+                    listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let {
+                        if (gpuFirst) it.reversed() else it
+                    }
+                profiles.flatMap { profile ->
+                    order.map { models.snapshot(profile).copy(backend = it) }
+                }
+            } else if (windowCompare) {
                 val order =
                     listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC).let {
                         if (dynamicFirst) it.reversed() else it
@@ -194,16 +211,27 @@ class DictationController(private val context: Context) {
             }
         val configuredInputs = inputs.map {
             it.copy(
-                vocabulary = vocabulary.value,
-                flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value,
+                vocabulary =
+                    if (it.engine == RecognitionEngine.WHISPER) vocabulary.value
+                    else Vocabulary.EMPTY,
+                flashAttention =
+                    it.engine == RecognitionEngine.WHISPER &&
+                        it.backend == RecognitionBackend.VULKAN &&
+                        flashAttention.value,
                 window =
-                    if (windowCompare) it.window
+                    if (it.engine == RecognitionEngine.TRANSCRIBEPSY) RecognitionWindow.NATIVE
+                    else if (windowCompare) it.window
                     else if (dynamicWindow.value) RecognitionWindow.DYNAMIC
                     else RecognitionWindow.FULL,
             )
         }
-        runPlan = RunPlan(configuredInputs, language.value)
-        comparing.value = compareIds != null || gpuCompare || windowCompare
+        runPlan =
+            RunPlan(
+                configuredInputs,
+                if (profiles.first().engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
+                else language.value,
+            )
+        comparing.value = compareIds != null || gpuCompare || windowCompare || precisionCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
@@ -218,6 +246,7 @@ class DictationController(private val context: Context) {
             configuredInputs.map { it.flashAttention },
             configuredInputs.map { it.window },
             vocabularyTerms = configuredInputs.first().vocabulary.count,
+            engines = configuredInputs.map { it.engine },
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
@@ -418,7 +447,12 @@ class DictationController(private val context: Context) {
     fun selectModel(id: String) {
         if (session.value.busy || recognition.busy.value) return
         models.select(id)
+        refreshSettings?.invoke()
     }
+
+    fun recognitionLanguage(): String =
+        if (models.selected.value.engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
+        else language.value
 
     fun selectLanguage(value: String) {
         require(value in setOf("auto", "en", "fr", "es"))

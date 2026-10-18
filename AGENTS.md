@@ -63,6 +63,15 @@ ordinary screens, and a small View for the accessibility overlay. Use C++ only
 for the inference/JNI boundary. Start with `app`, `core`, `inference-whisper`,
 `network`, and the separate `editor-fixture` application.
 
+The authorized TranscribePsy experiment adds `inference-transcribepsy` as a
+separate pinned, symbol-isolated native runtime. Q8 and original-weight FP16
+are compared on CPU/Vulkan using identical audio. ARM64 CPU flags must omit
+I8MM and retain dot-product/FP16. Language is automatic; Whisper vocabulary,
+Flash Attention and audio-context switches do not apply. Preflight direct GPU
+graphs and report actual execution; never call CPU fallback a GPU success.
+See `docs/decisions/0018-transcribepsy-comparison.md`. Pixel execution/quality
+and speed remain phone gates.
+
 Do not introduce desktop targets, a replacement keyboard, always-listening
 audio, broad screen extraction, cloud accounts, billing, automatic sending,
 automatic cross-provider failover, or a mandatory hosted backend.
