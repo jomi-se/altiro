@@ -8,6 +8,9 @@
 - [0003 — Misleading model selection](0003-misleading-model-selection.md):
   remove Home's fixed Chilean shortcut; selected and recorded model identifiers
   are separate in diagnostic exports. Phone confirmation remains pending.
+- [0004 — Encoder lab backend registration](0004-encoder-lab-backend-registration.md):
+  0.6.1 rejected GPU cases before worker startup; 0.6.2 corrects the frozen
+  diagnostic plan. Phone execution of the corrected GPU cases remains pending.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.

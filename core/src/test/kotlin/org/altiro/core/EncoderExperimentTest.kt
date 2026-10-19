@@ -1,9 +1,80 @@
 package org.altiro.core
 
+import java.io.File
 import org.junit.Assert.*
 import org.junit.Test
 
 class EncoderExperimentTest {
+    private fun input(id: String, backend: RecognitionBackend) =
+        RecognitionInput(
+            ModelSpec(id, 1, "0".repeat(64)),
+            File("unused-$id.gguf"),
+            backend = backend,
+            window = RecognitionWindow.NATIVE,
+            engine = RecognitionEngine.TRANSCRIBEPSY,
+        )
+
+    private fun trace(inputs: List<RecognitionInput>) =
+        RecognitionDiagnostics().apply {
+            begin(
+                "auto",
+                inputs.map { it.spec.id },
+                true,
+                inputs.map { it.backend },
+                windows = inputs.map { it.window },
+                engines = inputs.map { it.engine },
+            )
+        }
+
+    @Test
+    fun labDiagnosticsAdmitEveryCaseForEitherSavedBackendAndBothFormats() {
+        for (saved in RecognitionBackend.entries) for (count in 1..2) {
+            val selected =
+                listOf("transcribepsy-q8", "transcribepsy-fp16").take(count).map {
+                    input(it, saved)
+                }
+            val registered = EncoderExperiment.diagnosticInputs(selected)
+            assertEquals(count * 2, registered.size)
+            val diagnostics = trace(registered)
+            for (reverse in listOf(false, true)) for (model in selected) {
+                for (case in EncoderExperiment.suite(true, true, reverse)) {
+                    // NativeCall publishes this record before it binds the worker.
+                    diagnostics.runtime(
+                        RuntimeDetails(
+                            model.spec.id,
+                            case.backend,
+                            window = model.window,
+                            engine = model.engine,
+                        )
+                    )
+                }
+            }
+            assertEquals(count * 2, diagnostics.report.value!!.runtimes.size)
+            assertTrue(selected.all { it.backend == saved })
+        }
+    }
+
+    @Test
+    fun selectedBackendAloneReproducesRejectionAndLabPlanKeepsIdentityChecks() {
+        val selected = listOf(input("transcribepsy-q8", RecognitionBackend.CPU))
+        val gpu =
+            RuntimeDetails(
+                "transcribepsy-q8",
+                RecognitionBackend.VULKAN,
+                window = RecognitionWindow.NATIVE,
+                engine = RecognitionEngine.TRANSCRIBEPSY,
+            )
+        assertThrows(IllegalArgumentException::class.java) { trace(selected).runtime(gpu) }
+        val diagnostics = trace(EncoderExperiment.diagnosticInputs(selected))
+        diagnostics.runtime(gpu)
+        assertThrows(IllegalArgumentException::class.java) {
+            diagnostics.runtime(gpu.copy(modelId = "unknown-model"))
+        }
+        assertThrows(IllegalArgumentException::class.java) {
+            diagnostics.runtime(gpu.copy(window = RecognitionWindow.FULL))
+        }
+    }
+
     @Test
     fun nativeOptionsAreBoundedAndRejectCommands() {
         for (invalid in

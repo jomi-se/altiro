@@ -1,6 +1,8 @@
 # Encoder lab on a phone
 
-Use Altiro 0.6.1 or later. Select a ready **TranscribePsy** model, open **Console →
+Use Altiro 0.6.2 or later. Version 0.6.1 rejected GPU cases before starting their
+worker when CPU was selected; repeating it cannot produce GPU measurements.
+Select a ready **TranscribePsy** model, open **Console →
 Encoder lab**, and start with **Quick**. Record 10–15 seconds of ordinary speech,
 then Stop. The app runs the cases without further taps. The lab stops recording
 at about 29 seconds; it does not change the normal dictation limit.

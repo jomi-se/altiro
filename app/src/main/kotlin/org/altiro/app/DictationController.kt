@@ -265,15 +265,19 @@ class DictationController(private val context: Context) {
         deliveryStatus.value = "PENDING"
         diagnosticGeneration = id.value
         checkpoint.beginSession()
+        val diagnosticInputs =
+            if (encoderLabMode != 0)
+                org.altiro.core.EncoderExperiment.diagnosticInputs(configuredInputs)
+            else configuredInputs
         diagnostics.begin(
             runPlan!!.language,
-            inputs.map { it.spec.id },
+            diagnosticInputs.map { it.spec.id },
             comparing.value,
-            inputs.map { it.backend },
-            configuredInputs.map { it.flashAttention },
-            configuredInputs.map { it.window },
-            vocabularyTerms = configuredInputs.first().vocabulary.count,
-            engines = configuredInputs.map { it.engine },
+            diagnosticInputs.map { it.backend },
+            diagnosticInputs.map { it.flashAttention },
+            diagnosticInputs.map { it.window },
+            vocabularyTerms = diagnosticInputs.first().vocabulary.count,
+            engines = diagnosticInputs.map { it.engine },
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {

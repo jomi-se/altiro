@@ -95,6 +95,7 @@ class EncoderLab(private val context: Context) {
                 .put("profiled", case.profiled)
                 .put("status", "RUNNING")
                 .put("before", environment())
+                .put("phase", "WORKER_SETUP")
                 .put("samples", JSONArray())
         report.getJSONArray("cases").put(current)
         save()

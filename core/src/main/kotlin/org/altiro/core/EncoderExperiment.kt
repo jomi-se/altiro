@@ -12,6 +12,17 @@ data class EncoderExperiment(
         get() = "$threads:$variant"
 
     companion object {
+        /** Register every backend the lab may dispatch, independent of the saved selection. */
+        fun diagnosticInputs(inputs: List<RecognitionInput>): List<RecognitionInput> {
+            require(inputs.size in 1..2 && inputs.map { it.spec.id }.distinct().size == inputs.size)
+            require(inputs.all { it.engine == RecognitionEngine.TRANSCRIBEPSY })
+            return inputs.flatMap { input ->
+                listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).map { backend ->
+                    input.copy(backend = backend)
+                }
+            }
+        }
+
         fun suite(
             full: Boolean,
             profile: Boolean,

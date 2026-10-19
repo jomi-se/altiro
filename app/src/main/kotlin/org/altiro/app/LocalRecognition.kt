@@ -333,6 +333,8 @@ class LocalRecognition(
             synchronized(guard) {
                 if (details.failure == RuntimeFailure.WORKER_DIED)
                     "WORKER_DIED_${details.workerExit.name}"
+                else if (labCase != null && details.failure == RuntimeFailure.NONE)
+                    "LAB_SETUP_FAILED"
                 else details.failure.name
             }
 
@@ -504,6 +506,7 @@ class LocalRecognition(
                         }
                         val caseIndex = done
                         main.post { update(caseIndex * 100 / (inputs.size * cases.size), case.id) }
+                        diagnostics.selectBackend(current.backend, current.window)
                         val call =
                             NativeCall(
                                 current,
@@ -534,6 +537,7 @@ class LocalRecognition(
                 }
                 emptyList<TimedTranscript>()
             }
+            diagnostics.selectBackend(null)
             audio.delete()
             try {
                 lab.finish(
