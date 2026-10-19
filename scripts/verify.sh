@@ -14,6 +14,9 @@ case "${1:-}" in
     ;;
   --) shift ;;
 esac
+# Deliverable debug APKs must install through Android's ordinary package installer,
+# including when a caller narrows native compilation with an IDE ABI property.
+set -- "$@" -Pandroid.injected.testOnly=false
 # Format before compilation so parallel Gradle tasks never race source edits.
 ./gradlew --no-daemon spotlessApply "$@"
 exec ./gradlew --no-daemon :core:test :network:test checkNativePages checkRuntimeNotices \

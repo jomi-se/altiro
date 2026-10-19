@@ -2,6 +2,13 @@
 
 Updated: 2026-10-19.
 
+The first 0.6.1 APK was unintentionally marked `android:testOnly` by an
+ABI-targeted build, blocking normal tap-to-install updates despite a valid,
+unchanged signing certificate. Verification now explicitly disables that flag,
+checks the packaged binary manifest, and follows AGP's APK artifact providers
+instead of checking an older cached output. Replacement APK installation still
+needs phone confirmation; app data and model imports should be retained.
+
 The maintainer's 0.6.0 Pixel 7 comparisons now establish successful CPU and
 Vulkan encoder/decoder execution for Q8 and FP16 in those trials, with no
 unsupported operations. CPU inference was approximately twice as fast as

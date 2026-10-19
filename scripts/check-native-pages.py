@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Check actual packaged 64-bit ELF LOAD and uncompressed APK alignment."""
+"""Check installable application manifests and packaged 64-bit native alignment."""
 
 from pathlib import Path
 import struct
@@ -7,9 +7,71 @@ import sys
 import zipfile
 
 
+def check_installable_manifest(data: bytes) -> None:
+    """Reject test-only application APKs, reading their compiled manifest."""
+    if len(data) < 8 or struct.unpack_from("<H", data)[0] != 3:
+        raise ValueError("Expected a binary Android manifest")
+    strings = []
+    application = False
+    position = 8
+    while position < len(data):
+        kind, header, size = struct.unpack_from("<HHI", data, position)
+        if header < 8 or size < header or position + size > len(data):
+            raise ValueError("Invalid manifest chunk bounds")
+        end = position + size
+        if kind == 1:
+            count, _, flags, start = struct.unpack_from("<IIII", data, position + 8)
+            if header < 28 or header + 4 * count > size or start > size:
+                raise ValueError("Invalid manifest string pool")
+            strings = []
+            for index in range(count):
+                offset = struct.unpack_from("<I", data, position + header + 4 * index)[0]
+                at = position + start + offset
+                unit = 1 if flags & 256 else 2
+
+                def length(at):
+                    value = int.from_bytes(data[at:at + unit], "little")
+                    high = 1 << (unit * 8 - 1)
+                    if at + unit > end:
+                        raise ValueError("Truncated manifest string")
+                    at += unit
+                    if value & high:
+                        if at + unit > end:
+                            raise ValueError("Truncated manifest string length")
+                        value = ((value & (high - 1)) << (unit * 8)) | int.from_bytes(data[at:at + unit], "little")
+                        at += unit
+                    return value, at
+
+                size_chars, at = length(at)
+                if unit == 1:
+                    size_chars, at = length(at)
+                stop = at + size_chars * unit
+                if stop + unit > end or any(data[stop:stop + unit]):
+                    raise ValueError("Invalid manifest string bounds")
+                strings.append(data[at:stop].decode("utf-8" if unit == 1 else "utf-16-le"))
+        elif kind == 0x102:
+            _, name, first, stride, count = struct.unpack_from("<IIHHH", data, position + 16)
+            if name >= len(strings) or stride < 20 or 16 + first + count * stride > size:
+                raise ValueError("Invalid manifest attribute bounds")
+            if strings[name] == "application":
+                application = True
+                for index in range(count):
+                    at = position + 16 + first + index * stride
+                    namespace, key, _, _, _, value_type, value = struct.unpack_from("<IIIHBBI", data, at)
+                    if key >= len(strings) or (namespace != 0xffffffff and namespace >= len(strings)):
+                        raise ValueError("Invalid manifest attribute name")
+                    if strings[key] == "testOnly" and namespace != 0xffffffff and strings[namespace] == "http://schemas.android.com/apk/res/android":
+                        if value_type != 0x12 or value != 0:
+                            raise ValueError("Application APK is android:testOnly; rebuild for normal installation")
+        position = end
+    if not application:
+        raise ValueError("Manifest has no application")
+
+
 def check_apk(path: Path) -> int:
     count = 0
     with path.open("rb") as archive, zipfile.ZipFile(path) as apk:
+        check_installable_manifest(apk.read("AndroidManifest.xml"))
         for member in apk.infolist():
             if not member.filename.startswith("lib/") or not member.filename.endswith(".so"):
                 continue
@@ -48,6 +110,6 @@ if __name__ == "__main__":
     try:
         for argument in sys.argv[1:]:
             check_apk(Path(argument))
-    except (ValueError, OSError, zipfile.BadZipFile, struct.error) as error:
+    except (ValueError, KeyError, OSError, zipfile.BadZipFile, struct.error) as error:
         print(str(error), file=sys.stderr)
         raise SystemExit(1)

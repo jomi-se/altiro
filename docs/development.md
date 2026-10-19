@@ -83,7 +83,11 @@ by the formatter. The same command runs locally and in CI.
 
 Full verification runs core tests, debug builds, Android lint,
 instrumentation APK compilation, and 16 KiB alignment of bundled native
-libraries. Connected tests execute separately.
+libraries. It also rejects application APKs marked `android:testOnly`, which
+Android's normal package installer cannot install. Verification explicitly
+disables that flag even when an IDE ABI property narrows native compilation;
+packaging checks use that build's actual APK directory. Do not distribute an
+IDE Run APK without this check. Connected tests execute separately.
 They supplement the [physical Gate A procedure](testing/gate-a.md).
 
 Application IDs are `org.altiro.app` and `org.altiro.fixture`. Core is pure
