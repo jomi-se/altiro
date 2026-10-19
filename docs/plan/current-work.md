@@ -2,12 +2,25 @@
 
 Updated: 2026-10-19.
 
+The 0.6.3 physical-phone Full run completed all 40 cases and 160 samples on one
+11.08-second recording. Disk-seeded pipeline caching reduced FP16 first-encoder
+time from 4.445 to 1.542 seconds, and Q8 from 4.754 to 1.818 seconds, in fresh
+workers. The files were approximately 181 KB; nested shader setup fell from
+seconds to 28–44 ms. FP16 weights with F32 accumulation reduced relative RMS
+feature differences from 1.24% to 0.137% at roughly 4% warm-time cost. Q8 CPU
+two-thread encoding remains competitive, but CPU baselines drifted during the
+long run. See the [Full measurement analysis](../research/transcribepsy-performance-investigation.md#full-encoder-lab-phone-follow-up-063).
+The phase-capacity defect is accepted on hardware. Next candidates are persistent
+pipeline caching and preparation during recording, with FP16/F32 accumulation
+for GPU. Their combined implementation, end-to-end latency, resource lifecycle
+and transcription quality still need validation; everyday defaults have not changed.
+
 Version 0.6.3 fixes the lab's [diagnostic phase budget](../issues/0005-encoder-lab-phase-capacity.md),
 with regression coverage of all 40 Full-suite worker lifecycles and elapsed
 timings. The 0.6.2 phone Quick report establishes real GPU execution: 13/16 cases
 completed; the last three hit the ordinary 64-phase trace limit before worker
 startup. The lab now explicitly allows 1,024 phases; ordinary sessions keep 64.
-Phone completion of the corrected long suite remains pending. On the same
+The following Full report confirms the corrected long suite completes. On the same
 7.52-second clip, warm stock FP16 GPU encoding reached 0.834 seconds versus
 1.291 seconds CPU, while the first GPU call spent 4.085 seconds in nested shader
 registration/compilation. See the [measurement analysis](../research/transcribepsy-performance-investigation.md#encoder-lab-phone-follow-up-062).
@@ -43,7 +56,8 @@ first/warm repetitions, CPU threads and Vulkan graph/kernel-routing variants,
 content-free partial reports and an optional timestamp profiler. The decoder
 lookahead proposal remains unimplemented. Everyday runtime defaults are unchanged.
 Host CPU execution checks cover both formats. Physical Quick GPU measurements
-are now available; Full-suite and numerical/quality acceptance remain pending.
+and Full GPU measurements are now available; combined-path numerical/quality
+and product resource/latency acceptance remain pending.
 
 Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
 ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen

@@ -8,7 +8,8 @@ Scope: runtime `364ec36130dc87d2cd46e596598268a6e3313751`, the reviewed Q8/FP16
 EU-sub files, and Altiro 0.6.0. Source anchors below refer to that exact revision.
 The model metadata and code were inspected directly. Phone figures are
 maintainer-reported same-recording comparisons, not a controlled benchmark.
-The follow-up below uses the maintainer's exported 0.6.2 encoder-lab measurements.
+The follow-ups below use the maintainer's exported 0.6.2 and 0.6.3 encoder-lab
+measurements.
 
 ## What the existing phone evidence establishes
 
@@ -90,6 +91,83 @@ encoder; neither number is a speech-error rate or a transcription-quality
 acceptance decision. No decoder or transcript is included in this lab report.
 The Q8 end baseline and profiler are missing, so its drift/hotspot analysis is
 incomplete. No runtime defaults change based on this one short recording.
+
+## Full encoder lab phone follow-up (0.6.3)
+
+The subsequent Full report completed all 40 planned cases and 160 repetitions
+on the same 11.08-second recording, with FP16 first and reverse variant order.
+All cases finished, all sampled outputs were finite, and the final baseline and
+profiler cases are present for both formats. This accepts the two harness fixes;
+it does not establish transcription quality. The suite took about 680 seconds,
+including per-case CPU references and setup, not 680 seconds of dictation latency.
+
+### Disk pipeline cache
+
+These cases keep worker processes fresh and differ in whether the app-managed
+pipeline cache is initially empty or seeded. Driver-managed caches remain
+uncontrolled, but the adjacent pairs and shader timers give strong evidence of
+an effective persisted cache on this phone/runtime.
+
+| Format | Empty-cache first encoder | Seeded-cache first encoder | Shader setup, empty → seeded | Cache file size |
+| --- | ---: | ---: | ---: | ---: |
+| FP16 | 4.445 s | 1.542 s | 2.874 s → 0.028 s | 181,168 bytes |
+| Q8 | 4.754 s | 1.818 s | 3.156 s → 0.044 s | 181,552 bytes |
+
+Both cache cases have identical feature errors within each format. File counts
+change from zero to one for the empty case; seeded cases retain that file.
+Cache creation requests are not hardware compilation counts or explicit hit
+counters: driver pipeline objects still have to be created in each process.
+
+The FP16 warm medians are nearly identical for the pair (1.365 / 1.366 seconds).
+The Q8 warm medians are 1.379 / 1.510 seconds, with wider timing variation late
+in the run. The approximately 2.9-second first-call reduction is predominantly
+shader setup, not a new encoder arithmetic optimization. These figures exclude
+candidate model loading, which still took 0.731 seconds for seeded FP16 and
+0.483 seconds for seeded Q8, plus ordinary IPC/verification and decoder work.
+
+### Precision, kernels and CPU threads
+
+| Candidate | Warm encoder median | Relative RMS feature error against same-format CPU |
+| --- | ---: | ---: |
+| FP16 GPU, stock start | 1.355 s | 1.24% |
+| FP16 GPU, stock end | 1.362 s | 1.24% |
+| FP16 GPU, F32 accumulation | 1.412 s | 0.137% |
+| Q8 GPU, stock start | 1.356 s | 2.04% |
+| Q8 GPU, F32 accumulation | 1.424 s | 1.43% |
+| Q8 CPU, 2 threads | 1.437 s | 0 |
+
+FP16/F32 accumulation is the stronger numerical GPU candidate: roughly nine
+times lower feature difference for a roughly 4% warm-time cost versus stock.
+The weights remain FP16. Shader labels confirm the intended precision route
+changes. Q8 improves with F32 accumulation but remains above the lab's 1% screen.
+These are encoder feature differences, not word-error rates. The precision
+case did not enable the disk cache, so the combined configuration remains unmeasured.
+
+Flash Attention, reordering, direct convolution and submission-budget changes
+do not show a large consistent gain: most GPU warm medians cluster around
+1.33–1.45 seconds. Disabling integer-dot is effectively unchanged, with zero
+integer-dot routes in the stock samples. The profiler attributes 84.5% of FP16
+and 82.2% of Q8 serialized operation intervals to matrix multiplication.
+
+CPU two-thread Q8 is competitive with GPU encoder time. However, the CPU
+four-thread baseline drifts from 1.611 to 2.363 seconds (47%) in the Q8 block;
+FP16 drifts from 1.979 to 2.181 seconds (10%). Battery temperature rises from
+32.3 to 39.2 °C across the suite and Android reports increasing thermal status.
+These are battery readings, not CPU/GPU die temperatures, and do not alone
+attribute the timing changes to throttling. FP16 two threads is slower than
+four in this run; eight threads is very slow for both formats. Do not infer one
+optimal thread count for every format or input from the earlier shorter trials.
+
+### Next product experiment
+
+Persistent pipeline caching plus preparation during recording now has direct
+evidence behind it. FP16 weights with F32 accumulation is a candidate GPU path;
+Q8 CPU remains a useful efficiency baseline. Validate the combined cache and
+precision settings, real transcription quality and end-to-end post-Stop latency.
+Record-time preparation must start capture immediately, preserve one session
+owner, retain the prepared context only through that session, and release it
+on completion/cancellation or worker death. Neither background warm-up nor
+cross-session model residency has been implemented by these measurements.
 
 ## Follow the real timing and execution paths
 

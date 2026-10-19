@@ -1,6 +1,6 @@
 # 0005 — Ordinary diagnostic phase limit aborts later lab cases
 
-Status: in-progress.
+Status: done.
 
 ## Reproduction and impact
 
@@ -26,10 +26,10 @@ runtime callbacks, in both case orders. It checks every worker start/stop is
 retained and processing/elapsed totals remain complete. Separate coverage checks
 the capacity bounds and return to the ordinary budget on the next session.
 
-Physical acceptance remains pending: Quick with both formats and profiling,
-then Full, must retain the final baseline/profiler cases without a setup failure
-caused by the diagnostic phase budget. A real native unsupported operation or
-failure is still an admissible recorded experiment result.
+The subsequent 0.6.3 physical-phone Full report contains all 40 planned cases,
+all marked `FINISHED`, and all 160 encoder samples. Both formats retain their
+final baselines and profiler. This satisfies phase-capacity acceptance; it does
+not establish speech quality or end-to-end product latency for the variants.
 
 Host verification passes: 60 core and 8 acquisition tests, 11 Python checks,
 Android app/fixture builds and lint, test APK compilation, packaged native
