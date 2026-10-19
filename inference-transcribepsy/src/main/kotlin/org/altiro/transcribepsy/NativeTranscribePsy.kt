@@ -20,6 +20,17 @@ class NativeTranscribePsy {
         recognize(handle, modelPath, wavPath, gpu, progress)
             ?.decodeToString(throwOnInvalidSequence = true)
 
+    external fun benchmark(
+        handle: Long,
+        modelPath: String,
+        wavPath: String,
+        gpu: Boolean,
+        threads: Int,
+        variant: Int,
+        cachePath: String,
+        progress: NativeProgress,
+    ): Boolean
+
     private external fun recognize(
         handle: Long,
         modelPath: String,

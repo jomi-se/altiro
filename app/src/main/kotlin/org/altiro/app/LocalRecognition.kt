@@ -39,8 +39,14 @@ class LocalRecognition(
     val busy = mutableBusy.asStateFlow()
     private var active: Operation? = null
 
+    private class WorkerTerminationFailure : IllegalStateException()
+
+    private class WorkerDeadlineFailure : IllegalStateException()
+
     private class Operation(val cancelled: AtomicBoolean = AtomicBoolean()) {
         @Volatile var call: NativeCall? = null
+        @Volatile var terminationUnconfirmed = false
+        @Volatile var parentCompleted = false
     }
 
     private inner class NativeCall(
@@ -50,6 +56,8 @@ class LocalRecognition(
         private val operation: Operation,
         private val diagnostics: RecognitionDiagnostics,
         private val progress: (Int) -> Unit,
+        private val labCase: org.altiro.core.EncoderExperiment? = null,
+        private val labReport: ((String) -> Unit)? = null,
     ) : ServiceConnection {
         private val connected = CountDownLatch(1)
         private val finished = CountDownLatch(1)
@@ -91,6 +99,15 @@ class LocalRecognition(
             died.countDown()
             finished.countDown()
             connected.countDown()
+            main.post {
+                if (active === operation && operation.terminationUnconfirmed) {
+                    operation.terminationUnconfirmed = false
+                    if (operation.parentCompleted) {
+                        active = null
+                        mutableBusy.value = false
+                    }
+                }
+            }
         }
 
         private fun publish() {
@@ -152,6 +169,10 @@ class LocalRecognition(
                 override fun onRuntime(report: String) {
                     synchronized(guard) {
                         if (died.count == 0L || finished.count == 0L) return
+                        if (labCase != null && org.json.JSONObject(report).optBoolean("lab")) {
+                            labReport?.invoke(report)
+                            return
+                        }
                         details =
                             try {
                                 runtimeDetails(details, report)
@@ -249,10 +270,14 @@ class LocalRecognition(
                         input.flashAttention,
                         input.window == RecognitionWindow.DYNAMIC,
                         input.vocabulary.prompt,
+                        labCase?.wire.orEmpty(),
                         callback,
                     )
                     if (operation.cancelled.get()) remote!!.cancel(1)
-                    finished.await()
+                    if (!finished.await(if (labCase == null) 600 else 120, TimeUnit.SECONDS)) {
+                        cancel()
+                        throw WorkerDeadlineFailure()
+                    }
                     check(
                         (status == 0 &&
                             synchronized(guard) { details.failure == RuntimeFailure.NONE }) ||
@@ -295,9 +320,21 @@ class LocalRecognition(
                 // this bound service between CPU/GPU passes. Binder death remains
                 // linked independently of the now-removed ServiceConnection.
                 terminate()
-                if (binder != null) died.await()
+                if (binder != null && !died.await(10, TimeUnit.SECONDS)) {
+                    operation.terminationUnconfirmed = true
+                    // Close the race between await returning and death arriving.
+                    if (died.count == 0L) operation.terminationUnconfirmed = false
+                    if (operation.terminationUnconfirmed) throw WorkerTerminationFailure()
+                }
             }
         }
+
+        fun failureCode(): String =
+            synchronized(guard) {
+                if (details.failure == RuntimeFailure.WORKER_DIED)
+                    "WORKER_DIED_${details.workerExit.name}"
+                else details.failure.name
+            }
 
         fun cancel() {
             try {
@@ -361,21 +398,28 @@ class LocalRecognition(
                     { input ->
                         val current = index++
                         val call =
-                            NativeCall(input, audio, language, operation, diagnostics) { percent ->
-                                main.post {
-                                    if (active === operation && !operation.cancelled.get()) {
-                                        progress(
-                                            (current * 100 + percent) / inputs.size,
-                                            input.spec.id,
-                                        )
+                            NativeCall(
+                                input,
+                                audio,
+                                language,
+                                operation,
+                                diagnostics,
+                                progress = { percent ->
+                                    main.post {
+                                        if (active === operation && !operation.cancelled.get()) {
+                                            progress(
+                                                (current * 100 + percent) / inputs.size,
+                                                input.spec.id,
+                                            )
+                                        }
                                     }
-                                }
-                            }
+                                },
+                            )
                         operation.call = call
                         try {
                             call.run()
                         } finally {
-                            operation.call = null
+                            if (!operation.terminationUnconfirmed) operation.call = null
                         }
                     },
                     phase = { stage, modelId ->
@@ -397,10 +441,124 @@ class LocalRecognition(
             }
             diagnostics.phase(RecognitionStage.WORKER_RELEASE)
             main.post {
-                if (active === operation) active = null
+                finishOperation(operation) {
+                    complete(if (operation.cancelled.get()) Result.success(emptyList()) else result)
+                    checkpoint.save(diagnostics.report.value)
+                }
+            }
+        }
+    }
+
+    fun benchmark(
+        audio: File,
+        inputs: List<RecognitionInput>,
+        diagnostics: RecognitionDiagnostics,
+        lab: EncoderLab,
+        full: Boolean,
+        profile: Boolean,
+        update: (Int, String) -> Unit,
+        complete: (Result<List<TimedTranscript>>) -> Unit,
+    ) {
+        check(Looper.myLooper() == Looper.getMainLooper() && !busy.value)
+        val operation = Operation()
+        val reverse = lab.reverseNextSuite()
+        val orderedInputs = if (reverse) inputs.reversed() else inputs
+        val cases = org.altiro.core.EncoderExperiment.suite(full, profile, reverse)
+        lab.begin(orderedInputs, cases, reverse)
+        active = operation
+        mutableBusy.value = true
+        executor.execute {
+            var result = runCatching {
+                require(audio.length() in 46..960044) { "Lab audio must be at most 30 seconds" }
+                var done = 0
+                for (input in orderedInputs) {
+                    check(
+                        org.altiro.core.VerifiedModel.matches(
+                            input.file,
+                            input.spec,
+                            operation.cancelled::get,
+                        )
+                    )
+                    for (case in cases) {
+                        if (operation.cancelled.get()) break
+                        if (case.id == "gpu-cache-empty")
+                            check(
+                                java.io.File(context.cacheDir, "encoder-lab-vulkan").let {
+                                    !it.exists() || it.deleteRecursively()
+                                }
+                            )
+                        val current = input.copy(backend = case.backend)
+                        lab.startCase(input.spec.id, case)
+                        if (
+                            case.id == "gpu-cache-seeded" &&
+                                java.io
+                                    .File(context.cacheDir, "encoder-lab-vulkan")
+                                    .listFiles()
+                                    ?.any {
+                                        it.isFile && it.name.endsWith(".pcache") && it.length() > 0
+                                    } != true
+                        ) {
+                            lab.endCase("SKIPPED", "CACHE_SEED_UNAVAILABLE")
+                            done++
+                            continue
+                        }
+                        val caseIndex = done
+                        main.post { update(caseIndex * 100 / (inputs.size * cases.size), case.id) }
+                        val call =
+                            NativeCall(
+                                current,
+                                audio,
+                                "auto",
+                                operation,
+                                diagnostics,
+                                progress = {},
+                                labCase = case,
+                                labReport = { lab.accept(it) },
+                            )
+                        operation.call = call
+                        try {
+                            call.run()
+                            lab.endCase(if (operation.cancelled.get()) "CANCELLED" else "FINISHED")
+                        } catch (failure: Exception) {
+                            lab.endCase(
+                                if (operation.cancelled.get()) "CANCELLED" else "WORKER_FAILED",
+                                if (failure is WorkerDeadlineFailure) "CASE_DEADLINE"
+                                else call.failureCode(),
+                            )
+                            if (failure is WorkerTerminationFailure) throw failure
+                        } finally {
+                            if (!operation.terminationUnconfirmed) operation.call = null
+                        }
+                        done++
+                    }
+                }
+                emptyList<TimedTranscript>()
+            }
+            audio.delete()
+            try {
+                lab.finish(
+                    if (operation.cancelled.get()) "CANCELLED"
+                    else if (result.isFailure) "FAILED" else "FINISHED"
+                )
+            } catch (failure: Exception) {
+                result = Result.failure(failure)
+            }
+            main.post {
+                finishOperation(operation) {
+                    complete(if (operation.cancelled.get()) Result.success(emptyList()) else result)
+                }
+            }
+        }
+    }
+
+    private fun finishOperation(operation: Operation, completion: () -> Unit) {
+        try {
+            completion()
+        } finally {
+            operation.parentCompleted = true
+            if (!operation.terminationUnconfirmed && active === operation) {
+                active = null
                 mutableBusy.value = false
-                complete(if (operation.cancelled.get()) Result.success(emptyList()) else result)
-                checkpoint.save(diagnostics.report.value)
             }
         }
     }

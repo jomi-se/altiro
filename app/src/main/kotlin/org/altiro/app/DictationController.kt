@@ -49,6 +49,7 @@ class DictationController(private val context: Context) {
     val models = ModelStore(context)
     val checkpoint = RuntimeCheckpoint(context)
     val recognition = LocalRecognition(context, checkpoint)
+    val encoderLab = EncoderLab(context)
     val progress = MutableStateFlow(0)
     val activeModelName = MutableStateFlow("")
     val lastRun = MutableStateFlow<List<TimedTranscript>>(emptyList())
@@ -59,9 +60,14 @@ class DictationController(private val context: Context) {
     private data class RunPlan(
         val inputs: List<RecognitionInput>,
         val language: String,
+        val labMode: Int = 0,
+        val labProfile: Boolean = false,
     )
 
     private var runPlan: RunPlan? = null
+    val encoderLabActive: Boolean
+        get() = runPlan?.labMode != null && runPlan?.labMode != 0
+
     val processingSeconds = MutableStateFlow(0)
     val language =
         MutableStateFlow(
@@ -157,8 +163,22 @@ class DictationController(private val context: Context) {
         windowCompare: Boolean = false,
         dynamicFirst: Boolean = false,
         precisionCompare: Boolean = false,
+        encoderLabMode: Int = 0,
+        encoderLabBoth: Boolean = false,
+        encoderLabProfile: Boolean = false,
     ): SessionId? {
         checkMain()
+        if (encoderLabMode !in 0..2) return null
+        if (
+            encoderLabMode != 0 &&
+                (!explicit ||
+                    compareIds != null ||
+                    gpuCompare ||
+                    windowCompare ||
+                    precisionCompare ||
+                    models.selected.value.engine != RecognitionEngine.TRANSCRIBEPSY)
+        )
+            return null
         val state = session.value
         if (state.busy || state.phase in setOf(Phase.READY, Phase.AWAITING_USER)) return null
         if (models.busy.value || recognition.busy.value) return null
@@ -175,7 +195,7 @@ class DictationController(private val context: Context) {
             return null
         if (windowCompare && models.selected.value.engine != RecognitionEngine.WHISPER) return null
         val profiles =
-            (if (precisionCompare) models.precisionIds()
+            (if (precisionCompare || (encoderLabMode != 0 && encoderLabBoth)) models.precisionIds()
                 else compareIds ?: listOf(models.selected.value.spec.id))
                 .map { id ->
                     models.profiles.firstOrNull { it.spec.id == id } ?: return null
@@ -230,8 +250,15 @@ class DictationController(private val context: Context) {
                 configuredInputs,
                 if (profiles.first().engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
                 else language.value,
+                encoderLabMode,
+                encoderLabProfile,
             )
-        comparing.value = compareIds != null || gpuCompare || windowCompare || precisionCompare
+        comparing.value =
+            encoderLabMode != 0 ||
+                compareIds != null ||
+                gpuCompare ||
+                windowCompare ||
+                precisionCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
@@ -305,12 +332,14 @@ class DictationController(private val context: Context) {
                 delay(1000)
                 if (session.value.id != id || session.value.phase != Phase.TRANSCRIBING) break
                 processingSeconds.value += 1
-                if (processingSeconds.value >= 600) {
+                if (processingSeconds.value >= if (encoderLabActive) 2400 else 600) {
                     recognition.cancel()
                     event(
                         SessionEvent.Fail(
                             id,
-                            "Recognition exceeded ten minutes. Try a shorter recording.",
+                            if (encoderLabActive)
+                                "Encoder lab reached its time limit. Partial results are in Console."
+                            else "Recognition exceeded ten minutes. Try a shorter recording.",
                         )
                     )
                     context.stopService(Intent(context, DictationRecordingService::class.java))
@@ -323,6 +352,45 @@ class DictationController(private val context: Context) {
             diagnostics.audioDuration(
                 ((audio.length() - 44).coerceAtLeast(0) / 32).coerceAtMost(300_000)
             )
+            if (plan.labMode != 0) {
+                recognition.benchmark(
+                    audio,
+                    plan.inputs,
+                    diagnostics,
+                    encoderLab,
+                    plan.labMode == 2,
+                    plan.labProfile,
+                    { percent, case ->
+                        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                            progress.value = percent
+                            activeModelName.value = case
+                            onProgress(percent)
+                        }
+                    },
+                ) { result ->
+                    if (diagnosticGeneration == id.value)
+                        diagnostics.finish(
+                            if (diagnostics.report.value?.cancellationRequested == true)
+                                DiagnosticOutcome.CANCELLED
+                            else if (result.isFailure) DiagnosticOutcome.FAILED
+                            else DiagnosticOutcome.COMPLETED
+                        )
+                    if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                        if (result.isSuccess) {
+                            progress.value = 100
+                            event(SessionEvent.ComparisonComplete(id))
+                        } else
+                            event(
+                                SessionEvent.Fail(
+                                    id,
+                                    "Encoder lab stopped. Open Console for partial results.",
+                                )
+                            )
+                    }
+                    complete()
+                }
+                return
+            }
             recognition.transcribe(
                 audio,
                 plan.inputs,
@@ -490,6 +558,7 @@ class DictationController(private val context: Context) {
     fun clearDiagnostics() {
         if (session.value.busy || recognition.busy.value) return
         diagnostics.clear()
+        encoderLab.clear()
         editorVisibility.clear()
         lastEditorStatus.value = "NONE"
         checkpoint.clear()

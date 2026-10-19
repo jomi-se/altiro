@@ -11,9 +11,13 @@ phone observations, not controlled latency/quality or comprehensive resource
 acceptance. The [code-level performance investigation](../research/transcribepsy-performance-investigation.md)
 traces lazy pipeline compilation inside encoder timings, matrix types/shapes,
 direct versus lowered convolution, graph optimization and decoder dependencies.
-It proposes measurement/optimization experiments, including exact-prefix frame
-lookahead; none are implemented or accepted runtime defaults. No new APK ships
-with this research increment.
+The encoder experiments now ship behind the opt-in [Encoder lab](../testing/encoder-lab.md)
+in 0.6.1 (decision [0019](../decisions/0019-encoder-lab.md)). One recording drives
+first/warm repetitions, CPU threads and Vulkan graph/kernel-routing variants,
+content-free partial reports and an optional timestamp profiler. The decoder
+lookahead proposal remains unimplemented. Everyday runtime defaults are unchanged.
+Host CPU execution checks cover both formats; physical-phone GPU measurements
+and numerical/quality acceptance of these variants remain pending.
 
 Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
 ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen

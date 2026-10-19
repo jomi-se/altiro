@@ -67,6 +67,7 @@ class WorkerIsolationTest {
                 true,
                 true,
                 "Ñuñoa, 𝔸ltiro",
+                "",
                 object : IRecognitionCallback.Stub() {
                     override fun onProgress(percent: Int) {}
 

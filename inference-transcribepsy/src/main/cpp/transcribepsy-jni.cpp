@@ -66,6 +66,9 @@ struct Progress {
     uint32_t driver = 0;
     int devices = -1, vulkan_result = 0;
     bool storage16 = false, shader_fp16 = false, shader_int8 = false;
+    bool timestamps = false;
+    double timestamp_period_ns = 0;
+    int timestamp_bits_min = -1;
 
     void check_java() {
         if (env->ExceptionCheck()) {
@@ -131,6 +134,19 @@ void probe_vulkan(Progress & progress) {
     progress.devices = static_cast<int>(count);
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(devices[0], &properties);
+    uint32_t queue_count = 0;
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_count, nullptr);
+    std::vector<VkQueueFamilyProperties> queues(queue_count);
+    vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_count, queues.data());
+    // Conservative: every compute queue must support full-width timestamps.
+    // This avoids attributing an unsupported queue or mishandling wraparound.
+    progress.timestamp_period_ns = properties.limits.timestampPeriod;
+    progress.timestamps = properties.limits.timestampPeriod > 0 && queue_count > 0;
+    for (const auto & q : queues) if (q.queueFlags & VK_QUEUE_COMPUTE_BIT) {
+        progress.timestamp_bits_min = progress.timestamp_bits_min < 0 ? static_cast<int>(q.timestampValidBits) : std::min(progress.timestamp_bits_min, static_cast<int>(q.timestampValidBits));
+        progress.timestamps &= q.timestampValidBits == 64;
+    }
+    progress.timestamps &= progress.timestamp_bits_min >= 0;
     for (const char c : std::string(properties.deviceName)) {
         if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') ||
             std::strchr(" ._()+:-", c)) progress.gpu_name += c;
@@ -318,4 +334,170 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_recognize(JNIEnv * env, jobjec
     }
     progress.stage(5);
     return nullptr;
+}
+
+// This entry point is intentionally separate from everyday recognition. A worker
+// retains one model only for this bounded case, and returns no transcript/features.
+#include "encoder-lab.h"
+#include "parakeet_ctc.h"
+#include "mel_preprocess.h"
+#include <cmath>
+#include <cctype>
+#include <cstdlib>
+#include <ctime>
+
+namespace {
+double lab_ms(std::chrono::steady_clock::time_point start) {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now()-start).count();
+}
+double process_ms() {
+    timespec ts{};
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &ts);
+    return ts.tv_sec * 1000.0 + ts.tv_nsec / 1e6;
+}
+void lab_emit(Progress & progress, const std::string & report) {
+    auto value = progress.env->NewStringUTF(report.c_str());
+    if (!value) throw Failure{"OUT_OF_MEMORY"};
+    progress.env->CallVoidMethod(progress.receiver, progress.runtime, value);
+    progress.env->DeleteLocalRef(value);
+    progress.check_java();
+}
+// Only fixed native shader identifiers are admitted into the structured report.
+std::string lab_key(const std::string & key) {
+    std::string safe;
+    for (char c : key) if (std::isalnum(static_cast<unsigned char>(c)) || std::strchr("_:.-x", c)) {
+        safe += c; if (safe.size() == 120) break;
+    }
+    return safe;
+}
+template<typename T> void lab_map(std::ostringstream & out, const char * key, const std::map<std::string, T> & values) {
+    out << ",\"" << key << "\":{";
+    int n = 0;
+    for (const auto & item : values) {
+        if (n++) out << ',';
+        out << '"' << lab_key(item.first) << "\":" << item.second;
+    }
+    out << '}';
+}
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobject, jlong id,
+    jstring model_path, jstring wav_path, jboolean gpu, jint threads, jint variant,
+    jstring cache_path, jobject receiver) {
+    auto op = lookup(id);
+    if (!op || !model_path || !wav_path || !receiver || threads < 1 || threads > 8 || variant < 0 || variant > 10) return false;
+    auto cls = env->GetObjectClass(receiver);
+    Progress progress{env, receiver, op.get(), env->GetMethodID(cls, "onPhase", "(I)V"),
+        env->GetMethodID(cls, "onRuntime", "(Ljava/lang/String;)V")};
+    env->DeleteLocalRef(cls);
+    if (!progress.phase || !progress.runtime) return false;
+    progress.control.gpu = gpu;
+    progress.control.cancelled = &op->cancelled;
+    altiro_run_control = &progress.control;
+    AltiroEncoderLab metrics;
+    altiro_encoder_lab = &metrics;
+    struct ResetLab { ~ResetLab() { altiro_encoder_lab = nullptr; altiro_run_control = nullptr; } } reset;
+    try {
+#if defined(__aarch64__)
+        const auto hw = getauxval(AT_HWCAP);
+        if (!(hw & HWCAP_FPHP) || !(hw & HWCAP_ASIMDHP) || !(hw & HWCAP_ASIMDDP)) throw Failure{"CPU_UNSUPPORTED"};
+#endif
+        if (op->cancelled.load()) throw Failure{"NONE"};
+        UtfChars model(env, model_path), wav(env, wav_path), cache(env, cache_path);
+        if (!model.data || !wav.data || !cache.data) throw Failure{"INVALID_ARGUMENT"};
+        auto audio = read_audio(wav.data, *op);
+        if (audio.empty() || audio.size() > 30 * 16000) throw Failure{"LAB_AUDIO_LIMIT"};
+        if (variant == 10 && audio.size() > 5 * 16000) audio.resize(5 * 16000);
+        if (gpu) { progress.stage(7); probe_vulkan(progress); }
+        std::ostringstream device;
+        device << "{\"lab\":true,\"event\":\"DEVICE\",\"gpu\":\"" << progress.gpu_name
+               << "\",\"vulkan\":\"" << progress.vulkan_version << "\",\"driver\":" << progress.driver
+               << ",\"timestamp_period_ns\":" << progress.timestamp_period_ns << ",\"timestamp_bits_min\":" << progress.timestamp_bits_min
+               << ",\"timestamps_supported\":" << (progress.timestamps ? "true" : "false") << '}';
+        lab_emit(progress, device.str());
+        if (variant == 7) setenv("GGML_VK_DISABLE_INTEGER_DOT_PRODUCT", "1", 1);
+        if (variant == 8 || variant == 9) setenv("GGML_VK_PIPELINE_CACHE_DIR", cache.data, 1);
+        // Profile uses upstream per-operation timestamp queries with serialization.
+        // Queue support is checked before enabling it (no invented zero timings).
+        if (variant == 9) {
+#ifdef ALTIRO_VULKAN
+            if (!progress.timestamps) throw Failure{"TIMESTAMPS_UNAVAILABLE"};
+#endif
+            setenv("GGML_VK_PERF_LOGGER", "1", 1);
+        }
+        progress.stage(2);
+        lab_emit(progress, "{\"lab\":true,\"event\":\"PHASE\",\"phase\":\"REFERENCE\"}");
+        const auto ref_start = std::chrono::steady_clock::now();
+        std::vector<float> mel;
+        std::vector<float> reference;
+        int frames = 0;
+        // Release all reference weights before loading the candidate. Features
+        // stay only in this worker's RAM and never cross Binder or enter logs.
+        {
+            parakeet::ParakeetCtcModel baseline;
+            if (parakeet::load_from_gguf(model.data, baseline, 4, 0, false)) throw Failure{"MODEL_LOAD_FAILED"};
+            if (parakeet::compute_log_mel(audio.data(), static_cast<int>(audio.size()), baseline.mel_cfg, mel, frames)) throw Failure{"PREPROCESS_FAILED"};
+            parakeet::EncoderOutputs out;
+            if (parakeet::run_encoder(baseline, mel.data(), frames, baseline.mel_cfg.n_mels, out, -1, false)) throw Failure{"REFERENCE_FAILED"};
+            reference = std::move(out.encoder_out);
+        }
+        if (op->cancelled.load()) throw Failure{"NONE"};
+        const double reference_ms = lab_ms(ref_start);
+        metrics.variant = variant;
+        lab_emit(progress, "{\"lab\":true,\"event\":\"PHASE\",\"phase\":\"CANDIDATE_LOAD\"}");
+        const auto load_start = std::chrono::steady_clock::now();
+        parakeet::ParakeetCtcModel candidate;
+        if (parakeet::load_from_gguf(model.data, candidate, threads, gpu ? 1 : 0, false)) throw Failure{"MODEL_LOAD_FAILED"};
+        const double load_ms = lab_ms(load_start);
+        const auto backend = parakeet::model_active_backend_name(candidate);
+        if ((gpu && backend.rfind("Vulkan", 0) != 0) || (!gpu && backend != "CPU")) throw Failure{"BACKEND_MISMATCH"};
+        for (int repeat = 0; repeat < 4; ++repeat) {
+            if (op->cancelled.load()) throw Failure{"NONE"};
+            metrics.us.clear(); metrics.counts.clear(); metrics.shaders.clear(); metrics.gpu_ns.clear();
+            metrics.measuring = true;
+            progress.stage(3);
+            lab_emit(progress, "{\"lab\":true,\"event\":\"BEGIN\",\"repeat\":" + std::to_string(repeat) + "}");
+            const auto wall_start = std::chrono::steady_clock::now();
+            const double cpu_start = process_ms();
+            parakeet::EncoderOutputs out;
+            const int rc = parakeet::run_encoder(candidate, mel.data(), frames, candidate.mel_cfg.n_mels, out, -1, false);
+            const double wall_ms = lab_ms(wall_start), cpu_ms = process_ms() - cpu_start;
+            metrics.measuring = false;
+            if (op->cancelled.load()) throw Failure{"NONE"};
+            if (rc || progress.control.unsupported || progress.control.compute_failed) throw Failure{progress.control.unsupported ? "GRAPH_UNSUPPORTED" : "ENCODER_FAILED"};
+            bool finite = !out.encoder_out.empty() && out.encoder_out.size() == reference.size();
+            double sq = 0, ref_sq = 0, max_abs = 0;
+            if (finite) for (size_t i=0; i<reference.size(); ++i) {
+                const double a = out.encoder_out[i], b = reference[i];
+                if (!std::isfinite(a) || !std::isfinite(b)) { finite = false; break; }
+                sq += (a-b)*(a-b); ref_sq += b*b; max_abs = std::max(max_abs, std::abs(a-b));
+            }
+            std::ostringstream json;
+            json.precision(9);
+            json << "{\"lab\":true,\"event\":\"SAMPLE\",\"repeat\":" << repeat
+                 << ",\"wall_ms\":" << wall_ms << ",\"process_cpu_ms\":" << cpu_ms
+                 << ",\"reference_setup_ms\":" << reference_ms << ",\"candidate_load_ms\":" << load_ms
+                 << ",\"audio_ms\":" << audio.size()/16 << ",\"mel_frames\":" << frames
+                 << ",\"encoder_frames\":" << out.n_enc_frames << ",\"width\":" << out.d_model
+                 << ",\"backend\":\"" << backend << "\",\"finite\":" << (finite ? "true" : "false")
+                 << ",\"relative_rmse\":" << (finite ? std::sqrt(sq / std::max(ref_sq, 1e-30)) : -1)
+                 << ",\"max_abs_error\":" << (finite ? max_abs : -1);
+            lab_map(json, "host_us", metrics.us); lab_map(json, "counts", metrics.counts);
+            lab_map(json, "shaders", metrics.shaders); lab_map(json, "gpu_op_ns", metrics.gpu_ns);
+            json << '}';
+            lab_emit(progress, json.str());
+            if (!finite) throw Failure{"NONFINITE_OR_SHAPE"};
+        }
+        lab_emit(progress, "{\"lab\":true,\"event\":\"FINISHED\"}");
+        return true;
+    } catch (const Failure & failure) {
+        lab_emit(progress, std::string("{\"lab\":true,\"event\":\"") + (op->cancelled.load() ? "CANCELLED" : "FAILED") + "\",\"failure\":\"" + failure.code +
+            "\",\"unsupported_op\":\"" + progress.control.unsupported_op + "\",\"vk_result\":" + std::to_string(progress.vulkan_result) + "}");
+    } catch (const std::bad_alloc &) {
+        lab_emit(progress, "{\"lab\":true,\"event\":\"FAILED\",\"failure\":\"OUT_OF_MEMORY\"}");
+    } catch (...) {
+        lab_emit(progress, "{\"lab\":true,\"event\":\"FAILED\",\"failure\":\"NATIVE_ERROR\"}");
+    }
+    return false;
 }

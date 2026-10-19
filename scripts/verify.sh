@@ -4,6 +4,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 python3 scripts/check-repository.py
 python3 scripts/check-model-manifest.py
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 case "${1:-}" in
   --docs-only) exit 0 ;;
   --core-only)

@@ -39,3 +39,24 @@ void altiro_after_graph(int role, ggml_status status) {
     else if (role == 1) ++altiro_run_control->encoder_graphs;
     else ++altiro_run_control->decoder_graphs;
 }
+
+#include "encoder-lab.h"
+#include "ggml-backend-impl.h"
+thread_local AltiroEncoderLab * altiro_encoder_lab = nullptr;
+void altiro_lab_prepare_graph(ggml_backend_t backend, ggml_cgraph * graph) {
+    if (!altiro_encoder_lab) return;
+    if (altiro_lab_variant(2) && backend->iface.graph_optimize)
+        backend->iface.graph_optimize(backend, graph);
+    for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
+        auto * node = ggml_graph_node(graph, i);
+        if (altiro_lab_variant(6) && node->op == GGML_OP_MUL_MAT)
+            ggml_mul_mat_set_prec(node, GGML_PREC_F32);
+        // Operation shapes describe the graph, never feature values.
+        if (node->op == GGML_OP_MUL_MAT) {
+            auto * w = node->src[0]; auto * x = node->src[1];
+            const std::string key = std::string("MM:") + ggml_type_name(w->type) + ":" +
+                std::to_string(w->ne[1]) + "x" + std::to_string(x->ne[1]) + "x" + std::to_string(w->ne[0]);
+            if (altiro_encoder_lab->counts.size() < 80) ++altiro_encoder_lab->counts[key];
+        }
+    }
+}

@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicReference;
 /** Standalone host probe of the actual JNI ABI; never claims Android device acceptance. */
 public final class NativeTranscribePsy {
     static { System.loadLibrary("altiro-transcribepsy"); }
+    private native boolean benchmark(long handle, String model, String audio, boolean gpu, int threads, int variant, String cache, Object progress);
     private native long create();
     private native void cancel(long handle);
     private native void release(long handle);
@@ -98,7 +99,76 @@ public final class NativeTranscribePsy {
         System.out.println("Pre-cancel, missing/malformed audio and in-flight cancellation passed.");
     }
 
+    private void encoderLab(String model, String audio) {
+        final int[] samples = {0};
+        Progress progress = new Progress() {
+            @Override public void onRuntime(String report) {
+                super.onRuntime(report);
+                if (report.contains("\"event\":\"DEVICE\"")) {
+                    require(report.contains("timestamp_period_ns") && report.contains("timestamp_bits_min"), "Missing timestamp capability metadata");
+                }
+                if (report.contains("\"event\":\"SAMPLE\"")) {
+                    require(report.contains("\"finite\":true"), "Encoder produced invalid features");
+                    require(report.contains("\"backend\":\"CPU\""), "Wrong encoder backend");
+                    require(report.contains("compute_sync_us") && report.contains("readback_us"), "Missing stage measurements");
+                    require(!report.contains(model) && !report.contains(audio), "Private paths in lab output");
+                    samples[0]++;
+                    System.out.println(report);
+                }
+            }
+        };
+        long handle = create();
+        try {
+            require(benchmark(handle, model, audio, false, 2, 0, "", progress), "Lab failed: " + progress.latest);
+            require(samples[0] == 4, "First plus three warm executions required");
+            require(progress.latest.contains("FINISHED"), "Lab did not finish");
+        } finally { release(handle); }
+        long cancelled = create();
+        try {
+            cancel(cancelled);
+            require(!benchmark(cancelled, model, audio, false, 4, 0, "", progress), "Cancelled lab ran");
+            require(progress.latest.contains("CANCELLED"), "Lab cancellation missing");
+            require(!benchmark(cancelled, model, audio, false, 9, 0, "", progress), "Invalid lab options accepted");
+        } finally { release(cancelled); }
+    }
+
+    private void cancelEncoderLab(String model, String audio) throws Exception {
+        long handle = create();
+        CountDownLatch encoding = new CountDownLatch(1);
+        AtomicReference<Boolean> result = new AtomicReference<>();
+        AtomicReference<Throwable> failure = new AtomicReference<>();
+        Progress progress = new Progress() {
+            @Override public void onRuntime(String report) {
+                super.onRuntime(report);
+                if (report.contains("\"event\":\"BEGIN\"")) encoding.countDown();
+            }
+        };
+        Thread worker = new Thread(() -> {
+            try { result.set(benchmark(handle, model, audio, false, 2, 0, "", progress)); }
+            catch (Throwable error) { failure.set(error); }
+        });
+        try {
+            worker.start();
+            require(encoding.await(60, TimeUnit.SECONDS), "Lab encoder did not start");
+            Thread.sleep(100);
+            cancel(handle);
+            worker.join(10_000);
+            require(!worker.isAlive(), "Lab cancellation exceeded worker bound");
+            require(failure.get() == null && Boolean.FALSE.equals(result.get()), "Cancelled lab produced success or exception");
+            require(progress.latest.contains("CANCELLED"), "In-flight lab cancellation missing");
+        } finally {
+            cancel(handle); worker.join(10_000);
+            if (!worker.isAlive()) release(handle);
+        }
+    }
+
     public static void main(String[] args) throws Exception {
+        if (args.length == 3 && args[0].equals("--encoder-lab")) {
+            NativeTranscribePsy runtime = new NativeTranscribePsy();
+            runtime.encoderLab(args[1], args[2]);
+            runtime.cancelEncoderLab(args[1], args[2]);
+            return;
+        }
         require(args.length == 4, "Expected Q8 model, FP16 model, WAV and reference phrase");
         NativeTranscribePsy runtime = new NativeTranscribePsy();
         String q8 = runtime.transcribe(args[0], args[2], args[3]);

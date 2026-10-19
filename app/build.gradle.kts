@@ -16,8 +16,8 @@ android {
         applicationId = "org.altiro.app"
         minSdk = 33
         targetSdk = 37
-        versionCode = 19
-        versionName = "0.6.0-transcribepsy"
+        versionCode = 20
+        versionName = "0.6.1-encoder-lab"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         ndk {
             abiFilters += setOf("arm64-v8a", "x86_64")

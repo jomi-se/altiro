@@ -34,6 +34,7 @@ class RecognitionWorkerService : Service() {
                 flashAttention: Boolean,
                 dynamicWindow: Boolean,
                 vocabularyPrompt: String,
+                encoderExperiment: String,
                 callback: IRecognitionCallback,
             ) {
                 synchronized(lock) {
@@ -42,6 +43,7 @@ class RecognitionWorkerService : Service() {
                 }
                 executor.execute {
                     var status = 2
+                    var labTraceOpen = false
                     try {
                         val prompt = promptBytes(vocabularyPrompt)
                         if (prompt == null) {
@@ -51,6 +53,17 @@ class RecognitionWorkerService : Service() {
                             return@execute
                         }
                         val family = RecognitionEngine.valueOf(engine)
+                        val lab =
+                            if (encoderExperiment.isEmpty()) null
+                            else
+                                checkNotNull(
+                                    org.altiro.core.EncoderExperiment.options(encoderExperiment)
+                                )
+                        check(
+                            lab == null ||
+                                (family == RecognitionEngine.TRANSCRIBEPSY &&
+                                    (gpu || lab.second in listOf(0, 10)))
+                        )
                         if (
                             family == RecognitionEngine.TRANSCRIBEPSY &&
                                 (language != "auto" ||
@@ -89,6 +102,29 @@ class RecognitionWorkerService : Service() {
                                 override fun onPhase(phase: Int) = callback.onPhase(phase)
 
                                 override fun onRuntime(report: String) {
+                                    if (lab != null) {
+                                        val event = org.json.JSONObject(report)
+                                        val name =
+                                            when (event.optString("event")) {
+                                                "PHASE" ->
+                                                    when (event.optString("phase")) {
+                                                        "REFERENCE" -> "altiro.encoder.reference"
+                                                        "CANDIDATE_LOAD" -> "altiro.encoder.load"
+                                                        else -> null
+                                                    }
+                                                "BEGIN" ->
+                                                    "altiro.encoder.repeat-${event.optInt("repeat")}"
+                                                else -> null
+                                            }
+                                        if (labTraceOpen) {
+                                            android.os.Trace.endSection()
+                                            labTraceOpen = false
+                                        }
+                                        if (name != null) {
+                                            android.os.Trace.beginSection(name)
+                                            labTraceOpen = true
+                                        }
+                                    }
                                     if (family == RecognitionEngine.TRANSCRIBEPSY) {
                                         sampledPeakPss =
                                             maxOf(
@@ -104,8 +140,41 @@ class RecognitionWorkerService : Service() {
                                     } else callback.onRuntime(report)
                                 }
                             }
+                        val labCache = java.io.File(cacheDir, "encoder-lab-vulkan")
+                        fun cacheReport(event: String) {
+                            val files =
+                                labCache
+                                    .listFiles()
+                                    ?.filter { it.isFile && it.name.endsWith(".pcache") }
+                                    .orEmpty()
+                            callback.onRuntime(
+                                org.json
+                                    .JSONObject()
+                                    .put("lab", true)
+                                    .put("event", event)
+                                    .put("files", files.size)
+                                    .put("bytes", files.sumOf { it.length() })
+                                    .toString()
+                            )
+                        }
                         val text =
-                            if (whisper == null)
+                            if (lab != null) {
+                                cacheReport("CACHE_BEFORE")
+                                if (
+                                    psy!!.benchmark(
+                                        handle,
+                                        model,
+                                        audio,
+                                        gpu,
+                                        lab.first,
+                                        lab.second,
+                                        labCache.also { it.mkdirs() }.absolutePath,
+                                        progress,
+                                    )
+                                )
+                                    ""
+                                else null
+                            } else if (whisper == null)
                                 psy!!.transcribe(handle, model, audio, gpu, progress)
                             else
                                 whisper.transcribe(
@@ -119,13 +188,14 @@ class RecognitionWorkerService : Service() {
                                     progress,
                                     prompt,
                                 )
+                        if (lab != null) cacheReport("CACHE_AFTER")
                         if (text != null && !synchronized(lock) { cancelled }) {
                             // Bound Binder transactions; partial chunks never become an insertion
                             // payload.
                             for (chunk in text.chunked(8192)) callback.onTextChunk(chunk)
                             status = 0
                         } else {
-                            status = 1
+                            status = if (synchronized(lock) { cancelled }) 1 else 2
                         }
                     } catch (_: LinkageError) {
                         callback.onRuntime(
@@ -134,6 +204,7 @@ class RecognitionWorkerService : Service() {
                     } catch (_: Exception) {
                         // Native code has already supplied a typed failure when possible.
                     } finally {
+                        if (labTraceOpen) android.os.Trace.endSection()
                         synchronized(lock) {
                             if (handle != 0L) releaseNative?.invoke()
                             handle = 0

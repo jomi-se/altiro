@@ -157,10 +157,12 @@ class DictationRecordingService : Service() {
                 fail(id, "The microphone did not start. Check its privacy switch and try again.")
             }
         }
-        executor.execute { capture(id) }
+        val maxFrames =
+            if (controller.encoderLabActive) 29L * Wav.SAMPLE_RATE else Wav.MAX_FRAMES.toLong()
+        executor.execute { capture(id, maxFrames) }
     }
 
-    private fun capture(id: SessionId) {
+    private fun capture(id: SessionId, maxFrames: Long) {
         val directory = cacheDir.resolve("dictation").apply { mkdirs() }
         var file: java.io.File? = null
         var frames = 0L
@@ -202,12 +204,12 @@ class DictationRecordingService : Service() {
             val bytes = ByteBuffer.allocate(buffer.size * 2).order(ByteOrder.LITTLE_ENDIAN)
             RandomAccessFile(file, "rw").use { output ->
                 output.write(Wav.header(0))
-                while (requested == START && frames < Wav.MAX_FRAMES) {
+                while (requested == START && frames < maxFrames) {
                     val count =
                         capture.read(
                             buffer,
                             0,
-                            minOf(buffer.size.toLong(), Wav.MAX_FRAMES - frames).toInt(),
+                            minOf(buffer.size.toLong(), maxFrames - frames).toInt(),
                             AudioRecord.READ_BLOCKING,
                         )
                     if (requested != START) break
@@ -238,7 +240,7 @@ class DictationRecordingService : Service() {
                         }
                     }
                 }
-                if (frames >= Wav.MAX_FRAMES) requested = STOP
+                if (frames >= maxFrames) requested = STOP
                 output.seek(0)
                 output.write(Wav.header(frames))
             }

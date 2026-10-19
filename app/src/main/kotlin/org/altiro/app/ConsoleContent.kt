@@ -15,6 +15,7 @@ import org.altiro.core.Phase
 
 @androidx.compose.runtime.Composable
 internal fun ConsoleContent(controller: DictationController, microphoneAllowed: Boolean) {
+    EncoderLabTools(controller, microphoneAllowed)
     val report by controller.diagnostics.report.collectAsState()
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
@@ -77,7 +78,8 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
     } else {
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
         Text(
-            if (current.comparison) "Comparison · ${current.modelIds.size} passes"
+            if (controller.encoderLabActive) "Encoder lab · session"
+            else if (current.comparison) "Comparison · ${current.modelIds.size} passes"
             else "Latest dictation",
             style = MaterialTheme.typography.titleMedium,
         )
@@ -91,7 +93,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        for (step in current.steps) {
+        for (step in if (controller.encoderLabActive) emptyList() else current.steps) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 ConsoleRow(
                     step.stage.label,
@@ -238,7 +240,15 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
         for (check in controller.models.startupChecks.value) appendLine(
             "${check.modelId}: ${DiagnosticReport.seconds(check.elapsedMillis)} s; verified: ${check.verified}"
         )
-        append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLabActive)
+            appendLine(
+                "Encoder lab: use structured results below; ordinary dictation runtime counters do not apply."
+            )
+        else append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLab.summary.value.isNotEmpty()) {
+            appendLine("Encoder lab · structured measurements")
+            appendLine(controller.encoderLab.export())
+        }
         controller.checkpoint.saved.value?.let {
             appendLine("\nSaved checkpoint:")
             appendLine(it)
@@ -259,7 +269,13 @@ internal fun compactDiagnostics(controller: DictationController, microphone: Boo
             "Models: ${controller.models.installed.value.size}; selected ready=${controller.models.ready.value}"
         )
         append(controller.editorVisibility.report.value.compactExport())
-        append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLabActive)
+            appendLine(
+                "Encoder lab: use structured results below; ordinary dictation runtime counters do not apply."
+            )
+        else append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLab.summary.value.isNotEmpty())
+            appendLine(controller.encoderLab.summary.value)
     }
     return if (report.length <= 8000) report
     else

@@ -51,6 +51,12 @@ short-window accuracy and GPU behavior remain phone gates.
 Visible recording/diagnostics screens stay awake during work; manual lock still
 cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 
+The opt-in Encoder lab (decision 0019) measures TranscribePsy directly, without
+its decoder. Each case gets a separate worker; only that lab worker retains its
+model for one first candidate execution plus three warm repeats. CPU reference
+setup precedes the candidate, so this is not a completely cold process benchmark.
+Experimental flags never affect ordinary dictation. See `docs/testing/encoder-lab.md`.
+
 The everyday interface now separates Home, Models, Setup and Console. The owner
 approved sage/chalk/charcoal centered-mic geometry and prioritizes the actual
 non-focusable cross-app overlay above the app screen. See decision 0009. Explicit
