@@ -278,6 +278,9 @@ class DictationController(private val context: Context) {
             diagnosticInputs.map { it.window },
             vocabularyTerms = diagnosticInputs.first().vocabulary.count,
             engines = diagnosticInputs.map { it.engine },
+            maxPhases =
+                if (encoderLabMode != 0) org.altiro.core.EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY
+                else 64,
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {

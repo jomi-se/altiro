@@ -2,13 +2,24 @@
 
 Updated: 2026-10-19.
 
+Version 0.6.3 fixes the lab's [diagnostic phase budget](../issues/0005-encoder-lab-phase-capacity.md),
+with regression coverage of all 40 Full-suite worker lifecycles and elapsed
+timings. The 0.6.2 phone Quick report establishes real GPU execution: 13/16 cases
+completed; the last three hit the ordinary 64-phase trace limit before worker
+startup. The lab now explicitly allows 1,024 phases; ordinary sessions keep 64.
+Phone completion of the corrected long suite remains pending. On the same
+7.52-second clip, warm stock FP16 GPU encoding reached 0.834 seconds versus
+1.291 seconds CPU, while the first GPU call spent 4.085 seconds in nested shader
+registration/compilation. See the [measurement analysis](../research/transcribepsy-performance-investigation.md#encoder-lab-phone-follow-up-062).
+
 Version 0.6.2 fixes [encoder-lab backend registration](../issues/0004-encoder-lab-backend-registration.md).
 The maintainer successfully installed the corrected 0.6.1 package and exported
 all 40 Full-suite case records. All 24 attempted GPU cases were rejected by the
 parent's diagnostic identity check before worker startup, not by GPU kernels;
 14 CPU cases completed and two cache-seed cases were skipped. The lab now
 registers both backends for each selected model and labels unclassified setup
-failures. Physical GPU execution and numerical acceptance remain pending.
+failures. Physical GPU execution is now confirmed by the following Quick report;
+numerical and transcription-quality acceptance remain pending.
 
 The first 0.6.1 APK was unintentionally marked `android:testOnly` by an
 ABI-targeted build, blocking normal tap-to-install updates despite a valid,
@@ -31,8 +42,8 @@ in 0.6.1 (decision [0019](../decisions/0019-encoder-lab.md)). One recording driv
 first/warm repetitions, CPU threads and Vulkan graph/kernel-routing variants,
 content-free partial reports and an optional timestamp profiler. The decoder
 lookahead proposal remains unimplemented. Everyday runtime defaults are unchanged.
-Host CPU execution checks cover both formats; physical-phone GPU measurements
-and numerical/quality acceptance of these variants remain pending.
+Host CPU execution checks cover both formats. Physical Quick GPU measurements
+are now available; Full-suite and numerical/quality acceptance remain pending.
 
 Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
 ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen

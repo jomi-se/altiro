@@ -158,6 +158,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
     private var activeBackend: RecognitionBackend? = null
     private var window: RecognitionWindow? = null
     private var activeWindow: RecognitionWindow? = null
+    private var phaseCapacity = 64
 
     @Synchronized
     fun begin(
@@ -169,7 +170,9 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
         vocabularyTerms: Int = 0,
         engines: List<RecognitionEngine> = modelIds.map { RecognitionEngine.WHISPER },
+        maxPhases: Int = 64,
     ) {
+        require(maxPhases in 64..1024)
         require(vocabularyTerms in 0..Vocabulary.MAX_TERMS)
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
@@ -184,6 +187,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         require(flashAttention.size == modelIds.size)
         require(engines.size == modelIds.size)
         started = clockNanos()
+        phaseCapacity = maxPhases
         completed = emptyList()
         active = null
         backend = null
@@ -244,7 +248,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         )
             return
         require(modelId == null || modelId in report.modelIds)
-        check(completed.size < 64)
+        check(completed.size < phaseCapacity)
         val now = clockNanos()
         closeStep(now)
         active = stage to modelId

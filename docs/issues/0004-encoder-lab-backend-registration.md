@@ -1,6 +1,6 @@
 # 0004 — Encoder lab rejects GPU cases before starting a worker
 
-Status: in-progress.
+Status: done.
 
 ## Reproduction and impact
 
@@ -36,8 +36,13 @@ an unclassified lab setup failure reports `LAB_SETUP_FAILED`, with an initial
   records four encoder samples or reports a genuine typed native/worker failure.
   No GPU optimization or numerical-quality acceptance is implied by host checks.
 
-The last condition remains pending. Retain the original CPU measurements; the
-failed 0.6.1 GPU entries are harness failures and must not enter speed rankings.
+The subsequent 0.6.2 phone report confirms native GPU baseline/variant execution
+for both formats and four samples per completed case, plus FP16 timestamp
+profiling. This satisfies backend-dispatch acceptance. Its final three setup
+failures are the separate [phase-capacity defect](0005-encoder-lab-phase-capacity.md).
+Retain the original CPU measurements; the failed 0.6.1 GPU entries are harness
+failures and must not enter speed rankings. Numerical and speech-quality
+acceptance remain separate from this dispatch correction.
 
 Host verification passes: 58 core and 8 acquisition tests, 11 Python checks,
 Android app/fixture builds and lint, instrumentation APK compilation, native

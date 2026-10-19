@@ -1,14 +1,14 @@
 # TranscribePsy: distinguish hardware limits from implementation costs
 
 Investigated: 2026-10-19.
-Status: source investigation and proposed experiments; instrumentation and
-optimizations below are not implemented or accepted product defaults.
+Status: source investigation with a subsequent encoder-lab phone follow-up.
+The opt-in lab is implemented; its variants are not accepted product defaults.
 
 Scope: runtime `364ec36130dc87d2cd46e596598268a6e3313751`, the reviewed Q8/FP16
 EU-sub files, and Altiro 0.6.0. Source anchors below refer to that exact revision.
 The model metadata and code were inspected directly. Phone figures are
 maintainer-reported same-recording comparisons, not a controlled benchmark.
-No additional GPU measurements were performed by this investigation.
+The follow-up below uses the maintainer's exported 0.6.2 encoder-lab measurements.
 
 ## What the existing phone evidence establishes
 
@@ -32,6 +32,64 @@ inference. A GPU encoder plus the observed CPU decoder would be approximately
 4.310 s before additional integration costs. These are arithmetic bounds using
 these timings, not measured hybrid performance. Encoder investigation has
 priority for single-utterance latency.
+
+## Encoder lab phone follow-up (0.6.2)
+
+One 7.52-second recording on Pixel 7 produced 13 completed cases out of 16
+planned Quick cases (two formats plus profiling). The final three cases failed
+before native execution because the ordinary diagnostic trace exhausted its
+64-phase budget; see [defect 0005](../issues/0005-encoder-lab-phase-capacity.md).
+The preceding successful measurements remain usable. These are encoder-only
+measurements, with a CPU reference preceding each candidate; first candidate
+execution is not a completely cold process measurement.
+
+| Format / backend | First encoder call | Warm median | Maximum relative RMS feature error |
+| --- | ---: | ---: | ---: |
+| FP16 CPU, start | 1.524 s | 1.291 s | 0 |
+| FP16 GPU, start | 5.330 s | 1.053 s | 0.639% |
+| FP16 GPU, end | 3.019 s | 0.834 s | 0.639% |
+| FP16 CPU, end | 1.746 s | 1.291 s | 0 |
+| Q8 CPU, start | 1.095 s | 0.866 s | 0 |
+| Q8 GPU, start | 3.080 s | 0.842 s | 1.80% |
+
+The first FP16 GPU call includes 4.085 seconds in the nested shader
+registration/compilation timer and 24 lazy pipeline compile requests. That
+timer falls to 2.044 seconds on the end baseline's first call, and is absent
+from warm repetitions. First-call shader preparation, rather than warm encoder
+execution alone, explains much of this configuration's GPU latency disadvantage.
+This does not measure the full ordinary dictation path or establish a universal
+CPU/GPU comparison. Reusing a worker or a persisted pipeline cache requires its
+own resource, cancellation and end-to-end validation.
+
+FP16 warm GPU encoding is approximately 35% faster than the paired warm CPU
+baseline at suite end. Direct convolution reaches 0.814 seconds, graph reorder
+0.835 seconds, and the 1 MB submission variant 0.852 seconds. However, the stock
+GPU baseline itself improved by 21% from start to end. Direct convolution's
+roughly 2% difference versus the end baseline does not establish a repeatable
+variant advantage. The 1 MB submission setting increases FP16 submissions from
+18 to 220 without an improvement over that end baseline.
+
+The FP16 profiler records 903.55 ms of serialized GPU operation intervals in its
+last repeat; matrix multiplication contributes 715.13 ms (79.1%). The stock warm
+upload/readback host timers are roughly 0.1 ms each. Synchronization includes
+waiting for GPU work and overlaps compute: do not attribute that whole interval
+to transfer or submission overhead, or sum nested host timers. Profiling changes
+execution dependencies, so use its operation distribution alongside unprofiled
+latency rather than as a replacement for it.
+
+Both formats use 1,613 dispatches in the stock path. FP16 records 217 dispatches
+of `matmul_f16_f32_f16acc_aligned_m`; Q8 uses 217 of
+`matmul_q8_0_f32_f16acc_aligned_m`. Integer-dot route counters are zero for both.
+Thus this Q8 execution is not demonstrating an integer-dot matrix acceleration
+path. The Full precision/routing experiments remain useful; disabling integer
+dot may be a no-op for this recorded graph/device configuration.
+
+FP16 feature differences remain below the lab's 1% screening threshold. Q8 GPU
+differences around 1.8% exceed it. These compare each format against its own CPU
+encoder; neither number is a speech-error rate or a transcription-quality
+acceptance decision. No decoder or transcript is included in this lab report.
+The Q8 end baseline and profiler are missing, so its drift/hotspot analysis is
+incomplete. No runtime defaults change based on this one short recording.
 
 ## Follow the real timing and execution paths
 

@@ -12,6 +12,9 @@ data class EncoderExperiment(
         get() = "$threads:$variant"
 
     companion object {
+        // A full two-format suite has 40 workers, each with its own phase lifecycle.
+        const val DIAGNOSTIC_PHASE_CAPACITY = 1024
+
         /** Register every backend the lab may dispatch, independent of the saved selection. */
         fun diagnosticInputs(inputs: List<RecognitionInput>): List<RecognitionInput> {
             require(inputs.size in 1..2 && inputs.map { it.spec.id }.distinct().size == inputs.size)

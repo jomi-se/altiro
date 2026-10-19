@@ -27,6 +27,75 @@ class EncoderExperimentTest {
         }
 
     @Test
+    fun fullTwoFormatSuiteRetainsEveryWorkerLifecycleAndAllElapsedTime() {
+        for (reverse in listOf(false, true)) {
+            var nowMillis = 0L
+            val inputs =
+                listOf("transcribepsy-q8", "transcribepsy-fp16").map {
+                    input(it, RecognitionBackend.CPU)
+                }
+            val registered = EncoderExperiment.diagnosticInputs(inputs)
+            val diagnostics = RecognitionDiagnostics { nowMillis * 1_000_000 }
+            diagnostics.begin(
+                "auto",
+                registered.map { it.spec.id },
+                true,
+                registered.map { it.backend },
+                windows = registered.map { it.window },
+                engines = registered.map { it.engine },
+                maxPhases = EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY,
+            )
+            nowMillis = 100
+            diagnostics.phase(RecognitionStage.FINALIZING)
+            for (model in inputs) for (case in EncoderExperiment.suite(true, true, reverse)) {
+                diagnostics.selectBackend(case.backend, model.window)
+                diagnostics.runtime(
+                    RuntimeDetails(
+                        model.spec.id,
+                        case.backend,
+                        window = model.window,
+                        engine = model.engine,
+                    )
+                )
+                for (stage in
+                    listOf(
+                        RecognitionStage.WORKER_START,
+                        RecognitionStage.AUDIO_READ,
+                        RecognitionStage.GPU_PROBE,
+                        RecognitionStage.MODEL_LOAD,
+                        RecognitionStage.INFERENCE,
+                        RecognitionStage.TEXT_ASSEMBLY,
+                        RecognitionStage.MODEL_RELEASE,
+                        RecognitionStage.WORKER_STOP,
+                    )) {
+                    nowMillis++
+                    diagnostics.phase(stage, model.spec.id)
+                    // Native repetitions can announce the same phase again.
+                    if (stage == RecognitionStage.INFERENCE)
+                        repeat(4) {
+                            nowMillis++
+                            diagnostics.phase(stage, model.spec.id)
+                        }
+                }
+            }
+            diagnostics.selectBackend(null)
+            nowMillis++
+            diagnostics.phase(RecognitionStage.AUDIO_DELETE)
+            nowMillis++
+            diagnostics.phase(RecognitionStage.WORKER_RELEASE)
+            nowMillis++
+            diagnostics.finish(DiagnosticOutcome.COMPLETED)
+            val report = diagnostics.report.value!!
+            assertTrue(report.steps.size > 64)
+            assertEquals(40, report.steps.count { it.stage == RecognitionStage.WORKER_START })
+            assertEquals(40, report.steps.count { it.stage == RecognitionStage.WORKER_STOP })
+            assertEquals(nowMillis, report.elapsedMillis)
+            assertEquals(nowMillis - 100, report.processingMillis)
+            assertEquals(DiagnosticOutcome.COMPLETED, report.outcome)
+        }
+    }
+
+    @Test
     fun labDiagnosticsAdmitEveryCaseForEitherSavedBackendAndBothFormats() {
         for (saved in RecognitionBackend.entries) for (count in 1..2) {
             val selected =

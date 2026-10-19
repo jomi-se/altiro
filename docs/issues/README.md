@@ -10,7 +10,10 @@
   are separate in diagnostic exports. Phone confirmation remains pending.
 - [0004 — Encoder lab backend registration](0004-encoder-lab-backend-registration.md):
   0.6.1 rejected GPU cases before worker startup; 0.6.2 corrects the frozen
-  diagnostic plan. Phone execution of the corrected GPU cases remains pending.
+  diagnostic plan. Native GPU execution is confirmed by the next phone report.
+- [0005 — Encoder lab phase capacity](0005-encoder-lab-phase-capacity.md):
+  0.6.2 exhausted the ordinary 64-phase trace during a multi-model lab run;
+  0.6.3 uses an explicitly bounded lab budget. Phone completion remains pending.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.
