@@ -24,6 +24,10 @@ def summarize(report):
             raise ValueError('Invalid case status')
         if case.get('backend_requested') not in ('CPU', 'VULKAN'):
             raise ValueError('Invalid requested backend')
+        variant = case.get('variant')
+        if type(variant) is not int or variant not in (*range(17), *range(20,30)):
+            raise ValueError('Unknown native variant')
+        kernels = kernel_rows(case) if variant >= 20 else []
         samples = case.get('samples', [])
         if not isinstance(samples, list) or len(samples) > 4:
             raise ValueError('Invalid sample count')
@@ -40,16 +44,82 @@ def summarize(report):
             (sample.get('backend') == 'CPU' if case.get('backend_requested') == 'CPU' else isinstance(sample.get('backend'), str) and re.fullmatch(r'Vulkan[0-9]{1,2}', sample['backend']) is not None) for sample in samples
         )
         complete = len(samples) == 4 and case.get('status') == 'FINISHED'
-        variant = case.get('variant')
-        if type(variant) is not int or variant not in range(11):
-            raise ValueError('Unknown native variant')
         same_work = variant != 10
         profile = case.get('profiled', False) or variant == 9
+        tile_counter = 'forced_small_tile_routes' if variant in (11,13) else 'forced_large_tile_routes' if variant == 12 else 'forced_rectangular_tile_routes' if variant in (15,16) else None
+        routing = tile_counter is None or any(s.get('counts',{}).get(tile_counter,0) > 0 for s in samples)
+        if variant in (15,16):
+            tile = 'tile_64x32' if variant == 15 else 'tile_32x64'
+            routing = routing and any(s.get('counts',{}).get(tile,0) > 0 for s in samples)
         rows.append(dict(model=model, name=name, samples=samples, median=statistics.median(warm) if warm else None,
                          low=min(warm) if warm else None, high=max(warm) if warm else None,
-                         eligible=complete and numerics and placement and same_work and not profile,
-                         complete=complete, numerics=numerics, placement=placement, profile=profile,
+                         eligible=complete and numerics and placement and routing and same_work and not profile,
+                         complete=complete, numerics=numerics, placement=placement, routing=routing, profile=profile,
+                         kernels=kernels, variant=variant,
                          status=case.get('status'), error=max((s['relative_rmse'] for s in samples), default=None)))
+    return rows
+
+
+def number(value, sentinel=False):
+    if type(value) not in (float,int) or not math.isfinite(value) or (value < 0 and not (sentinel and value == -1)):
+        raise ValueError('Invalid kernel measurement')
+    return value
+
+
+def kernel_rows(case):
+    kernels = case.get('kernels', [])
+    if not isinstance(kernels,list) or len(kernels) > 32:
+        raise ValueError('Invalid kernel count')
+    rows = []
+    seen = set()
+    variant = case['variant']
+    for i,kernel in enumerate(kernels):
+        shape = tuple(kernel.get(k) for k in ('m','n','k'))
+        if (kernel.get('sequence') != i or any(type(v) not in (float,int) for v in shape)
+                or shape[::2] not in ((2560,640),(640,2560),(1920,640),(640,640))
+                or shape[1] not in (32,64,65,128,129,139,256,384) or shape in seen):
+            raise ValueError('Invalid kernel identity')
+        seen.add(shape)
+        streams = kernel.get('streams')
+        if streams != (8 if variant == 26 else 1):
+            raise ValueError('Invalid stream count')
+        source = 'q8_0' if case['model'] == 'transcribepsy-q8' else 'f16'
+        if kernel.get('source_type') != source or kernel.get('storage_type') != ('f16' if variant == 24 else source):
+            raise ValueError('Wrong kernel weight type')
+        if kernel.get('activation_row_padding') != (32 if variant == 25 else 0) or kernel.get('f32_accumulation') is not (variant >= 23):
+            raise ValueError('Wrong kernel layout or precision')
+        placement = (kernel.get('backend') == 'CPU' if case['backend_requested'] == 'CPU' else
+                     isinstance(kernel.get('backend'),str) and re.fullmatch(r'Vulkan[0-9]{1,2}',kernel['backend']) is not None)
+        times = kernel.get('wall_ms')
+        for key in ('wall_ms','process_cpu_ms','readback_check_ms'):
+            values = kernel.get(key)
+            if not isinstance(values,list) or len(values) != 6:
+                raise ValueError('Incomplete kernel repetitions')
+            for value in values: number(value)
+        finite = kernel.get('finite')
+        if type(finite) is not bool: raise ValueError('Invalid finite flag')
+        repacked = kernel.get('cpu_repacked',False)
+        if type(repacked) is not bool or (repacked and case['backend_requested'] != 'CPU'):
+            raise ValueError('Invalid CPU packing placement')
+        error = number(kernel.get('relative_rmse'),not finite)
+        number(kernel.get('max_abs_error'),not finite)
+        for key in ('resident_bytes','setup_ms','reference_cells'): number(kernel.get(key))
+        if kernel['reference_cells'] != 64 * streams: raise ValueError('Wrong reference coverage')
+        for key in ('counts','shaders'):
+            values = kernel.get(key)
+            if not isinstance(values,dict) or len(values) > 100: raise ValueError('Invalid kernel counters')
+            for name,value in values.items():
+                if not re.fullmatch(r'[A-Za-z0-9_:.-]{1,120}',name): raise ValueError('Invalid counter label')
+                number(value)
+        median = statistics.median(times[1:])
+        route = 'forced_small_tile_routes' if variant == 21 else 'forced_large_tile_routes' if variant == 22 else 'forced_rectangular_tile_routes' if variant in (28,29) else None
+        routing = route is None or kernel.get('counts',{}).get(route,0) > 0
+        if variant in (28,29):
+            routing = routing and kernel.get('counts',{}).get('tile_64x32' if variant == 28 else 'tile_32x64',0) > 0
+        rows.append(dict(shape=shape, streams=streams, first=times[0], median=median,cpu_repacked=repacked,
+                         low=min(times[1:]),high=max(times[1:]),error=error,finite=finite,
+                         eligible=case.get('status') == 'FINISHED' and len(kernels) == 32 and finite and placement and routing and 0 <= error <= 0.01,
+                         gflops=2 * math.prod(shape) * streams / (median * 1e6) if median else 0))
     return rows
 
 
@@ -61,6 +131,9 @@ def render(report):
              '| Model | Case | First ms | Warm ms (range) | Relative RMS error | State |',
              '| --- | --- | ---: | ---: | ---: | --- |']
     for row in rows:
+        if row['variant'] >= 20:
+            lines.append(f"| {row['model']} | {row['name']} | — | {len(row['kernels'])}/32 kernel shapes | — | {row['status']} |")
+            continue
         first = f"{row['samples'][0]['wall_ms']:.1f}" if row['samples'] else '—'
         warm = f"{row['median']:.1f} ({row['low']:.1f}–{row['high']:.1f})" if row['median'] is not None else '—'
         error = f"{row['error']:.3g}" if row['error'] is not None and row['error'] >= 0 else '—'
@@ -68,6 +141,7 @@ def render(report):
         if row['profile']: state += '; profiling overhead'
         if not row['numerics']: state += '; invalid/missing numerics'
         if row['samples'] and not row['placement']: state += '; wrong backend'
+        if not row['routing']: state += '; requested tile not observed'
         if len(row['samples']) != 4: state += '; incomplete'
         lines.append(f"| {row['model']} | {row['name']} | {first} | {warm} | {error} | {state} |")
     for model in sorted({r['model'] for r in rows}):
@@ -88,10 +162,51 @@ def render(report):
                 safe_ops = [(k, v) for k, v in ops.items() if isinstance(k, str) and k.isupper() and all(c.isalpha() or c == '_' for c in k) and isinstance(v, (int, float)) and math.isfinite(v) and v >= 0]
                 hottest = sorted(safe_ops, key=lambda item: item[1], reverse=True)[:8]
                 lines.append('Profiled GPU timestamp intervals (serialized, last repeat): ' + ', '.join(f'{k} {v/1e6:.2f} ms' for k, v in hottest))
+                shapes = row['samples'][-1].get('gpu_shapes_ns',{})
+                safe = [(k,v) for k,v in shapes.items() if re.fullmatch(r'[A-Za-z0-9_:.-]{1,120}',k) and type(v) in (float,int) and math.isfinite(v) and v >= 0]
+                for key,value in sorted(safe,key=lambda x:x[1],reverse=True)[:12]:
+                    lines.append(f'  {key}: {value/1e6:.2f} ms (shape group; includes batches).')
+        lines.extend(render_kernels(matching))
     lines += ['', 'Host timers overlap (synchronization and shader registration are nested inside compute).',
               'Compare profiled hotspots with unprofiled cases; timestamps include dependency effects.',
               'Read thermal_status, battery_deci_c, CPU frequency samples and process_cpu_ms in the JSON before drawing conclusions.']
     return '\n'.join(lines)
+
+
+def render_kernels(rows):
+    cases = [r for r in rows if r['variant'] >= 20]
+    if not cases: return []
+    lines = ['', 'Synthetic kernel isolation: deterministic data, resident inputs, 1 first + 5 warm calls.',
+             'Full outputs checked for finiteness; 64 cells per stream checked against double precision.',
+             '1% error screen is triage only. No decoder, speech quality or end-to-end latency claim.',
+             '', '| M×N×K | Stock GPU ms | Best screened single-stream case | ms | GPU gain | CPU ms |',
+             '| --- | ---: | --- | ---: | ---: | ---: |']
+    indexed = {r['variant']:{k['shape']:k for k in r['kernels']} for r in cases}
+    names = {r['variant']:r['name'] for r in cases}
+    for shape,base in indexed.get(20,{}).items():
+        if not base['eligible'] or base['median'] <= 0: continue
+        candidates = [(v,s[shape]) for v,s in indexed.items() if v in (20,21,22,23,24,28,29) and shape in s and s[shape]['eligible']
+                      and (v != 24 or rows[0]['model'] == 'transcribepsy-q8')]
+        if not candidates: continue
+        v,best = min(candidates,key=lambda x:x[1]['median'])
+        cpu = indexed.get(27,{}).get(shape)
+        cpu_ms = f"{cpu['median']:.3f}" if cpu and cpu['eligible'] else '—'
+        label = '×'.join(str(int(x)) for x in shape)
+        lines.append(f"| {label} | {base['median']:.3f} | {names[v]} | {best['median']:.3f} | {base['median']/best['median']:.2f}× | {cpu_ms} |" if best['median'] > 0 else f'| {label} | — | Unresolvable timer | — | — | — |')
+    for r in cases:
+        if r['variant'] == 27:
+            lines.append(f"CPU_REPACK observed for {sum(k['cpu_repacked'] for k in r['kernels'])}/{len(r['kernels'])} CPU shapes; otherwise the runtime's default buffer was used.")
+        valid = [k for k in r['kernels'] if k['eligible']]
+        if valid:
+            peak = max(valid,key=lambda k:k['gflops'])
+            lines.append(f"{r['name']}: best measured effective throughput {peak['gflops']:.1f} GFLOP/s at {peak['shape']} ({peak['streams']} streams; warm range {peak['low']:.3f}–{peak['high']:.3f} ms). This is workload throughput, not hardware peak.")
+        for k in r['kernels']:
+            if not k['eligible']: lines.append(f"Excluded {r['name']} {k['shape']}: incomplete case, placement, finite or numerical screen.")
+    lines += ['Compare kernel-f32 with kernel-strided for layout cost, and with kernel-predequant for Q8 decode cost.',
+              'kernel-streams uses eight distinct weights/inputs in ONE graph: report throughput per multiplication; it is not eight concurrent queues.',
+              'Pre-dequant setup and extra storage are reported separately; a warm kernel gain does not establish a full-model gain.',
+              'Shader/counter labels in each kernel record establish whether the requested tile route actually changed.']
+    return lines
 
 
 def main():

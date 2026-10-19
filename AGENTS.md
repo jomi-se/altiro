@@ -56,6 +56,11 @@ its decoder. Each case gets a separate worker; only that lab worker retains its
 model for one first candidate execution plus three warm repeats. CPU reference
 setup precedes the candidate, so this is not a completely cold process benchmark.
 Experimental flags never affect ordinary dictation. See `docs/testing/encoder-lab.md`.
+The opt-in Kernel hunt (decision 0020) adds synthetic matrix isolation and full
+encoder tile experiments. Synthetic calls never load audio-derived features or
+emit text, and never establish speech quality or everyday latency. Keep shape,
+precision, backend placement and numerical screens attached to every claim.
+See `docs/testing/kernel-hunt.md`; phone execution remains a gate.
 
 The everyday interface now separates Home, Models, Setup and Console. The owner
 approved sage/chalk/charcoal centered-mic geometry and prioritizes the actual

@@ -1,5 +1,8 @@
 # Encoder lab on a phone
 
+For the deeper no-remote-access matrix investigation in 0.6.4, select
+[Kernel hunt](kernel-hunt.md). Quick and Full retain their existing matrix.
+
 Use Altiro 0.6.3 or later. Version 0.6.1 rejected GPU cases before starting their
 worker when CPU was selected; 0.6.2 fixed dispatch but could exhaust the ordinary
 64-phase trace before later cases. Both issues are corrected in 0.6.3.

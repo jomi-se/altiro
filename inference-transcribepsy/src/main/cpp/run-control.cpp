@@ -49,7 +49,7 @@ void altiro_lab_prepare_graph(ggml_backend_t backend, ggml_cgraph * graph) {
         backend->iface.graph_optimize(backend, graph);
     for (int i = 0; i < ggml_graph_n_nodes(graph); ++i) {
         auto * node = ggml_graph_node(graph, i);
-        if (altiro_lab_variant(6) && node->op == GGML_OP_MUL_MAT)
+        if (altiro_lab_f32() && node->op == GGML_OP_MUL_MAT)
             ggml_mul_mat_set_prec(node, GGML_PREC_F32);
         // Operation shapes describe the graph, never feature values.
         if (node->op == GGML_OP_MUL_MAT) {

@@ -2,6 +2,21 @@
 
 Updated: 2026-10-19.
 
+The next phone campaign is **0.6.4 Kernel hunt**: full-encoder tile experiments,
+persisted-cache/F32 accumulation, and 640 synthetic shape records for Q8 + FP16,
+with shape-specific optional GPU profiling. See the [run procedure](../testing/kernel-hunt.md)
+and [decision 0020](../decisions/0020-kernel-hunt.md). It requires no remote access.
+Host validation and device acceptance are separate; physical-phone execution of
+this campaign is pending. Ordinary dictation defaults are unchanged.
+Host verification passed: 69 JVM tests, 18 Python tests, Android app/fixture
+builds and lint, instrumentation APK compilation, installability, notices and
+16 KiB packaging. Production-JNI CPU checks covered 256 synthetic shape records
+(1,536 measured graph calls), both real encoders and cancellation. All corrected
+synthetic records passed the numerical screen; incompatible strided CPU prepacking
+was rejected and guarded. Forty-four Mali-G710 static shader reports motivated
+the rectangular candidates; see [the investigation](../research/mali-kernel-hunt.md).
+These checks do not establish GPU execution, a speedup or speech quality on the phone.
+
 The 0.6.3 physical-phone Full run completed all 40 cases and 160 samples on one
 11.08-second recording. Disk-seeded pipeline caching reduced FP16 first-encoder
 time from 4.445 to 1.542 seconds, and Q8 from 4.754 to 1.818 seconds, in fresh

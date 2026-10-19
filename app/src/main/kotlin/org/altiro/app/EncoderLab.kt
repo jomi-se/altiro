@@ -64,7 +64,10 @@ class EncoderLab(private val context: Context) {
                 .put("android_api", android.os.Build.VERSION.SDK_INT)
                 .put(
                     "measurement",
-                    "encoder only; first candidate call after CPU reference; then 3 resident warm calls",
+                    if (cases.any { it.variant >= 20 })
+                        "full encoder: 1 first + 3 warm; synthetic kernels: 1 first + 5 warm; setup excluded"
+                    else
+                        "encoder only; first candidate call after CPU reference; then 3 resident warm calls",
                 )
                 .put("privacy", "No audio, features, transcript, editor identity or paths")
                 .put("planned_cases", inputs.size * cases.size)
@@ -97,6 +100,7 @@ class EncoderLab(private val context: Context) {
                 .put("before", environment())
                 .put("phase", "WORKER_SETUP")
                 .put("samples", JSONArray())
+                .put("kernels", JSONArray())
         report.getJSONArray("cases").put(current)
         save()
     }
@@ -113,12 +117,24 @@ class EncoderLab(private val context: Context) {
                 val vulkan = input.getString("vulkan")
                 require(gpu.length <= 96 && gpu.matches(Regex("[A-Za-z0-9 ._()+:-]*")))
                 require(vulkan.length <= 32 && vulkan.matches(Regex("[0-9.]*")))
+                for (key in
+                    listOf(
+                        "subgroup_size",
+                        "shared_memory_bytes",
+                        "max_workgroup_invocations",
+                    )) require(input.getLong(key) in 0..1_073_741_824)
                 row.put(
                     "device",
                     JSONObject()
                         .put("gpu", gpu)
                         .put("vulkan", vulkan)
                         .put("driver", input.getLong("driver"))
+                        .put("subgroup_size", input.getLong("subgroup_size"))
+                        .put("shared_memory_bytes", input.getLong("shared_memory_bytes"))
+                        .put(
+                            "max_workgroup_invocations",
+                            input.getLong("max_workgroup_invocations"),
+                        )
                         .put(
                             "timestamp_period_ns",
                             input.getDouble("timestamp_period_ns").also {
@@ -149,6 +165,79 @@ class EncoderLab(private val context: Context) {
             "BEGIN" ->
                 row.put("phase", "ENCODER")
                     .put("repeat", input.getInt("repeat").also { require(it in 0..3) })
+            "KERNEL" -> {
+                val kernels = row.getJSONArray("kernels")
+                require(row.getInt("variant") in 20..29 && kernels.length() < 32)
+                require(input.getInt("sequence") == kernels.length())
+                val kernel = JSONObject()
+                for (key in
+                    listOf(
+                        "sequence",
+                        "m",
+                        "n",
+                        "k",
+                        "streams",
+                        "activation_row_padding",
+                        "resident_bytes",
+                        "setup_ms",
+                        "reference_cells",
+                        "relative_rmse",
+                        "max_abs_error",
+                        "sampled_peak_pss_kib",
+                    )) {
+                    val value = input.getDouble(key)
+                    require(value.isFinite() && value >= -1 && value < 1e12)
+                    kernel.put(key, value)
+                }
+                require(kernel.getInt("m") in listOf(640, 1920, 2560))
+                require(kernel.getInt("n") in listOf(32, 64, 65, 128, 129, 139, 256, 384))
+                require(kernel.getInt("k") in listOf(640, 2560))
+                require(kernel.getInt("streams") in listOf(1, 8))
+                val variant = row.getInt("variant")
+                require(
+                    kernel.getInt("m") to kernel.getInt("k") in
+                        listOf(2560 to 640, 640 to 2560, 1920 to 640, 640 to 640)
+                )
+                require(kernel.getInt("streams") == if (variant == 26) 8 else 1)
+                require(kernel.getInt("reference_cells") == kernel.getInt("streams") * 64)
+                require(kernel.getInt("activation_row_padding") == if (variant == 25) 32 else 0)
+                val sourceType = if (row.getString("model") == "transcribepsy-q8") "q8_0" else "f16"
+                require(input.getString("source_type") == sourceType)
+                require(input.getString("storage_type") == if (variant == 24) "f16" else sourceType)
+                require(input.getBoolean("f32_accumulation") == (variant >= 23))
+                for (key in listOf("source_type", "storage_type")) kernel.put(
+                    key,
+                    input.getString(key).also { require(it in listOf("f16", "q8_0")) },
+                )
+                kernel.put(
+                    "backend",
+                    input.getString("backend").also {
+                        require(it == "CPU" || it.matches(Regex("Vulkan[0-9]{1,2}")))
+                        require((it == "CPU") == (row.getString("backend_requested") == "CPU"))
+                    },
+                )
+                kernel.put("finite", input.getBoolean("finite"))
+                kernel.put("f32_accumulation", input.getBoolean("f32_accumulation"))
+                kernel.put("cpu_repacked", input.getBoolean("cpu_repacked"))
+                require(
+                    !input.getBoolean("cpu_repacked") || row.getString("backend_requested") == "CPU"
+                )
+                for (key in listOf("wall_ms", "process_cpu_ms", "readback_check_ms")) {
+                    val values = input.getJSONArray(key)
+                    require(values.length() == 6)
+                    for (i in 0 until values.length()) require(
+                        values.getDouble(i).let { it.isFinite() && it >= 0 && it < 1e9 }
+                    )
+                    kernel.put(key, values)
+                }
+                for (key in listOf("counts", "shaders")) kernel.put(
+                    key,
+                    measurementMap(input.getJSONObject(key)),
+                )
+                kernel.put("environment", environment())
+                kernels.put(kernel)
+                row.put("phase", "KERNEL ${kernels.length()}/32")
+            }
             "SAMPLE" -> {
                 val samples = row.getJSONArray("samples")
                 require(samples.length() < 4)
@@ -182,17 +271,16 @@ class EncoderLab(private val context: Context) {
                         require(it == "CPU" || it.matches(Regex("Vulkan[0-9]{1,2}")))
                     },
                 )
-                for (key in listOf("host_us", "counts", "shaders", "gpu_op_ns")) {
-                    val source = input.getJSONObject(key)
-                    require(source.length() <= 100)
-                    val values = JSONObject()
-                    for (name in source.keys()) {
-                        require(name.matches(Regex("[A-Za-z0-9_:.-]{1,120}")))
-                        val value = source.getDouble(name)
-                        require(value.isFinite() && value >= 0 && value < 1e18)
-                        values.put(name, value)
-                    }
-                    sample.put(key, values)
+                for (key in
+                    listOf(
+                        "host_us",
+                        "counts",
+                        "shaders",
+                        "gpu_op_ns",
+                        "gpu_shapes_ns",
+                        "gpu_shapes_calls",
+                    )) {
+                    sample.put(key, measurementMap(input.getJSONObject(key)))
                 }
                 sample.put("environment", environment())
                 samples.put(sample)
@@ -216,7 +304,10 @@ class EncoderLab(private val context: Context) {
                 )
             }
             "FINISHED" -> {
-                require(row.getJSONArray("samples").length() == 4)
+                require(
+                    if (row.getInt("variant") >= 20) row.getJSONArray("kernels").length() == 32
+                    else row.getJSONArray("samples").length() == 4
+                )
                 row.put("status", event)
             }
             else -> error("Invalid lab event")
@@ -232,6 +323,18 @@ class EncoderLab(private val context: Context) {
             it.put("after", environment())
         }
         save()
+    }
+
+    private fun measurementMap(source: JSONObject): JSONObject {
+        require(source.length() <= 100)
+        val values = JSONObject()
+        for (name in source.keys()) {
+            require(name.matches(Regex("[A-Za-z0-9_:.-]{1,120}")))
+            val value = source.getDouble(name)
+            require(value.isFinite() && value >= 0 && value < 1e18)
+            values.put(name, value)
+        }
+        return values
     }
 
     @Synchronized
@@ -313,6 +416,23 @@ class EncoderLab(private val context: Context) {
                     )
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
+                        val kernels = row.optJSONArray("kernels")
+                        if (row.optInt("variant") >= 20) {
+                            append(
+                                "${row.getString("model")} · ${row.getString("id")} · ${kernels?.length() ?: 0}/32 kernels · ${row.optString("status")}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
+                            )
+                            if (
+                                kernels != null &&
+                                    (0 until kernels.length()).any {
+                                        !kernels.getJSONObject(it).getBoolean("finite") ||
+                                            kernels.getJSONObject(it).getDouble("relative_rmse") >
+                                                0.01
+                                    }
+                            )
+                                append(" · CHECK NUMERICS")
+                            appendLine()
+                            continue
+                        }
                         val samples = row.getJSONArray("samples")
                         val warm =
                             (1 until samples.length()).map {

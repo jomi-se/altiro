@@ -81,7 +81,7 @@ execute_process(COMMAND ${Python3_EXECUTABLE}
 add_subdirectory(${transcribepsy_SOURCE_DIR} ${transcribepsy_BINARY_DIR})
 target_include_directories(qvac-parakeet PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(ggml PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp)
+add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp kernel-hunt.cpp)
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/src")
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/ggml/src")
 target_link_libraries(altiro-transcribepsy PRIVATE qvac-parakeet)

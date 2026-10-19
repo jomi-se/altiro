@@ -147,10 +147,46 @@ class EncoderExperimentTest {
     @Test
     fun nativeOptionsAreBoundedAndRejectCommands() {
         for (invalid in
-            listOf("", "0:0", "9:0", "4:11", "4:-1", "4:0:1", "env=X", "1:2;anything")) {
+            listOf(
+                "",
+                "0:0",
+                "9:0",
+                "4:17",
+                "4:19",
+                "4:30",
+                "4:-1",
+                "4:0:1",
+                "env=X",
+                "1:2;anything",
+            )) {
             assertNull(invalid, EncoderExperiment.options(invalid))
         }
         assertEquals(4 to 0, EncoderExperiment.options("4:0"))
+    }
+
+    @Test
+    fun kernelHuntKeepsProcessBudgetBaselinesAndCacheDependency() {
+        for (reverse in listOf(false, true)) for (profile in listOf(false, true)) {
+            val cases = EncoderExperiment.suite(false, profile, reverse, hunt = true)
+            assertTrue(cases.size * 2 <= 64)
+            assertEquals(cases.size, cases.map { it.id }.distinct().size)
+            assertEquals("cpu-4-start", cases.first().id)
+            assertEquals("cpu-4-end", cases.filterNot { it.profiled }.last().id)
+            assertTrue(
+                cases.indexOfFirst { it.id == "gpu-cache-empty" } <
+                    cases.indexOfFirst { it.id == "gpu-cache-seeded" }
+            )
+            assertEquals(
+                (20..29).toSet(),
+                cases.filter { it.variant >= 20 }.map { it.variant }.toSet(),
+            )
+            assertTrue(cases.all { EncoderExperiment.options(it.wire) != null })
+            assertTrue(
+                cases
+                    .filter { it.backend == RecognitionBackend.CPU }
+                    .all { it.variant in listOf(0, 27) }
+            )
+        }
     }
 
     @Test

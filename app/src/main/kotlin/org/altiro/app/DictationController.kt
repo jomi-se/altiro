@@ -168,7 +168,7 @@ class DictationController(private val context: Context) {
         encoderLabProfile: Boolean = false,
     ): SessionId? {
         checkMain()
-        if (encoderLabMode !in 0..2) return null
+        if (encoderLabMode !in 0..3) return null
         if (
             encoderLabMode != 0 &&
                 (!explicit ||
@@ -365,7 +365,7 @@ class DictationController(private val context: Context) {
                     plan.inputs,
                     diagnostics,
                     encoderLab,
-                    plan.labMode == 2,
+                    plan.labMode,
                     plan.labProfile,
                     { percent, case ->
                         if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {

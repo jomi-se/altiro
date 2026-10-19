@@ -69,6 +69,7 @@ struct Progress {
     bool timestamps = false;
     double timestamp_period_ns = 0;
     int timestamp_bits_min = -1;
+    uint32_t subgroup_size = 0, shared_memory_bytes = 0, max_workgroup_invocations = 0;
 
     void check_java() {
         if (env->ExceptionCheck()) {
@@ -134,6 +135,13 @@ void probe_vulkan(Progress & progress) {
     progress.devices = static_cast<int>(count);
     VkPhysicalDeviceProperties properties{};
     vkGetPhysicalDeviceProperties(devices[0], &properties);
+    VkPhysicalDeviceSubgroupProperties subgroup{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_SUBGROUP_PROPERTIES};
+    VkPhysicalDeviceProperties2 properties2{VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2};
+    properties2.pNext = &subgroup;
+    vkGetPhysicalDeviceProperties2(devices[0], &properties2);
+    progress.subgroup_size = subgroup.subgroupSize;
+    progress.shared_memory_bytes = properties.limits.maxComputeSharedMemorySize;
+    progress.max_workgroup_invocations = properties.limits.maxComputeWorkGroupInvocations;
     uint32_t queue_count = 0;
     vkGetPhysicalDeviceQueueFamilyProperties(devices[0], &queue_count, nullptr);
     std::vector<VkQueueFamilyProperties> queues(queue_count);
@@ -386,7 +394,8 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
     jstring model_path, jstring wav_path, jboolean gpu, jint threads, jint variant,
     jstring cache_path, jobject receiver) {
     auto op = lookup(id);
-    if (!op || !model_path || !wav_path || !receiver || threads < 1 || threads > 8 || variant < 0 || variant > 10) return false;
+    if (!op || !model_path || !wav_path || !receiver || threads < 1 || threads > 8 ||
+        !((variant >= 0 && variant <= 16) || (variant >= 20 && variant <= 29))) return false;
     auto cls = env->GetObjectClass(receiver);
     Progress progress{env, receiver, op.get(), env->GetMethodID(cls, "onPhase", "(I)V"),
         env->GetMethodID(cls, "onRuntime", "(Ljava/lang/String;)V")};
@@ -414,10 +423,12 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
         device << "{\"lab\":true,\"event\":\"DEVICE\",\"gpu\":\"" << progress.gpu_name
                << "\",\"vulkan\":\"" << progress.vulkan_version << "\",\"driver\":" << progress.driver
                << ",\"timestamp_period_ns\":" << progress.timestamp_period_ns << ",\"timestamp_bits_min\":" << progress.timestamp_bits_min
+               << ",\"subgroup_size\":" << progress.subgroup_size << ",\"shared_memory_bytes\":" << progress.shared_memory_bytes
+               << ",\"max_workgroup_invocations\":" << progress.max_workgroup_invocations
                << ",\"timestamps_supported\":" << (progress.timestamps ? "true" : "false") << '}';
         lab_emit(progress, device.str());
         if (variant == 7) setenv("GGML_VK_DISABLE_INTEGER_DOT_PRODUCT", "1", 1);
-        if (variant == 8 || variant == 9) setenv("GGML_VK_PIPELINE_CACHE_DIR", cache.data, 1);
+        if (variant == 8 || variant == 9 || variant == 14 || variant >= 20) setenv("GGML_VK_PIPELINE_CACHE_DIR", cache.data, 1);
         // Profile uses upstream per-operation timestamp queries with serialization.
         // Queue support is checked before enabling it (no invented zero timings).
         if (variant == 9) {
@@ -425,6 +436,20 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
             if (!progress.timestamps) throw Failure{"TIMESTAMPS_UNAVAILABLE"};
 #endif
             setenv("GGML_VK_PERF_LOGGER", "1", 1);
+        }
+        if (variant >= 20) {
+            progress.stage(3);
+            const std::string path(model.data);
+            // Model identity is pinned and verified by the parent. The file is
+            // not loaded: this mode isolates synthetic kernels of that format.
+            const auto filename = path.substr(path.find_last_of("/\\") + 1);
+            if (filename != "transcribepsy-250m-eu-sub.gguf" && filename != "transcribepsy-250m-eu-sub-f16.gguf")
+                throw Failure{"MODEL_IDENTITY_INVALID"};
+            const bool quantized = filename == "transcribepsy-250m-eu-sub.gguf";
+            const char * failure = altiro_kernel_hunt(gpu,threads,variant,quantized,op->cancelled,
+                [&](const std::string & event) { lab_emit(progress,event); });
+            if (failure) throw Failure{failure};
+            return true;
         }
         progress.stage(2);
         lab_emit(progress, "{\"lab\":true,\"event\":\"PHASE\",\"phase\":\"REFERENCE\"}");
@@ -455,6 +480,7 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
         for (int repeat = 0; repeat < 4; ++repeat) {
             if (op->cancelled.load()) throw Failure{"NONE"};
             metrics.us.clear(); metrics.counts.clear(); metrics.shaders.clear(); metrics.gpu_ns.clear();
+            metrics.gpu_shapes_ns.clear(); metrics.gpu_shapes_calls.clear();
             metrics.measuring = true;
             progress.stage(3);
             lab_emit(progress, "{\"lab\":true,\"event\":\"BEGIN\",\"repeat\":" + std::to_string(repeat) + "}");
@@ -485,6 +511,7 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
                  << ",\"max_abs_error\":" << (finite ? max_abs : -1);
             lab_map(json, "host_us", metrics.us); lab_map(json, "counts", metrics.counts);
             lab_map(json, "shaders", metrics.shaders); lab_map(json, "gpu_op_ns", metrics.gpu_ns);
+            lab_map(json, "gpu_shapes_ns", metrics.gpu_shapes_ns); lab_map(json, "gpu_shapes_calls", metrics.gpu_shapes_calls);
             json << '}';
             lab_emit(progress, json.str());
             if (!finite) throw Failure{"NONFINITE_OR_SHAPE"};

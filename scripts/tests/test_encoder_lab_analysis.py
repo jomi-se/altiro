@@ -66,6 +66,60 @@ class AnalysisTest(unittest.TestCase):
         for sample in value['samples']: sample['relative_rmse'] = 0.5
         self.assertNotIn('Fastest completed', analysis.render(self.report(value)))
 
+    def test_kernel_suite_is_not_mistaken_for_full_encoder_latency(self):
+        value = kernel_case()
+        row = analysis.summarize(self.report(value))[0]
+        self.assertFalse(row['eligible'])
+        self.assertEqual(32,len(row['kernels']))
+        self.assertTrue(all(k['eligible'] for k in row['kernels']))
+        output = analysis.render(self.report(value))
+        self.assertIn('Synthetic kernel isolation',output)
+        self.assertNotIn('Fastest completed',output)
+
+    def test_kernel_numerics_placement_precision_and_repetitions_are_checked(self):
+        for mutate in (
+            lambda v:v.update(status='FAILED'),
+            lambda v:v['kernels'][0].update(finite=False,relative_rmse=-1,max_abs_error=-1),
+            lambda v:v['kernels'][0].update(backend='CPU'),
+            lambda v:v['kernels'][0].update(relative_rmse=0.5),
+        ):
+            value = kernel_case(); mutate(value)
+            self.assertFalse(analysis.summarize(self.report(value))[0]['kernels'][0]['eligible'])
+        for mutate in (
+            lambda v:v['kernels'][0]['wall_ms'].pop(),
+            lambda v:v['kernels'][0].update(f32_accumulation=True),
+            lambda v:v['kernels'][0].update(streams=8),
+            lambda v:v['kernels'][0].update(n=999),
+            lambda v:v['kernels'][0].update(storage_type='f16'),
+            lambda v:v['kernels'][0].update(relative_rmse=float('nan')),
+        ):
+            value = kernel_case(); mutate(value)
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+
+    def test_rectangular_selection_requires_actual_dispatch_geometry(self):
+        value = kernel_case()
+        value.update(variant=28,id='kernel-64x32-f32')
+        for k in value['kernels']:
+            k.update(f32_accumulation=True,counts={'forced_rectangular_tile_routes':1,'tile_64x64':1})
+        self.assertFalse(analysis.summarize(self.report(value))[0]['kernels'][0]['eligible'])
+        for k in value['kernels']: k['counts']['tile_64x32'] = 1
+        self.assertTrue(analysis.summarize(self.report(value))[0]['kernels'][0]['eligible'])
+
+
+def kernel_case():
+    value = case('kernel-stock','VULKAN',20)
+    value['samples'] = []
+    value['kernels'] = []
+    for m,k in ((2560,640),(640,2560),(1920,640),(640,640)):
+        for n in (32,64,65,128,129,139,256,384):
+            value['kernels'].append(dict(sequence=len(value['kernels']),m=m,n=n,k=k,streams=1,
+                source_type='q8_0',storage_type='q8_0',activation_row_padding=0,f32_accumulation=False,
+                backend='Vulkan0',finite=True,relative_rmse=0,max_abs_error=0,
+                resident_bytes=1000,setup_ms=10,reference_cells=64,
+                wall_ms=[1000,2,3,4,5,6],process_cpu_ms=[1]*6,readback_check_ms=[1]*6,
+                counts={},shaders={}))
+    return value
+
 
 if __name__ == '__main__':
     unittest.main()

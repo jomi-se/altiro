@@ -62,7 +62,7 @@ class RecognitionWorkerService : Service() {
                         check(
                             lab == null ||
                                 (family == RecognitionEngine.TRANSCRIBEPSY &&
-                                    (gpu || lab.second in listOf(0, 10)))
+                                    (gpu || lab.second in listOf(0, 10, 27)))
                         )
                         if (
                             family == RecognitionEngine.TRANSCRIBEPSY &&

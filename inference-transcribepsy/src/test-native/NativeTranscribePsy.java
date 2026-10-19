@@ -163,6 +163,50 @@ public final class NativeTranscribePsy {
     }
 
     public static void main(String[] args) throws Exception {
+        if ((args.length == 3 || args.length == 4) && args[0].equals("--kernel-hunt")) {
+            NativeTranscribePsy runtime = new NativeTranscribePsy();
+            int variant = args.length == 4 ? Integer.parseInt(args[3]) : 27;
+            final int[] kernels = {0};
+            Progress progress = new Progress() {
+                @Override public void onRuntime(String report) {
+                    super.onRuntime(report);
+                    if (report.contains("\"event\":\"KERNEL\"")) {
+                        require(report.contains("\"finite\":true"), "Nonfinite synthetic output");
+                        require(report.contains("\"backend\":\"CPU\""), "Synthetic backend mismatch");
+                        var error = java.util.regex.Pattern.compile("\"relative_rmse\":([-+0-9.eE]+)").matcher(report);
+                        require(error.find() && Double.parseDouble(error.group(1)) <= 0.01, "Synthetic CPU reference mismatch");
+                        if(variant == 25) require(report.contains("\"cpu_repacked\":false"), "Strided CPU input used incompatible prepacking");
+                        require(!report.contains(args[1]) && !report.contains(args[2]), "Paths in synthetic export");
+                        kernels[0]++;
+                        System.out.println(report);
+                    }
+                }
+            };
+            long handle = runtime.create();
+            try {
+                require(runtime.benchmark(handle,args[1],args[2],false,2,variant,"",progress), "Synthetic suite failed: " + progress.latest);
+                require(kernels[0] == 32, "Missing synthetic shapes");
+                require(progress.latest.contains("FINISHED"), "Missing completion");
+            } finally { runtime.release(handle); }
+            long cancelled = runtime.create();
+            try {
+                runtime.cancel(cancelled);
+                require(!runtime.benchmark(cancelled,args[1],args[2],false,2,27,"",progress), "Cancelled synthetic suite ran");
+                require(progress.latest.contains("CANCELLED"), "Synthetic cancellation missing");
+            } finally { runtime.release(cancelled); }
+            long inflight = runtime.create();
+            Progress cancelProgress = new Progress() {
+                @Override public void onRuntime(String report) {
+                    super.onRuntime(report);
+                    if(report.contains("\"event\":\"KERNEL\"")) runtime.cancel(inflight);
+                }
+            };
+            try {
+                require(!runtime.benchmark(inflight,args[1],args[2],false,2,variant,"",cancelProgress), "In-flight synthetic cancellation returned success");
+                require(cancelProgress.latest.contains("CANCELLED"), "In-flight synthetic cancellation missing");
+            } finally { runtime.release(inflight); }
+            return;
+        }
         if (args.length == 3 && args[0].equals("--encoder-lab")) {
             NativeTranscribePsy runtime = new NativeTranscribePsy();
             runtime.encoderLab(args[1], args[2]);

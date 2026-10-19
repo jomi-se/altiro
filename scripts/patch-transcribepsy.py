@@ -98,6 +98,10 @@ replace(vk, '            compiles.push_back(std::async(ggml_vk_create_pipeline_f
 replace(vk, '    subctx->s->buffer->buf.dispatch(wg0, wg1, wg2);',
         '    altiro_lab_count("dispatches");\n'
         '    altiro_lab_shader(pipeline->name.c_str());\n'
+        '    if (pipeline->name.rfind("matmul_",0) == 0) {\n'
+        '        const std::string tile = "tile_" + std::to_string(pipeline->wg_denoms[0]) + "x" + std::to_string(pipeline->wg_denoms[1]);\n'
+        '        altiro_lab_count(tile.c_str());\n'
+        '    }\n'
         '    subctx->s->buffer->buf.dispatch(wg0, wg1, wg2);')
 replace(vk, '    int nodes_per_submit = 100;',
         '    int nodes_per_submit = 100;')
@@ -122,5 +126,48 @@ replace(vk, '    const bool qx_needs_dequant = mmp == nullptr || x_non_contig ||
         '    altiro_lab_count("matmul_integer_dot_routes", quantize_y ? 1 : 0);\n'
         '    altiro_lab_count("matmul_separate_dequant_routes", (mmp == nullptr || x_non_contig || qx_force_dequant) ? 1 : 0);\n'
         '    const bool qx_needs_dequant = mmp == nullptr || x_non_contig || qx_force_dequant;')
+
+# Override only an existing supported tile family, before both the alignment
+# query and the final pipeline selection. Never force unavailable shared memory.
+replace(vk, '    if (ctx->device->coopmat2 && !mmp->scalar) {\n        const uint32_t shader_core_count',
+        '    if (altiro_lab_tile() == 1 && has_s && (aligned ? mmp->a_s : mmp->s)) {\n'
+        '        altiro_lab_count("forced_small_tile_routes");\n'
+        '        return aligned ? mmp->a_s : mmp->s;\n    }\n'
+        '    if (altiro_lab_tile() == 3 && has_l && (aligned ? mmp->a_l : mmp->l)) {\n'
+        '        altiro_lab_count("forced_large_tile_routes");\n'
+        '        return aligned ? mmp->a_l : mmp->l;\n    }\n'
+        '    if (altiro_lab_tile() >= 4 && !ctx->device->coopmat2 && !ctx->device->coopmat_support && has_m &&\n'
+        '        (src0_type == GGML_TYPE_F16 || src0_type == GGML_TYPE_Q8_0) && (aligned ? mmp->a_m : mmp->m)) {\n'
+        '        altiro_lab_count("forced_rectangular_tile_routes");\n'
+        '        return aligned ? mmp->a_m : mmp->m;\n    }\n'
+        '    if (altiro_lab_tile() && altiro_encoder_lab->measuring) altiro_lab_count("tile_override_unavailable");\n'
+        '    if (ctx->device->coopmat2 && !mmp->scalar) {\n        const uint32_t shader_core_count')
+
+# Scope rectangular specializations to dense FP16/Q8 medium pipelines. Sharing
+# the global denominator vectors would also alter unrelated MUL_MAT_ID families.
+replace(vk, '                                              uint32_t align, bool disable_robustness = false, bool require_full_subgroups = false, uint32_t required_subgroup_size = 0) {\n\n        if (!require_full_subgroups',
+        '                                              uint32_t align, bool disable_robustness = false, bool require_full_subgroups = false, uint32_t required_subgroup_size = 0) {\n'
+        '        std::vector<uint32_t> altiro_specs;\n'
+        '        const std::string altiro_name = altiro_lab_tile() >= 4 ? name : "";\n'
+        '        if (altiro_lab_tile() >= 4 && !device->coopmat_support && !device->coopmat2 &&\n'
+        '            specialization_constants.size() == 11 && altiro_name.size() > 2 && altiro_name.substr(altiro_name.size()-2) == "_m" &&\n'
+        '            (altiro_name.rfind("matmul_f16_",0) == 0 || altiro_name.rfind("matmul_q8_0_f32",0) == 0)) {\n'
+        '            altiro_specs = specialization_constants;\n'
+        '            const uint32_t bm = altiro_lab_tile() == 4 ? 64 : 32, bn = altiro_lab_tile() == 4 ? 32 : 64;\n'
+        '            altiro_specs[0] = 128; altiro_specs[1] = bm; altiro_specs[2] = bn;\n'
+        '            altiro_specs[4] = subgroup_size_8; altiro_specs[5] = 16; altiro_specs[6] = 2;\n'
+        '            altiro_specs[7] = 4; altiro_specs[8] = 2; altiro_specs[9] = 1; altiro_specs[10] = subgroup_size_8;\n'
+        '            wg_denoms = {bm,bn,1};\n'
+        '        }\n'
+        '        if (!require_full_subgroups')
+replace(vk, '                                          parameter_count, wg_denoms, specialization_constants, disable_robustness, require_full_subgroups, required_subgroup_size));',
+        '                                          parameter_count, wg_denoms, (altiro_specs.empty() ? specialization_constants : altiro_specs), disable_robustness, require_full_subgroups, required_subgroup_size));')
+
+# Shape-specific intervals complement the coarse operation groups. Fused groups
+# remain explicitly grouped, never duplicated as if each node took the full span.
+replace(vk, '                ctx->perf_logger->log_timing(nodes, names, uint64_t((timestamps[i] - timestamps[i-1]) * ctx->device->properties.limits.timestampPeriod));',
+        '                altiro_lab_count("profile_fused_groups");\n'
+        '                altiro_lab_count("profile_fused_ns", uint64_t((timestamps[i] - timestamps[i-1]) * ctx->device->properties.limits.timestampPeriod));\n'
+        '                ctx->perf_logger->log_timing(nodes, names, uint64_t((timestamps[i] - timestamps[i-1]) * ctx->device->properties.limits.timestampPeriod));')
 
 stamp.write_text(digest)

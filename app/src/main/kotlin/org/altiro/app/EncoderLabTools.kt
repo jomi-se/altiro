@@ -18,7 +18,7 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
     val busy by controller.recognition.busy.collectAsState()
     val modelBusy by controller.models.busy.collectAsState()
     val installed by controller.models.installed.collectAsState()
-    var full by rememberSaveable { mutableStateOf(false) }
+    var mode by rememberSaveable { mutableStateOf(1) }
     var both by rememberSaveable { mutableStateOf(false) }
     var profile by rememberSaveable { mutableStateOf(false) }
     var expanded by rememberSaveable { mutableStateOf(false) }
@@ -30,16 +30,22 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
     } else {
         FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FilterChip(
-                selected = !full,
-                onClick = { full = false },
+                selected = mode == 1,
+                onClick = { mode = 1 },
                 enabled = available,
                 label = { Text("Quick") },
             )
             FilterChip(
-                selected = full,
-                onClick = { full = true },
+                selected = mode == 2,
+                onClick = { mode = 2 },
                 enabled = available,
                 label = { Text("Full") },
+            )
+            FilterChip(
+                selected = mode == 3,
+                onClick = { mode = 3 },
+                enabled = available,
+                label = { Text("Kernel hunt") },
             )
             FilterChip(
                 selected = both,
@@ -56,7 +62,7 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
             )
         }
         Text(
-            "${if (both) "Q8 + FP16" else selected.name} · ${if (full) "several minutes" else "about 2 minutes"}",
+            "${if (both) "Q8 + FP16" else selected.name} · ${if (mode != 1) "several minutes" else "about 2 minutes"}",
             style = MaterialTheme.typography.bodySmall,
         )
         Button(
@@ -68,7 +74,7 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
             onClick = {
                 context.startActivity(
                     Intent(context, RecordingActivity::class.java)
-                        .putExtra("encoder-lab", if (full) 2 else 1)
+                        .putExtra("encoder-lab", mode)
                         .putExtra("encoder-lab-both", both)
                         .putExtra("encoder-lab-profile", profile)
                 )
