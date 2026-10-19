@@ -1,5 +1,9 @@
 # TranscribePsy phone experiment
 
+For the next diagnostic experiment, see the
+[code-level performance investigation](../research/transcribepsy-performance-investigation.md).
+Its instrumentation and alternate kernels are proposals, not controls in 0.6.0.
+
 This is an additional local engine, not a replacement for saved Whisper choices.
 The first build targets ARM64, including Pixel 7. No Pixel speed, GPU support or
 Chilean accuracy claim follows from a successful host build.
@@ -71,5 +75,7 @@ Full editor/resource gates remain separate from this experiment.
 The host JNI smoke procedure runs the production bridge with both model files
 and a public speech sample, validates a reference phrase, rejects malformed
 audio and checks pre-start/in-flight cancellation. It establishes CPU API
-behavior on that host; Android execution and Pixel CPU/GPU measurements are
-pending physical-device evidence.
+behavior on that host. Initial Pixel CPU/Vulkan trials are now reported in the
+[performance investigation](../research/transcribepsy-performance-investigation.md);
+controlled performance, resource/cancellation and multilingual quality acceptance
+remain open.

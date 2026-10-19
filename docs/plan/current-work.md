@@ -1,6 +1,19 @@
 # Current work
 
-Updated: 2026-10-18.
+Updated: 2026-10-19.
+
+The maintainer's 0.6.0 Pixel 7 comparisons now establish successful CPU and
+Vulkan encoder/decoder execution for Q8 and FP16 in those trials, with no
+unsupported operations. CPU inference was approximately twice as fast as
+Vulkan for the paired short recordings; on one identical 31.88-second CPU
+recording Q8 took 5.44 seconds versus FP16's 7.77 seconds. These are individual
+phone observations, not controlled latency/quality or comprehensive resource
+acceptance. The [code-level performance investigation](../research/transcribepsy-performance-investigation.md)
+traces lazy pipeline compilation inside encoder timings, matrix types/shapes,
+direct versus lowered convolution, graph optimization and decoder dependencies.
+It proposes measurement/optimization experiments, including exact-prefix frame
+lookahead; none are implemented or accepted runtime defaults. No new APK ships
+with this research increment.
 
 Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
 ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen
@@ -16,8 +29,9 @@ See [the test procedure](../testing/transcribepsy.md). Host JNI smoke tests
 have exercised both precisions on CPU, a reference phrase, malformed audio and
 cancellation. Full host verification passes: 52 core and 8 acquisition tests, Android app/fixture
 builds and lint, instrumentation APK compilation, native page alignment and
-packaged notices. Pixel CPU/GPU performance, memory, cancellation and
-multilingual quality remain unverified.
+packaged notices. The later phone observations above supplement these host
+checks; controlled performance, cancellation/resource gates and multilingual
+quality acceptance remain open.
 
 The maintainer reports improved ordinary insertion before this experiment.
 The earlier comprehensive editor/resource gates remain open. Current work
