@@ -12,8 +12,12 @@
 namespace {
 int live=0;
 int mode=0;
-void* fake_open(const char* name,int) { assert(std::string(name)=="libOpenCL.so"); return mode==1?nullptr:reinterpret_cast<void*>(1); }
-int fake_close(void*) {return 0;}
+int loaded=0;
+bool driver_pending=false;
+void process_reset(){live=0;loaded=0;driver_pending=false;}
+void check_cleanup(){assert(live==(driver_pending?5:0));assert(loaded==(driver_pending?1:0));}
+void* fake_open(const char* name,int) { assert(std::string(name)=="libOpenCL.so"); if(mode==1)return nullptr;++loaded;return reinterpret_cast<void*>(1); }
+int fake_close(void*) {--loaded;return 0;}
 cl_int CL_API_CALL platforms(cl_uint n,cl_platform_id* out,cl_uint* count) {assert(n==8);*count=mode==2?9:1;out[0]=reinterpret_cast<cl_platform_id>(1);return CL_SUCCESS;}
 cl_int CL_API_CALL devices(cl_platform_id,cl_device_type type,cl_uint n,cl_device_id* out,cl_uint* count) {assert(type==CL_DEVICE_TYPE_GPU&&n==16);*count=mode==3?17:1;out[0]=reinterpret_cast<cl_device_id>(1);return CL_SUCCESS;}
 cl_int CL_API_CALL info(cl_device_id,cl_device_info key,size_t n,void* out,size_t*) {
@@ -33,9 +37,9 @@ cl_program CL_API_CALL program(cl_context,cl_uint,const char**,const size_t*,cl_
 cl_int CL_API_CALL build(cl_program,cl_uint,const cl_device_id*,const char*,void(CL_CALLBACK*)(cl_program,void*),void*) {return mode==5?CL_BUILD_PROGRAM_FAILURE:CL_SUCCESS;}
 cl_kernel CL_API_CALL kernel(cl_program,const char*,cl_int* e) {*e=0;++live;return reinterpret_cast<cl_kernel>(1);}
 cl_int CL_API_CALL arg(cl_kernel,cl_uint,size_t,const void*) {return CL_SUCCESS;}
-cl_int CL_API_CALL enqueue(cl_command_queue,cl_kernel,cl_uint,const size_t*,const size_t* n,const size_t*,cl_uint,const cl_event*,cl_event*) {assert(*n==32);return mode==6?CL_OUT_OF_RESOURCES:CL_SUCCESS;}
-cl_int CL_API_CALL finish(cl_command_queue) {return mode==7?CL_OUT_OF_RESOURCES:CL_SUCCESS;}
-cl_int CL_API_CALL read(cl_command_queue,cl_mem,cl_bool,size_t,size_t n,void* p,cl_uint,const cl_event*,cl_event*) {assert(n==128);for(int i=0;i<32;++i)static_cast<float*>(p)[i]=float(i*2+1);if(mode==8)static_cast<float*>(p)[31]=0;return CL_SUCCESS;}
+cl_int CL_API_CALL enqueue(cl_command_queue,cl_kernel,cl_uint,const size_t*,const size_t* n,const size_t*,cl_uint,const cl_event*,cl_event*) {assert(*n==32);if(mode==6)return CL_OUT_OF_RESOURCES;driver_pending=true;return CL_SUCCESS;}
+cl_int CL_API_CALL finish(cl_command_queue) {if(mode==7)return CL_OUT_OF_RESOURCES;driver_pending=false;return CL_SUCCESS;}
+cl_int CL_API_CALL read(cl_command_queue,cl_mem,cl_bool,size_t,size_t n,void* p,cl_uint,const cl_event*,cl_event*) {assert(n==128);driver_pending=true;if(mode==9)return CL_OUT_OF_RESOURCES;driver_pending=false;for(int i=0;i<32;++i)static_cast<float*>(p)[i]=float(i*2+1);if(mode==8)static_cast<float*>(p)[31]=0;return CL_SUCCESS;}
 template<typename T> cl_int CL_API_CALL release(T) {--live;return CL_SUCCESS;}
 void* fake_symbol(void*,const char* name) {
 #define MAP(public_name,fn) if(strcmp(name,#public_name)==0)return reinterpret_cast<void*>(fn)
@@ -57,19 +61,22 @@ void* fake_symbol(void*,const char* name) {
 #undef dlclose
 #undef dlsym
 int main() {
-    const char* statuses[]={"verified","library_unavailable_in_app","platform_limit_exceeded","device_limit_exceeded","gpu_with_compiler_unavailable","compile_failed","enqueue_failed","finish_failed","verification_failed"};
-    for(mode=0;mode<9;++mode) {
+    const char* statuses[]={"verified","library_unavailable_in_app","platform_limit_exceeded","device_limit_exceeded","gpu_with_compiler_unavailable","compile_failed","enqueue_failed","finish_failed","verification_failed","read_failed"};
+    for(mode=0;mode<10;++mode) {
+        // Each invocation represents a fresh disposable worker process.
+        process_reset();
         const auto json=altiro_gpu_capabilities(nullptr,nullptr);
         assert(json.find(std::string("\"status\":\"")+statuses[mode]+"\"")!=std::string::npos);
-        assert(json.size()<8192); assert(live==0); assert(json.find("fake/name")==std::string::npos);
+        assert(json.size()<8192); check_cleanup(); assert(json.find("fake/name")==std::string::npos);
         if(mode==0) {assert(json.find("\"verified\":true")!=std::string::npos);assert(json.find("\"integerDotExtension\":true")!=std::string::npos);}
     }
     // Exercise cancellation at each checkpoint, including after compile/enqueue/finish/read.
     mode=0;
     for(int threshold=0;threshold<15;++threshold) {
+        process_reset();
         int remaining=threshold;
         altiro_gpu_capabilities([](void* p) {return --*static_cast<int*>(p)<0;},&remaining);
-        assert(live==0);
+        check_cleanup();
     }
     std::cout << "OpenCL capability fake ABI tests passed\n";
 }

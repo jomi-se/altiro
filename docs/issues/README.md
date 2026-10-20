@@ -19,6 +19,9 @@
   accepted on hardware: 0.6.6 completed all 48 cases, all 640 synthetic
   numerical screens, and finite forced-small full-encoder repetitions.
 
+- [0007 — OpenCL pending-work cleanup](0007-opencl-pending-work-cleanup.md):
+  source fixed and fake-driver lifecycle checks pass; phone cancellation remains pending.
+
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.
 Accepted feature work belongs in [plans](../plan/vertical-slice-build-order.md).

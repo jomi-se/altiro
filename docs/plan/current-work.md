@@ -2,6 +2,18 @@
 
 Updated: 2026-10-20.
 
+Version **0.6.9-opencl-int8** implements the owner-authorized next GPU
+campaign with Astra: actual pinned Arm OpenCL kernels and a scale-preserving
+signed-integer Vulkan path. The per-model schedule excludes unsupported FP16
+INT8 cases and retains matched controls and content-free diagnostics. See
+[decision 0024](../decisions/0024-opencl-and-integer-gpu-experiments.md) and the
+[phone procedure](../testing/opencl-int8.md). Host verification passes: 74 JVM
+tests, 54 Python checks, native layout and fake-driver lifecycle checks, and
+host-JNI dispatch/cancellation smoke checks. Android app/fixture builds, lint,
+instrumentation APK compilation, notices, installability and 16 KiB alignment
+checks pass. New OpenCL/INT8 GPU execution, cancellation and speed remain phone
+gates. Everyday recognition defaults remain unchanged.
+
 Version **0.6.8-packed-gpu** implements the next opt-in **Packed GPU**
 experiment: original register-blocked Vulkan matrix kernels, complete GGML
 controls, fixed/recording-derived shapes, independent products and ordinary-app

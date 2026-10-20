@@ -1,4 +1,6 @@
 import importlib.util
+import json
+import re
 from pathlib import Path
 import unittest
 
@@ -304,6 +306,196 @@ class NewGpuAnalysisTest(unittest.TestCase):
         self.assertIsNotNone(analysis.summarize(self.report(value))[0]['capability'])
         del value['capabilities']['opencl']['executeUs']
         with self.assertRaises(ValueError):analysis.summarize(self.report(value))
+
+
+def gemm_case(variant=80, fp16=False):
+    family='int8' if variant<90 else 'acl'
+    value=case(f'{family}-test','VULKAN',variant)
+    value.update(model='transcribepsy-fp16' if fp16 else 'transcribepsy-q8',samples=[],
+                 candidate_backend_requested='VULKAN' if family=='int8' else 'OPENCL')
+    value[family]=[]
+    width=145 if variant%10==1 else 201 if variant%10==2 else 139
+    for m,n,k in ((2560,width,640),(640,width,2560),(65,65,96),(63,63,64)):
+        cells=m*n
+        r=dict(sequence=len(value[family]),m=m,n=n,k=k,encoder_frames=139,streams=1,
+            complete_calls_per_repeat=1,source_type='f16' if fp16 else 'q8_0',
+            control_backend='Vulkan',activation_input_rounding='f16_then_f32',
+            execution_order='alternating_candidate_first_even',full_reference=cells<=8192,
+            reference_cells=cells if cells<=8192 else 64,finite=True,weight_pack_gpu_ns=1000,
+            control_counts={},control_shaders={},candidate_device='Example GPU',control_device='Example GPU',
+            candidate_vendor_id=1,sampled_peak_pss_kib=-1,
+            environment=dict(elapsed_ms=100,thermal_status=0,power_save=False,battery_deci_c=300,
+                battery_percent=80,plugged=0,cpu_sample_khz=[1000000,None,None,None,None,None,None,None]))
+        for key in ('wall_ms','process_cpu_ms','readback_check_ms','control_wall_ms'):
+            r[key]=[1000,2,3,4,5,6]
+        for key in ('boundary_gpu_ns','control_boundary_gpu_ns'):
+            r[key]=[100000000,2000000,3000000,4000000,5000000,6000000]
+        for key in ('resident_bytes','scratch_bytes','control_resident_bytes','host_reference_bytes',
+                    'setup_ms','weight_pack_wall_ms'):
+            r[key]=1
+        if family=='int8':
+            r.update(storage_type='q8_0',backend='Vulkan',candidate_backend='Vulkan',
+                control_weight_type='q8_0',implementation='altiro_q8_block32_sdot4_v1',
+                weight_layout='m4_block32_lane_q8',activation_layout='n4_block32_lane_q8',
+                activation_quantization='symmetric_per32_f32_scale_rna',
+                quantized_reference_mode='int64_block_dot_double_scale',
+                reference_mode='double_dot_q8_weights_half_rounded_x',
+                full_quantized_reference=True,quantized_reference_cells=cells,
+                workgroup=[8,8,1],register_tile=[4,4],dispatch=[(m+31)//32,(n+31)//32,1],
+                packing_workgroup=[64,1,1],specialization_constants=[],
+                candidate_gpu_dispatches_per_repeat=2,candidate_shared_memory_bytes=0,
+                physical_device_count=1,same_device_verified=True,activation_quant_checked=True,
+                weight_pack_checked=True,wall_includes_activation_quant=True,
+                shader_integer_dot_product=True,packed_signed_dot_accelerated=True,integer_dot_enabled=True,
+                logical_integer_dot_operations=cells*k//4,f32_accumulation=True,integer_accumulation='i32_per32',
+                candidate_device_id=1,candidate_driver_version=1,timestamp_valid_bits=64,
+                candidate_memory_flags_all=7,candidate_all_memory_device_local=True,timestamp_period_ns=1,
+                activation_rounding_tie_count=0)
+            for key in ('activation_quant_wall_ms','activation_quant_gpu_ns','compute_gpu_ns'):
+                r[key]=[1]*6
+            r['compute_gpu_ns']=[v-1 for v in r['boundary_gpu_ns']]
+            for key in ('pipeline_setup_ms','reference_setup_ms','source_quantization_max_abs',
+                        'activation_quant_max_abs','quantized_relative_rmse','quantized_max_abs_error',
+                        'float_relative_rmse','float_max_abs_error','control_reference_relative_rmse',
+                        'control_relative_rmse','control_max_abs_error'):
+                r[key]=0
+        else:
+            r.update(storage_type='f16',backend='OpenCL',candidate_backend='OpenCL',
+                implementation='acl_reshaped_rhs_t',acl_revision='80bbedb606746dcc1451cffedf3931d9fec3f53c',
+                gemm_kernel='gemm_mm_reshaped_only_rhs_t',reshape_kernel='gemm_reshape_rhs_matrix_t',
+                accumulation='f16',control_accumulation='f32',output_type='f16',
+                block_m0=4,block_n0=4,block_k0=4,block_h0=1,dispatch=[(m+3)//4,(n+3)//4,1],
+                activation_transform='f32_to_f16',output_transform='f16_to_f32',weight_pack_checked=True,
+                boundary_output_type='f32',glue_implementation='altiro_fixed_cast_v1',
+                candidate_gpu_events_per_repeat=3,activation_conversion_gpu_ns=[1]*6,
+                output_conversion_gpu_ns=[1]*6,compute_gpu_ns=[v-2 for v in r['boundary_gpu_ns']],
+                wall_includes_all_transforms=True,unique_gpu_vendor_match=True,
+                reference_mode='double_dot_half_rounded_inputs',opencl_gpu_count=1,vulkan_gpu_count=1,
+                device_type='GPU',workgroup_selection='driver_selected',
+                candidate_vendor='Example vendor',candidate_driver_version='1.2.3',
+                control_process_cpu_ms=[1]*6)
+            for key in ('program_build_ms','host_rhs_transpose_ms','source_rounding_max_abs',
+                        'relative_rmse','max_abs_error','control_relative_rmse','control_max_abs_error',
+                        'control_reference_relative_rmse'):
+                r[key]=0
+        value[family].append(r)
+    return value
+
+
+class AlternateGemmAnalysisTest(unittest.TestCase):
+    def report(self,value): return dict(schema=1,cases=[value])
+
+    def test_all_variants_are_isolated_and_exclude_first_call(self):
+        for variant in (80,81,82,90,91,92):
+            for fp16 in ((False,True) if variant>=90 else (False,)):
+                value=gemm_case(variant,fp16)
+                row=analysis.summarize(self.report(value))[0]
+                self.assertFalse(row['eligible'])
+                self.assertEqual(4,len(row['gemm']))
+                self.assertEqual(4,row['gemm'][0]['median'])
+                self.assertTrue(all(r['eligible'] for r in row['gemm']))
+                self.assertNotIn('Fastest completed',analysis.render(self.report(value)))
+
+    def test_native_event_fields_match_receiver_fixture(self):
+        # A field added to the C++ event but missing from the Android/export
+        # contract previously broke live receipts. Keep the independent fixture
+        # tied to the actual emitted key set, including array/map helper calls.
+        root=Path(__file__).parents[2]/'inference-transcribepsy/src/main/cpp'
+        for family,variant in (('int8',80),('acl',90)):
+            source=(root/f'{family}-kernel.cpp').read_text()
+            marker='out<<"{\\"lab\\":true,\\"event\\":\\"'+family.upper()
+            emission=source[source.index(marker):]
+            emission=emission[:emission.index('emit(out.str())')]
+            emitted=set(re.findall(r'\\"([A-Za-z0-9_]+)\\":',emission))
+            emitted.update(re.findall(r'(?:array|map|counters)\(out,\s*"([A-Za-z0-9_]+)"',emission))
+            fixture=set(gemm_case(variant)[family][0])-{'environment','sampled_peak_pss_kib'}
+            self.assertEqual(fixture|{'lab','event'},emitted)
+
+    def test_android_integral_double_json_spelling_is_accepted(self):
+        for variant in (80,90):
+            value=gemm_case(variant); family='int8' if variant==80 else 'acl'
+            for record in value[family]:
+                for key,item in list(record.items()):
+                    if type(item) is int: record[key]=float(item)
+                    elif isinstance(item,list) and key not in ('specialization_constants',):
+                        record[key]=[float(x) if type(x) is int else x for x in item]
+            # Android JSONObject flattens integral Doubles; both spellings must agree.
+            floating=json.loads(json.dumps(value))
+            def flatten(item):
+                if type(item) is float and item.is_integer(): return int(item)
+                if isinstance(item,list): return [flatten(v) for v in item]
+                if isinstance(item,dict): return {k:flatten(v) for k,v in item.items()}
+                return item
+            self.assertEqual(analysis.summarize(self.report(floating)),
+                             analysis.summarize(self.report(flatten(floating))))
+
+    def test_int8_float_quantization_error_is_not_oracle_failure(self):
+        value=gemm_case()
+        value['int8'][0].update(float_relative_rmse=.2,control_relative_rmse=.2)
+        self.assertTrue(analysis.summarize(self.report(value))[0]['gemm'][0]['eligible'])
+        value['int8'][0]['quantized_relative_rmse']=.001
+        self.assertFalse(analysis.summarize(self.report(value))[0]['gemm'][0]['eligible'])
+
+    def test_no_timestamp_or_failed_partial_case_cannot_claim_performance(self):
+        for variant in (80,90):
+            value=gemm_case(variant); family='int8' if variant==80 else 'acl'
+            value[family][0]['boundary_gpu_ns']=[None]*6
+            self.assertFalse(analysis.summarize(self.report(value))[0]['gemm'][0]['eligible'])
+            self.assertIn('timestamps unavailable',analysis.render(self.report(value)))
+            value.update(status='FAILED'); value[family]=value[family][:1]
+            self.assertEqual(1,len(analysis.summarize(self.report(value))[0]['gemm']))
+            value[family]=[]
+            self.assertIn('0/4',analysis.render(self.report(value)))
+
+    def test_mismatched_work_proof_bounds_and_privacy_are_rejected(self):
+        common=(
+            lambda r:r.update(m=True),lambda r:r.update(sequence=.5),
+            lambda r:r.update(streams=2),lambda r:r.update(control_backend='CPU'),
+            lambda r:r.update(wall_ms=[1]*5),lambda r:r.update(private_path='/private'),
+            lambda r:r.update(boundary_gpu_ns=[float('nan')]*6),
+            lambda r:r.update(control_boundary_gpu_ns=[-1]*6),
+            lambda r:r.update(candidate_device='private/path'),
+            lambda r:r.update(reference_cells=1),lambda r:r.update(finite='true'),
+            lambda r:r['environment'].update(private_path='/private'),
+        )
+        for variant in (80,90):
+            family='int8' if variant==80 else 'acl'
+            for mutate in common:
+                value=gemm_case(variant); mutate(value[family][0])
+                with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+            value=gemm_case(variant); value[family].pop()
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+            value=gemm_case(variant); value[family][1]['encoder_frames']=140
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+        for mutate in (
+            lambda r:r.update(control_weight_type='f32'),
+            lambda r:r.update(integer_dot_enabled=False),
+            lambda r:r.update(shader_integer_dot_product=False),
+            lambda r:r.update(packed_signed_dot_accelerated=False),
+            lambda r:r.update(activation_quant_checked=False),
+            lambda r:r.update(logical_integer_dot_operations=1),
+            lambda r:r.update(activation_quant_wall_ms=[2000]*6),
+            lambda r:r.update(activation_rounding_tie_count=10**12),
+        ):
+            value=gemm_case(); mutate(value['int8'][0])
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+        for mutate in (
+            lambda r:r.update(acl_revision='unverified'),
+            lambda r:r.update(unique_gpu_vendor_match=False),
+            lambda r:r.update(opencl_gpu_count=2),
+            lambda r:r.update(gemm_kernel='custom_kernel'),
+            lambda r:r.update(accumulation='f32'),
+            lambda r:r.update(weight_pack_checked=False),
+        ):
+            value=gemm_case(90); mutate(value['acl'][0])
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+
+    def test_int8_fp16_unknown_variant_and_requested_backend_rejected(self):
+        for value in (gemm_case(80,True),gemm_case(90)):
+            if value['variant']==90: value['candidate_backend_requested']='VULKAN'
+            with self.assertRaises(ValueError): analysis.summarize(self.report(value))
+        value=case(variant=50)
+        with self.assertRaises(ValueError): analysis.summarize(self.report(value))
 
 
 if __name__ == '__main__':

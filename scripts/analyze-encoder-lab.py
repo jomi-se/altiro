@@ -12,6 +12,12 @@ def is_kernel(variant):
     return variant in range(20, 30) or variant in range(40, 47)
 
 
+def gemm_family(variant):
+    if variant in (80, 81, 82): return 'int8'
+    if variant in (90, 91, 92): return 'acl'
+    return None
+
+
 def experiment_route(variant, counts, shape=None):
     if variant in (31, 41): return counts.get('blocking_final_fence', 0) > 0
     if variant in (32, 42): return counts.get('tile256_routes', 0) > 0
@@ -42,11 +48,13 @@ def summarize(report):
         if case.get('backend_requested') not in ('CPU', 'VULKAN'):
             raise ValueError('Invalid requested backend')
         variant = case.get('variant')
-        if type(variant) is not int or variant not in (*range(17), *range(20,37), *range(40,47), *range(60,64), 70):
+        if type(variant) is not int or variant not in (*range(17), *range(20,37), *range(40,47), *range(60,64), 70, 80, 81, 82, 90, 91, 92):
             raise ValueError('Unknown native variant')
-        special = variant in range(60,64) or variant == 70
+        family = gemm_family(variant)
+        special = variant in range(60,64) or variant == 70 or family is not None
         packed = packed_rows(case) if variant in range(60,64) else []
         capability = capability_row(case) if variant == 70 else None
+        gemm = gemm_rows(case, family) if family else []
         if special and case.get('samples', []): raise ValueError('Unexpected full encoder samples')
         kernels = (focused_rows(case) if variant in range(40,47) else kernel_rows(case)) if is_kernel(variant) else []
         samples = case.get('samples', [])
@@ -76,7 +84,7 @@ def summarize(report):
                          low=min(warm) if warm else None, high=max(warm) if warm else None,
                          eligible=not special and complete and numerics and placement and routing and same_work and not profile,
                          complete=complete, numerics=numerics, placement=placement, routing=routing, profile=profile,
-                         kernels=kernels, packed=packed, capability=capability, variant=variant,
+                         kernels=kernels, packed=packed, capability=capability, gemm=gemm, family=family, variant=variant,
                          status=case.get('status'), error=max((s['relative_rmse'] for s in samples), default=None)))
     return rows
 
@@ -232,6 +240,219 @@ def bounded_number(value, maximum=1e12):
     value = number(value)
     if value > maximum: raise ValueError('Measurement exceeds bound')
     return value
+
+
+def exact_integer(value, low=0, high=4294967295):
+    # JSONObject writes an integral Double without ".0"; accept either JSON
+    # numeric spelling, never booleans, fractions, nonfinite values or strings.
+    if type(value) not in (int, float) or not math.isfinite(value) or value != int(value) or not low <= value <= high:
+        raise ValueError('Invalid integral measurement')
+    return int(value)
+
+
+def exact_contract(record, contract):
+    for key, expected in contract.items():
+        value = record.get(key)
+        if type(expected) is int:
+            if exact_integer(value) != expected: raise ValueError('Wrong GEMM work contract')
+        elif isinstance(expected, list):
+            if not isinstance(value, list) or len(value) != len(expected) or any(exact_integer(a) != b for a,b in zip(value,expected)):
+                raise ValueError('Wrong GEMM dispatch contract')
+        elif type(value) is not type(expected) or value != expected:
+            raise ValueError('Wrong GEMM work contract')
+
+
+def repeated_measurements(record, fields, nullable=()):
+    for key in fields:
+        values = record.get(key)
+        if not isinstance(values, list) or len(values) != 6:
+            raise ValueError('Incomplete GEMM repetitions')
+        for value in values:
+            if value is None and key in nullable: continue
+            bounded_number(value, 1e18 if key.endswith('_ns') else 1e9)
+
+
+GEMM_DEVICE_NUMBERS = ('candidate_vendor_id', 'candidate_device_id', 'candidate_driver_version',
+                       'timestamp_valid_bits', 'candidate_memory_flags_all')
+INT8_TIMINGS = ('wall_ms', 'process_cpu_ms', 'activation_quant_wall_ms', 'activation_quant_gpu_ns',
+                'compute_gpu_ns', 'boundary_gpu_ns', 'readback_check_ms', 'control_wall_ms',
+                'control_boundary_gpu_ns')
+INT8_SCALARS = ('resident_bytes', 'scratch_bytes', 'control_resident_bytes', 'host_reference_bytes',
+                'pipeline_setup_ms', 'setup_ms', 'weight_pack_wall_ms', 'reference_setup_ms',
+                'source_quantization_max_abs', 'activation_quant_max_abs')
+INT8_ERRORS = ('quantized_relative_rmse', 'quantized_max_abs_error', 'float_relative_rmse',
+               'float_max_abs_error', 'control_reference_relative_rmse', 'control_relative_rmse',
+               'control_max_abs_error')
+ACL_TIMINGS = ('wall_ms','process_cpu_ms','readback_check_ms','control_wall_ms',
+               'control_process_cpu_ms','boundary_gpu_ns','control_boundary_gpu_ns',
+               'activation_conversion_gpu_ns','compute_gpu_ns','output_conversion_gpu_ns')
+ACL_SCALARS = ('program_build_ms','setup_ms','host_rhs_transpose_ms','weight_pack_wall_ms',
+               'resident_bytes','scratch_bytes','control_resident_bytes','host_reference_bytes',
+               'source_rounding_max_abs')
+ACL_ERRORS = ('relative_rmse','max_abs_error','control_relative_rmse','control_max_abs_error',
+              'control_reference_relative_rmse')
+ACL_EXTRA = {'candidate_device','candidate_vendor','candidate_driver_version','candidate_vendor_id',
+             'control_device'}
+
+
+def acl_contract(m,n,k):
+    return dict(storage_type='f16',backend='OpenCL',candidate_backend='OpenCL',
+        implementation='acl_reshaped_rhs_t',acl_revision='80bbedb606746dcc1451cffedf3931d9fec3f53c',
+        gemm_kernel='gemm_mm_reshaped_only_rhs_t',reshape_kernel='gemm_reshape_rhs_matrix_t',
+        accumulation='f16',control_accumulation='f32',output_type='f16',
+        block_m0=4,block_n0=4,block_k0=4,block_h0=1,dispatch=[(m+3)//4,(n+3)//4,1],
+        activation_transform='f32_to_f16',output_transform='f16_to_f32',weight_pack_checked=True,
+        boundary_output_type='f32',glue_implementation='altiro_fixed_cast_v1',candidate_gpu_events_per_repeat=3,
+        wall_includes_all_transforms=True,unique_gpu_vendor_match=True,
+        reference_mode='double_dot_half_rounded_inputs',opencl_gpu_count=1,vulkan_gpu_count=1,
+        device_type='GPU',workgroup_selection='driver_selected')
+
+
+def validate_acl(record, records, index):
+    for key in ('candidate_device','candidate_vendor','candidate_driver_version','control_device'):
+        if not isinstance(record.get(key),str) or not re.fullmatch(r'[A-Za-z0-9 ._-]{0,64}',record[key]):
+            raise ValueError('Unsafe OpenCL identity')
+    exact_integer(record.get('candidate_vendor_id'))
+    if index:
+        for key in ACL_EXTRA:
+            if record[key]!=records[0][key]: raise ValueError('Changing OpenCL identity')
+    for total,activation,compute,output in zip(record['boundary_gpu_ns'],record['activation_conversion_gpu_ns'],
+                                              record['compute_gpu_ns'],record['output_conversion_gpu_ns']):
+        if all(v is not None for v in (total,activation,compute,output)) and activation+compute+output>total+max(1,abs(total)*1e-7):
+            raise ValueError('OpenCL event intervals exceed complete GPU boundary')
+    numeric=(record['finite'] and 0<=record['relative_rmse']<=.02
+             and 0<=record['control_relative_rmse']<=.02
+             and 0<=record['control_reference_relative_rmse']<=.002)
+    return numeric,record['relative_rmse'],record['relative_rmse']
+
+
+def gemm_contract(case, family, sequence, frames):
+    base = 80 if family == 'int8' else 90
+    width = 145 if case['variant'] == base+1 else 201 if case['variant'] == base+2 else frames
+    m,n,k = ((2560,width,640),(640,width,2560),(65,65,96),(63,63,64))[sequence]
+    cells = m*n
+    common = dict(sequence=sequence,m=m,n=n,k=k,encoder_frames=frames,streams=1,complete_calls_per_repeat=1,
+                  source_type='q8_0' if case['model']=='transcribepsy-q8' else 'f16',
+                  control_backend='Vulkan',activation_input_rounding='f16_then_f32',
+                  execution_order='alternating_candidate_first_even',full_reference=cells<=8192,
+                  reference_cells=cells if cells<=8192 else 64)
+    if family == 'int8':
+        common.update(storage_type='q8_0',backend='Vulkan',candidate_backend='Vulkan',
+            control_weight_type='q8_0',implementation='altiro_q8_block32_sdot4_v1',
+            weight_layout='m4_block32_lane_q8',activation_layout='n4_block32_lane_q8',
+            activation_quantization='symmetric_per32_f32_scale_rna',
+            quantized_reference_mode='int64_block_dot_double_scale',
+            reference_mode='double_dot_q8_weights_half_rounded_x',full_quantized_reference=True,
+            quantized_reference_cells=cells,workgroup=[8,8,1],register_tile=[4,4],
+            dispatch=[(m+31)//32,(n+31)//32,1],packing_workgroup=[64,1,1],specialization_constants=[],
+            candidate_gpu_dispatches_per_repeat=2,candidate_shared_memory_bytes=0,
+            physical_device_count=1,same_device_verified=True,activation_quant_checked=True,
+            weight_pack_checked=True,wall_includes_activation_quant=True,
+            shader_integer_dot_product=True,packed_signed_dot_accelerated=True,integer_dot_enabled=True,
+            logical_integer_dot_operations=cells*k//4,f32_accumulation=True,integer_accumulation='i32_per32')
+    else:
+        common.update(acl_contract(m,n,k))
+    return common
+
+
+def gemm_rows(case, family):
+    records = case.get(family, [])
+    if not isinstance(records,list) or len(records)>4 or (case['status']=='FINISHED' and len(records)!=4):
+        raise ValueError('Incomplete GEMM shape set')
+    if case['backend_requested']!='VULKAN' or case.get('candidate_backend_requested') != ('OPENCL' if family=='acl' else 'VULKAN'):
+        raise ValueError('Wrong GEMM backend request')
+    if family=='int8' and case['model']!='transcribepsy-q8':
+        raise ValueError('INT8 requires Q8 source')
+    rows=[]
+    for i,record in enumerate(records):
+        if not isinstance(record,dict): raise ValueError('Invalid GEMM record')
+        frames=exact_integer(record.get('encoder_frames'),1,1000)
+        if i and frames!=records[0]['encoder_frames']: raise ValueError('Changing GEMM frame count')
+        contract=gemm_contract(case,family,i,frames)
+        if family=='int8':
+            timings,scalars,errors=INT8_TIMINGS,INT8_SCALARS,INT8_ERRORS
+            extra=set(GEMM_DEVICE_NUMBERS)|{'candidate_device','control_device','timestamp_period_ns',
+                'candidate_all_memory_device_local','activation_rounding_tie_count'}
+        else:
+            timings,scalars,errors,extra=ACL_TIMINGS,ACL_SCALARS,ACL_ERRORS,ACL_EXTRA
+        allowed=set(contract)|set(timings)|set(scalars)|set(errors)|set(extra)|{
+            'finite','weight_pack_gpu_ns','control_counts','control_shaders','sampled_peak_pss_kib',
+            'environment','lab','event'}
+        if set(record)-allowed: raise ValueError('Unknown GEMM field')
+        exact_contract(record,contract)
+        if 'event' in record and record['event']!=family.upper(): raise ValueError('Wrong GEMM event')
+        if 'lab' in record and record['lab'] is not True: raise ValueError('Wrong GEMM event')
+        if type(record.get('finite')) is not bool: raise ValueError('Invalid GEMM finite flag')
+        repeated_measurements(record,timings,tuple(k for k in timings if k.endswith('_ns')))
+        for key in scalars: bounded_number(record.get(key))
+        for key in errors:
+            if number(record.get(key),not record['finite'])>1e12: raise ValueError('GEMM error exceeds bound')
+        if 'weight_pack_gpu_ns' not in record: raise ValueError('Missing weight packing interval')
+        if record['weight_pack_gpu_ns'] is not None: bounded_number(record['weight_pack_gpu_ns'],1e18)
+        if 'environment' in record: validate_environment(record['environment'])
+        if 'sampled_peak_pss_kib' in record:
+            if number(record['sampled_peak_pss_kib'],True)>1e12: raise ValueError('PSS exceeds bound')
+        for key in ('control_counts','control_shaders'):
+            values=record.get(key)
+            if not isinstance(values,dict) or len(values)>100: raise ValueError('Invalid GEMM counters')
+            for label,value in values.items():
+                if not isinstance(label,str) or not re.fullmatch(r'[A-Za-z0-9_:.-]{1,120}',label):
+                    raise ValueError('Invalid GEMM counter')
+                bounded_number(value,1e18)
+        if family=='int8':
+            for key in GEMM_DEVICE_NUMBERS:
+                exact_integer(record.get(key),0,64 if key=='timestamp_valid_bits' else 4294967295)
+            flags=exact_integer(record['candidate_memory_flags_all'])
+            if type(record.get('candidate_all_memory_device_local')) is not bool or flags&6!=6 or record['candidate_all_memory_device_local']!=bool(flags&1):
+                raise ValueError('Invalid INT8 memory placement')
+            bounded_number(record.get('timestamp_period_ns'),1e9)
+            exact_integer(record.get('activation_rounding_tie_count'),0,contract['n']*contract['k'])
+            for key in ('candidate_device','control_device'):
+                if not isinstance(record.get(key),str) or not re.fullmatch(r'[A-Za-z0-9 ._-]{0,64}',record[key]):
+                    raise ValueError('Unsafe GEMM device')
+            if i:
+                for key in ('candidate_device','control_device','candidate_vendor_id','candidate_device_id',
+                            'candidate_driver_version','timestamp_valid_bits','timestamp_period_ns'):
+                    if record[key]!=records[0][key]: raise ValueError('Changing GEMM device')
+            for total,part in zip(record['wall_ms'],record['activation_quant_wall_ms']):
+                if part>total+.01: raise ValueError('Quantization exceeds complete call')
+            for total,quant,compute in zip(record['boundary_gpu_ns'],record['activation_quant_gpu_ns'],record['compute_gpu_ns']):
+                if total is not None and quant is not None and compute is not None and abs(total-quant-compute)>max(1,abs(total)*1e-7):
+                    raise ValueError('Inconsistent INT8 GPU intervals')
+            numeric=record['finite'] and 0<=record['quantized_relative_rmse']<=1e-5 and 0<=record['control_reference_relative_rmse']<=.002
+            error=record['quantized_relative_rmse']
+            float_error=record['float_relative_rmse']
+        else:
+            numeric,error,float_error=validate_acl(record,records,i)
+        gpu_fields=tuple(key for key in timings if key.endswith('_ns'))
+        timestamps=(record['weight_pack_gpu_ns'] is not None and record['weight_pack_gpu_ns']>0 and
+                    all(v is not None and v>0 for key in gpu_fields for v in record[key]))
+        rows.append(dict(shape=(contract['m'],contract['n'],contract['k']),
+            eligible=case['status']=='FINISHED' and numeric and timestamps,numerics=numeric,timestamps=timestamps,
+            median=statistics.median(record['wall_ms'][1:]),control=statistics.median(record['control_wall_ms'][1:]),
+            first=record['wall_ms'][0],error=error,float_error=float_error,
+            gpu_ms=statistics.median(record['boundary_gpu_ns'][1:])/1e6 if timestamps else None))
+    return rows
+
+
+def render_gemm(rows):
+    cases=[r for r in rows if r['family']]
+    if not cases: return []
+    lines=['', 'OpenCL / signed INT8 GEMM isolation: four shapes, first call + five warm repetitions.',
+        'These are isolated synthetic operators, not full-encoder rankings or speech-quality results.',
+        'INT8 complete wall includes activation quantization and packing; its GGML control retains Q8_0 weights with F32 accumulation. Floating-reference error reports quantization loss separately from the matched quantized oracle.',
+        'ACL complete calls convert F32 inputs to half, run vendor half accumulation/output, then convert outputs to F32. Its GGML control uses F16 weights and F32 accumulation on the same rounded operands.',
+        'ACL device matching requires one GPU in each API and equal vendor IDs; it is not a cross-API UUID match.',
+        '', '| Case | Route | M×N×K | Complete ms | Control ms | GPU ms | Matched RMS | Float RMS | State |',
+        '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | --- |']
+    for case in cases:
+        for item in case['gemm']:
+            gpu=f"{item['gpu_ms']:.3f}" if item['gpu_ms'] is not None else 'unavailable'
+            state='screened' if item['eligible'] else 'excluded'
+            if not item['timestamps']: state+='; timestamps unavailable'
+            if not item['numerics']: state+='; check numerics'
+            lines.append(f"| {case['name']} | {case['family'].upper()} | {'×'.join(map(str,item['shape']))} | {item['median']:.3f} | {item['control']:.3f} | {gpu} | {item['error']:.4g} | {item['float_error']:.4g} | {state} |")
+    return lines
 
 
 def validate_environment(obj):
@@ -416,6 +637,9 @@ def render(report):
     if report.get('live_relay_enabled'):
         lines.insert(0, 'Live relay enabled: network activity can perturb benchmark timings.\n')
     for row in rows:
+        if row['family']:
+            lines.append(f"| {row['model']} | {row['name']} | — | {len(row['gemm'])}/4 {row['family'].upper()} shapes | — | {row['status']} |")
+            continue
         if row['variant'] in range(60,64) or row['variant'] == 70:
             label = f"{len(row['packed'])}/4 packed shapes" if row['variant'] != 70 else 'capability probe'
             lines.append(f"| {row['model']} | {row['name']} | — | {label} | — | {row['status']} |")
@@ -459,6 +683,7 @@ def render(report):
         lines.extend(render_focused(matching))
         lines.extend(render_packed(matching))
         lines.extend(render_capabilities(matching))
+        lines.extend(render_gemm(matching))
     lines += ['', 'Host timers overlap (synchronization and shader registration are nested inside compute).',
               'Compare profiled hotspots with unprofiled cases; timestamps include dependency effects.',
               'Read thermal_status, battery_deci_c, CPU frequency samples and process_cpu_ms in the JSON before drawing conclusions.']

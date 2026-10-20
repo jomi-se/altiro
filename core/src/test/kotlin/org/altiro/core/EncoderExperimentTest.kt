@@ -167,6 +167,48 @@ class EncoderExperimentTest {
     }
 
     @Test
+    fun acceleratorSuiteFiltersUnsupportedFormatsAndRetainsMatchedControls() {
+        for (profile in listOf(false, true)) {
+            val forward = EncoderExperiment.suite(false, profile, accelerators = true)
+            val reverse =
+                EncoderExperiment.suite(false, profile, reverse = true, accelerators = true)
+            val first = forward.indexOfFirst { EncoderExperiment.isAcl(it.variant) }
+            val last = forward.indexOfLast { EncoderExperiment.isInt8(it.variant) }
+            assertEquals(forward.take(first), reverse.take(first))
+            assertEquals(forward.drop(last + 1), reverse.drop(last + 1))
+            assertEquals(
+                forward.subList(first, last + 1).reversed(),
+                reverse.subList(first, last + 1),
+            )
+            val q8 = forward.filter { it.appliesTo("transcribepsy-q8") }
+            val f16 = forward.filter { it.appliesTo("transcribepsy-fp16") }
+            assertEquals(if (profile) 16 else 15, q8.size)
+            assertEquals(if (profile) 13 else 12, f16.size)
+            assertEquals(
+                setOf(80, 81, 82),
+                q8.filter { EncoderExperiment.isInt8(it.variant) }.map { it.variant }.toSet(),
+            )
+            assertFalse(f16.any { EncoderExperiment.isInt8(it.variant) })
+            assertEquals(
+                setOf(90, 91, 92),
+                f16.filter { EncoderExperiment.isAcl(it.variant) }.map { it.variant }.toSet(),
+            )
+            assertTrue(
+                forward
+                    .filter { EncoderExperiment.isAcl(it.variant) }
+                    .all {
+                        it.candidateBackend == "OPENCL" && it.backend == RecognitionBackend.VULKAN
+                    }
+            )
+            assertTrue(q8.size + f16.size <= 64)
+            assertTrue((q8.size + f16.size) * 12 < EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY)
+            assertTrue(forward.all { EncoderExperiment.options(it.wire) != null })
+            assertFalse(forward.any { EncoderExperiment.isKernel(it.variant) })
+        }
+        for (variant in listOf(79, 83, 89, 93)) assertNull(EncoderExperiment.options("4:$variant"))
+    }
+
+    @Test
     fun packedSuitePreservesControlsAndBoundsDistinctMeasurementFamilies() {
         for (profile in listOf(false, true)) {
             val forward = EncoderExperiment.suite(false, profile, packed = true)

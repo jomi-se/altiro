@@ -66,7 +66,9 @@ class EncoderLab(private val context: Context) {
                 .put("android_api", android.os.Build.VERSION.SDK_INT)
                 .put(
                     "measurement",
-                    if (cases.any { it.variant in 60..63 || it.variant == 70 })
+                    if (cases.any { it.variant in 80..82 || it.variant in 90..92 })
+                        "OpenCL and INT8 GEMM: 1 first + 5 warm; quantization is included in complete INT8 calls; isolated kernels are not encoder timings"
+                    else if (cases.any { it.variant in 60..63 || it.variant == 70 })
                         "packed GEMM: 1 first + 5 warm; complete calls include activation packing; capability probes are not timings of the encoder"
                     else if (cases.any { EncoderExperiment.isKernel(it.variant) })
                         "full encoder: 1 first + 3 warm; synthetic kernels: 1 first + 5 warm; setup excluded"
@@ -74,7 +76,10 @@ class EncoderLab(private val context: Context) {
                         "encoder only; first candidate call after CPU reference; then 3 resident warm calls",
                 )
                 .put("privacy", "No audio, features, transcript, editor identity or paths")
-                .put("planned_cases", inputs.size * cases.size)
+                .put(
+                    "planned_cases",
+                    inputs.sumOf { input -> cases.count { it.appliesTo(input.spec.id) } },
+                )
                 .put("reverse_order", reverse)
                 .put("planned_order", JSONArray(cases.map { it.id }))
                 .put(
@@ -97,6 +102,7 @@ class EncoderLab(private val context: Context) {
                 .put("model", model)
                 .put("id", case.id)
                 .put("backend_requested", case.backend.name)
+                .put("candidate_backend_requested", case.candidateBackend)
                 .put("threads", case.threads)
                 .put("variant", case.variant)
                 .put("profiled", case.profiled)
@@ -106,6 +112,8 @@ class EncoderLab(private val context: Context) {
                 .put("samples", JSONArray())
                 .put("kernels", JSONArray())
                 .put("packed", JSONArray())
+                .put("acl", JSONArray())
+                .put("int8", JSONArray())
         report.getJSONArray("cases").put(current)
         save()
     }
@@ -168,11 +176,13 @@ class EncoderLab(private val context: Context) {
                 row.put(event.lowercase(), JSONObject().put("files", files).put("bytes", bytes))
             }
             "BEGIN" -> {
-                require(row.getInt("variant") !in 60..70)
+                require(!isolatedExperiment(row.getInt("variant")))
                 row.put("phase", "ENCODER")
                     .put("repeat", input.getInt("repeat").also { require(it in 0..3) })
             }
             "PACKED" -> acceptPacked(input, row)
+            "ACL",
+            "INT8" -> acceptGemm(input, row, event.lowercase())
             "CAPABILITY" -> {
                 require(row.getInt("variant") == 70 && !row.has("capabilities"))
                 val source = input.getJSONObject("capabilities")
@@ -332,7 +342,7 @@ class EncoderLab(private val context: Context) {
                 row.put("phase", "KERNEL ${kernels.length()}/$expected")
             }
             "SAMPLE" -> {
-                require(row.getInt("variant") !in 60..70)
+                require(!isolatedExperiment(row.getInt("variant")))
                 val samples = row.getJSONArray("samples")
                 require(samples.length() < 4)
                 val sample = JSONObject()
@@ -399,7 +409,9 @@ class EncoderLab(private val context: Context) {
             }
             "FINISHED" -> {
                 require(
-                    if (row.getInt("variant") == 70)
+                    if (row.getInt("variant") in 80..82) row.getJSONArray("int8").length() == 4
+                    else if (row.getInt("variant") in 90..92) row.getJSONArray("acl").length() == 4
+                    else if (row.getInt("variant") == 70)
                         row.optJSONObject("capabilities")?.let {
                             it.optJSONObject("opencl") != null && it.optJSONObject("vulkan") != null
                         } == true
@@ -415,6 +427,362 @@ class EncoderLab(private val context: Context) {
             else -> error("Invalid lab event")
         }
         save()
+    }
+
+    private fun isolatedExperiment(variant: Int) =
+        variant in 60..63 || variant == 70 || variant in 80..82 || variant in 90..92
+
+    private fun acceptGemm(input: JSONObject, row: JSONObject, family: String) {
+        val int8 = family == "int8"
+        val base = if (int8) 80 else 90
+        val variant = row.getInt("variant")
+        require(variant in base..base + 2 && row.getString("backend_requested") == "VULKAN")
+        require(row.getString("candidate_backend_requested") == if (int8) "VULKAN" else "OPENCL")
+        if (int8) require(row.getString("model") == "transcribepsy-q8")
+        val records = row.getJSONArray(family)
+        val sequence = input.getInt("sequence")
+        require(sequence == records.length() && sequence in 0..3)
+        val frames = input.getInt("encoder_frames").also { require(it in 1..1000) }
+        if (sequence > 0) require(frames == records.getJSONObject(0).getInt("encoder_frames"))
+        val width = if (variant == base + 1) 145 else if (variant == base + 2) 201 else frames
+        val shape =
+            listOf(
+                listOf(2560, width, 640),
+                listOf(640, width, 2560),
+                listOf(65, 65, 96),
+                listOf(63, 63, 64),
+            )[sequence]
+        val cells = shape[0] * shape[1]
+        val record = JSONObject()
+        fun expect(key: String, value: Any) {
+            if (value is Int) {
+                require(input.get(key) is Number && input.getDouble(key) == value.toDouble())
+            } else require(input.get(key) == value)
+            record.put(key, value)
+        }
+        for ((key, value) in
+            mapOf(
+                "sequence" to sequence,
+                "encoder_frames" to frames,
+                "m" to shape[0],
+                "n" to shape[1],
+                "k" to shape[2],
+                "streams" to 1,
+                "complete_calls_per_repeat" to 1,
+                "reference_cells" to if (cells <= 8192) cells else 64,
+            )) expect(key, value)
+        expect("full_reference", cells <= 8192)
+        expect("source_type", if (row.getString("model") == "transcribepsy-q8") "q8_0" else "f16")
+        expect("control_backend", "Vulkan")
+        expect("activation_input_rounding", "f16_then_f32")
+        expect("execution_order", "alternating_candidate_first_even")
+        val text =
+            if (int8)
+                mapOf(
+                    "storage_type" to "q8_0",
+                    "backend" to "Vulkan",
+                    "candidate_backend" to "Vulkan",
+                    "control_weight_type" to "q8_0",
+                    "implementation" to "altiro_q8_block32_sdot4_v1",
+                    "weight_layout" to "m4_block32_lane_q8",
+                    "activation_layout" to "n4_block32_lane_q8",
+                    "activation_quantization" to "symmetric_per32_f32_scale_rna",
+                    "quantized_reference_mode" to "int64_block_dot_double_scale",
+                    "reference_mode" to "double_dot_q8_weights_half_rounded_x",
+                    "integer_accumulation" to "i32_per32",
+                )
+            else
+                mapOf(
+                    "storage_type" to "f16",
+                    "backend" to "OpenCL",
+                    "candidate_backend" to "OpenCL",
+                    "implementation" to "acl_reshaped_rhs_t",
+                    "acl_revision" to "80bbedb606746dcc1451cffedf3931d9fec3f53c",
+                    "gemm_kernel" to "gemm_mm_reshaped_only_rhs_t",
+                    "reshape_kernel" to "gemm_reshape_rhs_matrix_t",
+                    "accumulation" to "f16",
+                    "control_accumulation" to "f32",
+                    "output_type" to "f16",
+                    "activation_transform" to "f32_to_f16",
+                    "output_transform" to "f16_to_f32",
+                    "boundary_output_type" to "f32",
+                    "glue_implementation" to "altiro_fixed_cast_v1",
+                    "reference_mode" to "double_dot_half_rounded_inputs",
+                    "device_type" to "GPU",
+                    "workgroup_selection" to "driver_selected",
+                )
+        for ((key, value) in text) expect(key, value)
+        val requiredFlags =
+            if (int8)
+                listOf(
+                    "full_quantized_reference",
+                    "f32_accumulation",
+                    "same_device_verified",
+                    "activation_quant_checked",
+                    "weight_pack_checked",
+                    "wall_includes_activation_quant",
+                    "shader_integer_dot_product",
+                    "packed_signed_dot_accelerated",
+                    "integer_dot_enabled",
+                )
+            else
+                listOf(
+                    "weight_pack_checked",
+                    "wall_includes_all_transforms",
+                    "unique_gpu_vendor_match",
+                )
+        for (key in requiredFlags) expect(key, true)
+        val fixedIntegers =
+            if (int8)
+                mapOf(
+                    "quantized_reference_cells" to cells,
+                    "candidate_gpu_dispatches_per_repeat" to 2,
+                    "candidate_shared_memory_bytes" to 0,
+                    "physical_device_count" to 1,
+                    "logical_integer_dot_operations" to cells * shape[2] / 4,
+                )
+            else
+                mapOf(
+                    "block_m0" to 4,
+                    "block_n0" to 4,
+                    "block_k0" to 4,
+                    "block_h0" to 1,
+                    "opencl_gpu_count" to 1,
+                    "vulkan_gpu_count" to 1,
+                    "candidate_gpu_events_per_repeat" to 3,
+                )
+        for ((key, value) in fixedIntegers) expect(key, value)
+        val tile = if (int8) 32 else 4
+        val geometry =
+            mutableMapOf(
+                "dispatch" to
+                    listOf(
+                        (shape[0] + tile - 1) / tile,
+                        (shape[1] + tile - 1) / tile,
+                        1,
+                    )
+            )
+        if (int8)
+            geometry.putAll(
+                mapOf(
+                    "workgroup" to listOf(8, 8, 1),
+                    "register_tile" to listOf(4, 4),
+                    "packing_workgroup" to listOf(64, 1, 1),
+                    "specialization_constants" to emptyList(),
+                )
+            )
+        for ((key, expected) in geometry) {
+            val values = input.getJSONArray(key)
+            require(values.length() == expected.size)
+            for (i in expected.indices) require(
+                values.get(i) is Number && values.getDouble(i) == expected[i].toDouble()
+            )
+            record.put(key, JSONArray(expected))
+        }
+        require(input.get("finite") is Boolean)
+        val finite = input.getBoolean("finite")
+        record.put("finite", finite)
+        val scalars =
+            if (int8)
+                listOf(
+                    "resident_bytes",
+                    "scratch_bytes",
+                    "control_resident_bytes",
+                    "host_reference_bytes",
+                    "pipeline_setup_ms",
+                    "setup_ms",
+                    "weight_pack_wall_ms",
+                    "reference_setup_ms",
+                    "source_quantization_max_abs",
+                    "activation_quant_max_abs",
+                )
+            else
+                listOf(
+                    "program_build_ms",
+                    "setup_ms",
+                    "host_rhs_transpose_ms",
+                    "weight_pack_wall_ms",
+                    "resident_bytes",
+                    "scratch_bytes",
+                    "control_resident_bytes",
+                    "host_reference_bytes",
+                    "source_rounding_max_abs",
+                )
+        for (key in scalars) record.put(key, boundedNumber(input, key, 0.0, 1e12))
+        val errors =
+            if (int8)
+                listOf(
+                    "quantized_relative_rmse",
+                    "quantized_max_abs_error",
+                    "float_relative_rmse",
+                    "float_max_abs_error",
+                    "control_reference_relative_rmse",
+                    "control_relative_rmse",
+                    "control_max_abs_error",
+                )
+            else
+                listOf(
+                    "relative_rmse",
+                    "max_abs_error",
+                    "control_relative_rmse",
+                    "control_max_abs_error",
+                    "control_reference_relative_rmse",
+                )
+        for (key in errors) {
+            val value = boundedNumber(input, key, if (finite) 0.0 else -1.0, 1e12)
+            require(value >= 0 || value == -1.0)
+            record.put(key, value)
+        }
+        val timings =
+            if (int8)
+                listOf(
+                    "wall_ms",
+                    "process_cpu_ms",
+                    "activation_quant_wall_ms",
+                    "activation_quant_gpu_ns",
+                    "compute_gpu_ns",
+                    "boundary_gpu_ns",
+                    "readback_check_ms",
+                    "control_wall_ms",
+                    "control_boundary_gpu_ns",
+                )
+            else
+                listOf(
+                    "wall_ms",
+                    "process_cpu_ms",
+                    "readback_check_ms",
+                    "control_wall_ms",
+                    "control_process_cpu_ms",
+                    "boundary_gpu_ns",
+                    "control_boundary_gpu_ns",
+                    "activation_conversion_gpu_ns",
+                    "compute_gpu_ns",
+                    "output_conversion_gpu_ns",
+                )
+        for (key in timings) {
+            val source = input.getJSONArray(key)
+            require(source.length() == 6)
+            val values = JSONArray()
+            for (i in 0..5) {
+                if (key.endsWith("_ns") && source.isNull(i)) values.put(JSONObject.NULL)
+                else {
+                    require(source.get(i) is Number)
+                    val value = source.getDouble(i)
+                    require(
+                        value.isFinite() &&
+                            value >= 0 &&
+                            value < if (key.endsWith("_ns")) 1e18 else 1e9
+                    )
+                    values.put(value)
+                }
+            }
+            record.put(key, values)
+        }
+        val parts =
+            if (int8) listOf("activation_quant_gpu_ns", "compute_gpu_ns")
+            else
+                listOf("activation_conversion_gpu_ns", "compute_gpu_ns", "output_conversion_gpu_ns")
+        for (i in 0..5) {
+            val boundary = record.getJSONArray("boundary_gpu_ns")
+            if (boundary.isNull(i) || parts.any { record.getJSONArray(it).isNull(i) }) continue
+            val total = boundary.getDouble(i)
+            val sum = parts.sumOf { record.getJSONArray(it).getDouble(i) }
+            val tolerance = maxOf(1.0, total * 1e-7)
+            require(
+                if (int8) kotlin.math.abs(total - sum) <= tolerance else sum <= total + tolerance
+            )
+        }
+        require(input.has("weight_pack_gpu_ns"))
+        record.put(
+            "weight_pack_gpu_ns",
+            if (input.isNull("weight_pack_gpu_ns")) JSONObject.NULL
+            else boundedNumber(input, "weight_pack_gpu_ns", 0.0, 1e18),
+        )
+        val deviceText =
+            if (int8) listOf("candidate_device", "control_device")
+            else
+                listOf(
+                    "candidate_device",
+                    "candidate_vendor",
+                    "candidate_driver_version",
+                    "control_device",
+                )
+        for (key in deviceText) {
+            require(input.get(key) is String)
+            val value = input.getString(key)
+            require(value.length <= 64 && value.matches(Regex("[A-Za-z0-9 ._\\-]*")))
+            record.put(key, value)
+        }
+        val deviceNumbers =
+            if (int8)
+                listOf(
+                    "candidate_vendor_id",
+                    "candidate_device_id",
+                    "candidate_driver_version",
+                    "timestamp_valid_bits",
+                    "candidate_memory_flags_all",
+                )
+            else listOf("candidate_vendor_id")
+        for (key in deviceNumbers) {
+            val value =
+                boundedNumber(
+                    input,
+                    key,
+                    0.0,
+                    if (key == "timestamp_valid_bits") 65.0 else 4_294_967_296.0,
+                )
+            require(value == value.toLong().toDouble())
+            record.put(key, value.toLong())
+        }
+        if (int8) {
+            val flags = record.getLong("candidate_memory_flags_all")
+            require((flags and 6L) == 6L)
+            require(input.get("candidate_all_memory_device_local") is Boolean)
+            val local = input.getBoolean("candidate_all_memory_device_local")
+            require(local == ((flags and 1L) != 0L))
+            record.put("candidate_all_memory_device_local", local)
+            record.put("timestamp_period_ns", boundedNumber(input, "timestamp_period_ns", 0.0, 1e9))
+            val ties =
+                boundedNumber(
+                    input,
+                    "activation_rounding_tie_count",
+                    0.0,
+                    (shape[1].toLong() * shape[2] + 1).toDouble(),
+                )
+            require(ties == ties.toLong().toDouble())
+            record.put("activation_rounding_tie_count", ties.toLong())
+            for (i in 0..5) require(
+                record.getJSONArray("activation_quant_wall_ms").getDouble(i) <=
+                    record.getJSONArray("wall_ms").getDouble(i) + 0.01
+            )
+        }
+        if (sequence > 0) {
+            val first = records.getJSONObject(0)
+            val identityFields =
+                deviceText +
+                    deviceNumbers.filter { it != "candidate_memory_flags_all" } +
+                    (if (int8) listOf("timestamp_period_ns") else emptyList())
+            for (key in identityFields) {
+                val actual = record.get(key)
+                val prior = first.get(key)
+                require(
+                    if (actual is Number && prior is Number) actual.toDouble() == prior.toDouble()
+                    else actual == prior
+                )
+            }
+        }
+        for (key in listOf("control_counts", "control_shaders")) record.put(
+            key,
+            measurementMap(input.getJSONObject(key)),
+        )
+        if (input.has("sampled_peak_pss_kib")) {
+            val value = boundedNumber(input, "sampled_peak_pss_kib", -1.0, 1e12)
+            require(value >= 0 || value == -1.0)
+            record.put("sampled_peak_pss_kib", value)
+        }
+        record.put("environment", environment())
+        records.put(record)
+        row.put("phase", "${family.uppercase()} ${records.length()}/4")
     }
 
     private fun acceptPacked(input: JSONObject, row: JSONObject) {
@@ -831,6 +1199,62 @@ class EncoderLab(private val context: Context) {
                     )
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
+                        if (row.optInt("variant") in 80..82 || row.optInt("variant") in 90..92) {
+                            val family = if (row.optInt("variant") in 80..82) "int8" else "acl"
+                            val records = row.optJSONArray(family)
+                            append(
+                                "${row.getString("model")} · ${row.getString("id")} · ${records?.length() ?: 0}/4 ${family.uppercase()} shapes · ${row.optString("status")}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
+                            )
+                            if (records != null) {
+                                if (
+                                    (0 until records.length()).any {
+                                        val item = records.getJSONObject(it)
+                                        !item.getBoolean("finite") ||
+                                            item.getDouble("control_reference_relative_rmse") >
+                                                0.002 ||
+                                            (if (family == "int8")
+                                                item.getDouble("quantized_relative_rmse") > 0.00001
+                                            else
+                                                item.getDouble("relative_rmse") > 0.02 ||
+                                                    item.getDouble("control_relative_rmse") > 0.02)
+                                    }
+                                )
+                                    append(" · CHECK NUMERICS")
+                                if (
+                                    (0 until records.length()).any {
+                                        val item = records.getJSONObject(it)
+                                        val intervals =
+                                            if (family == "int8")
+                                                listOf(
+                                                    "boundary_gpu_ns",
+                                                    "control_boundary_gpu_ns",
+                                                    "activation_quant_gpu_ns",
+                                                    "compute_gpu_ns",
+                                                )
+                                            else
+                                                listOf(
+                                                    "boundary_gpu_ns",
+                                                    "control_boundary_gpu_ns",
+                                                    "activation_conversion_gpu_ns",
+                                                    "compute_gpu_ns",
+                                                    "output_conversion_gpu_ns",
+                                                )
+                                        item.isNull("weight_pack_gpu_ns") ||
+                                            item.optDouble("weight_pack_gpu_ns", 0.0) <= 0 ||
+                                            intervals.any { key ->
+                                                val values = item.getJSONArray(key)
+                                                (0 until values.length()).any { index ->
+                                                    values.isNull(index) ||
+                                                        values.optDouble(index, 0.0) <= 0
+                                                }
+                                            }
+                                    }
+                                )
+                                    append(" · GPU timing unavailable")
+                            }
+                            appendLine()
+                            continue
+                        }
                         if (row.optInt("variant") == 70) {
                             val capabilities = row.optJSONObject("capabilities")
                             appendLine(

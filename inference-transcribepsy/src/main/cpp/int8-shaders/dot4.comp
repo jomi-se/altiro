@@ -1,0 +1,45 @@
+#version 450
+#extension GL_EXT_spirv_intrinsics : require
+// shaderc 2023.8 predates GL_EXT_integer_dot_product builtins. The standard
+// intrinsics extension emits the exact same OpSDotKHR (4450), with packed-4x8
+// format 0 and required DotProductKHR / DotProductInput4x8BitPackedKHR caps.
+spirv_instruction(extensions=["SPV_KHR_integer_dot_product"],capabilities=[6019,6018],id=4450)
+int altiro_sdot_instruction(int a,int b,spirv_literal int packed_format);
+int dotPacked4x8EXT(int a,int b) { return altiro_sdot_instruction(a,b,0); }
+// Packed int32 operands deliberately require no Int8 type/storage capability.
+// Each block's 32 signed products fit I32 (<=524288), and its original weight
+// scale is applied before summing different blocks in F32.
+layout(local_size_x=8,local_size_y=8) in;
+struct Block { uint q[8]; float scale; };
+layout(binding=0,std430) readonly buffer Weights { Block w[]; };
+layout(binding=1,std430) readonly buffer Activations { Block x[]; };
+layout(binding=2,std430) writeonly buffer Output { float y[]; };
+layout(push_constant) uniform Shape { uint m; uint n; uint k; } p;
+void main() {
+    uint rb=gl_GlobalInvocationID.x,cb=gl_GlobalInvocationID.y,row=rb*4,col=cb*4,blocks=p.k/32;
+    if(row>=p.m||col>=p.n) return;
+    vec4 result0=vec4(0),result1=vec4(0),result2=vec4(0),result3=vec4(0);
+    for(uint b=0;b<blocks;b++) {
+        uint wi=(rb*blocks+b)*4,xi=(cb*blocks+b)*4;
+        ivec4 s0=ivec4(0),s1=ivec4(0),s2=ivec4(0),s3=ivec4(0);
+        for(uint j=0;j<8;j++) {
+            ivec4 qw=ivec4(w[wi].q[j],w[wi+1].q[j],w[wi+2].q[j],w[wi+3].q[j]);
+            ivec4 qx=ivec4(x[xi].q[j],x[xi+1].q[j],x[xi+2].q[j],x[xi+3].q[j]);
+            s0+=ivec4(dotPacked4x8EXT(qw.x,qx.x),dotPacked4x8EXT(qw.y,qx.x),dotPacked4x8EXT(qw.z,qx.x),dotPacked4x8EXT(qw.w,qx.x));
+            s1+=ivec4(dotPacked4x8EXT(qw.x,qx.y),dotPacked4x8EXT(qw.y,qx.y),dotPacked4x8EXT(qw.z,qx.y),dotPacked4x8EXT(qw.w,qx.y));
+            s2+=ivec4(dotPacked4x8EXT(qw.x,qx.z),dotPacked4x8EXT(qw.y,qx.z),dotPacked4x8EXT(qw.z,qx.z),dotPacked4x8EXT(qw.w,qx.z));
+            s3+=ivec4(dotPacked4x8EXT(qw.x,qx.w),dotPacked4x8EXT(qw.y,qx.w),dotPacked4x8EXT(qw.z,qx.w),dotPacked4x8EXT(qw.w,qx.w));
+        }
+        vec4 scales=vec4(w[wi].scale,w[wi+1].scale,w[wi+2].scale,w[wi+3].scale);
+        result0=fma(vec4(s0),scales*x[xi].scale,result0);
+        result1=fma(vec4(s1),scales*x[xi+1].scale,result1);
+        result2=fma(vec4(s2),scales*x[xi+2].scale,result2);
+        result3=fma(vec4(s3),scales*x[xi+3].scale,result3);
+    }
+    for(uint j=0;j<4;j++) if(row+j<p.m) {
+        y[col*p.m+row+j]=result0[j];
+        if(col+1<p.n) y[(col+1)*p.m+row+j]=result1[j];
+        if(col+2<p.n) y[(col+2)*p.m+row+j]=result2[j];
+        if(col+3<p.n) y[(col+3)*p.m+row+j]=result3[j];
+    }
+}

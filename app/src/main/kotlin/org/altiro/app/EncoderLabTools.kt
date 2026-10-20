@@ -61,6 +61,12 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
                 label = { Text("Packed GPU") },
             )
             FilterChip(
+                selected = mode == 6,
+                onClick = { mode = 6 },
+                enabled = available,
+                label = { Text("OpenCL + INT8") },
+            )
+            FilterChip(
                 selected = both,
                 onClick = { both = !both },
                 enabled =

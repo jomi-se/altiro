@@ -79,6 +79,44 @@ class ReceiverTests(unittest.TestCase):
         self.assertIn('Focused GPU tuning', saved['receipt']['analysis'])
         self.assertIn('1/8 kernel shapes', saved['receipt']['analysis'])
 
+    def test_opencl_int8_checkpoints_and_failed_partial_results_survive_upload(self):
+        from test_encoder_lab_analysis import gemm_case
+        report=json.loads(self.raw)
+        report['planned_cases']=2
+        for variant in (80,90):
+            family='int8' if variant==80 else 'acl'
+            complete=gemm_case(variant)
+            for count,status in ((0,'RUNNING'),(1,'RUNNING'),(2,'FAILED'),(4,'FINISHED')):
+                case=json.loads(json.dumps(complete))
+                case['status']=status
+                case[family]=case[family][:count]
+                report['cases']=[case]
+                raw=json.dumps(report).encode()
+                code,digest=self.request('POST','/reports',raw)
+                self.assertEqual(200,code)
+                self.assertEqual(hashlib.sha256(raw).hexdigest(),digest.decode().strip())
+                saved=json.loads((Path(self.directory.name)/'latest.json').read_text())
+                self.assertEqual(count,len(saved['report']['cases'][0][family]))
+                self.assertIn(f'{count}/4',saved['receipt']['analysis'])
+                self.assertNotIn('Fastest completed',saved['receipt']['analysis'])
+                if count:
+                    self.assertIn('environment',saved['report']['cases'][0][family][0])
+                    self.assertEqual(-1,saved['report']['cases'][0][family][0]['sampled_peak_pss_kib'])
+
+    def test_failed_gpu_interval_stays_unavailable_and_invalid_route_does_not_replace_receipt(self):
+        from test_encoder_lab_analysis import gemm_case
+        report=json.loads(self.raw)
+        case=gemm_case(80)
+        case['int8'][0]['boundary_gpu_ns']=[None]*6
+        report['cases']=[case]
+        raw=json.dumps(report).encode()
+        self.assertEqual(200,self.request('POST','/reports',raw)[0])
+        saved=(Path(self.directory.name)/'latest.json').read_bytes()
+        self.assertIn('timestamps unavailable',self.inbox.latest['analysis'])
+        case['int8'][0]['integer_dot_enabled']=False
+        self.assertEqual(422,self.request('POST','/reports',json.dumps(report).encode())[0])
+        self.assertEqual(saved,(Path(self.directory.name)/'latest.json').read_bytes())
+
     def test_unauthenticated_and_cross_origin_requests_are_refused(self):
         for method in ('GET', 'POST'):
             path = '/reports' if method == 'POST' else '/status'

@@ -39,6 +39,13 @@ FetchContent_Declare(opencl_headers
     SOURCE_SUBDIR altiro-no-auto-subdir
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
 FetchContent_MakeAvailable(opencl_headers)
+# Exact upstream vendor kernels, compiled on-device through ordinary OpenCL access.
+FetchContent_Declare(acl_kernels
+    URL https://codeload.github.com/ARM-software/ComputeLibrary/tar.gz/80bbedb606746dcc1451cffedf3931d9fec3f53c
+    URL_HASH SHA256=1afeccd2c8f757cc26b130360d62b7f0a5da590d732626a94f385c5070b3fb92
+    SOURCE_SUBDIR altiro-no-auto-subdir
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(acl_kernels)
 if(ALTIRO_VULKAN)
     FetchContent_Declare(vulkan_headers
         URL https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/2cd90f9d20df57eac214c148f3aed885372ddcfe
@@ -67,11 +74,8 @@ if(ALTIRO_VULKAN)
     find_program(ALTIRO_HOST_CC NAMES cc gcc clang cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
     find_program(ALTIRO_HOST_CXX NAMES c++ g++ clang++ cl NO_CMAKE_FIND_ROOT_PATH REQUIRED)
     set(ALTIRO_SHADER_TOOLCHAIN "${CMAKE_CURRENT_BINARY_DIR}/altiro-shader-toolchain.cmake")
-    file(WRITE "${ALTIRO_SHADER_TOOLCHAIN}"
-        "set(CMAKE_SYSTEM_NAME \"${CMAKE_HOST_SYSTEM_NAME}\")\n"
-        "set(CMAKE_C_COMPILER \"${ALTIRO_HOST_CC}\")\n"
-        "set(CMAKE_CXX_COMPILER \"${ALTIRO_HOST_CXX}\")\n"
-        "set(CMAKE_MAKE_PROGRAM \"${CMAKE_MAKE_PROGRAM}\" CACHE FILEPATH \"\" FORCE)\n")
+    configure_file("${CMAKE_CURRENT_SOURCE_DIR}/shader-toolchain.cmake.in"
+        "${ALTIRO_SHADER_TOOLCHAIN}" @ONLY)
     set(GGML_VULKAN_SHADERS_GEN_TOOLCHAIN "${ALTIRO_SHADER_TOOLCHAIN}" CACHE FILEPATH "" FORCE)
 endif()
 FetchContent_Declare(transcribepsy
@@ -85,11 +89,16 @@ set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_
 execute_process(COMMAND ${Python3_EXECUTABLE}
     "${CMAKE_CURRENT_SOURCE_DIR}/../../../../scripts/patch-transcribepsy.py"
     "${transcribepsy_SOURCE_DIR}" COMMAND_ERROR_IS_FATAL ANY)
+set_property(DIRECTORY APPEND PROPERTY CMAKE_CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/../../../../scripts/prepare-acl-kernels.py")
+execute_process(COMMAND ${Python3_EXECUTABLE}
+    "${CMAKE_CURRENT_SOURCE_DIR}/../../../../scripts/prepare-acl-kernels.py"
+    "${acl_kernels_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}/acl-kernels.inc.h"
+    COMMAND_ERROR_IS_FATAL ANY)
 add_subdirectory(${transcribepsy_SOURCE_DIR} ${transcribepsy_BINARY_DIR})
 target_include_directories(qvac-parakeet PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(ggml PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp kernel-hunt.cpp packed-kernel.cpp gpu-lab-capabilities.cpp)
-target_include_directories(altiro-transcribepsy PRIVATE "${opencl_headers_SOURCE_DIR}")
+add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp kernel-hunt.cpp packed-kernel.cpp gpu-lab-capabilities.cpp acl-kernel.cpp int8-kernel.cpp)
+target_include_directories(altiro-transcribepsy PRIVATE "${opencl_headers_SOURCE_DIR}" "${CMAKE_CURRENT_BINARY_DIR}")
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/src")
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/ggml/src")
 target_link_libraries(altiro-transcribepsy PRIVATE qvac-parakeet ${CMAKE_DL_LIBS})
@@ -118,6 +127,25 @@ if(ALTIRO_VULKAN)
         VERBATIM)
     target_sources(altiro-transcribepsy PRIVATE "${ALTIRO_PACKED_SHADER_DIR}/packed-spirv.h")
     target_include_directories(altiro-transcribepsy PRIVATE "${ALTIRO_PACKED_SHADER_DIR}")
+    set(ALTIRO_INT8_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/int8-shaders")
+    file(MAKE_DIRECTORY "${ALTIRO_INT8_SHADER_DIR}")
+    set(ALTIRO_INT8_SPV)
+    foreach(shader pack-weights quant-activations dot4)
+        set(output "${ALTIRO_INT8_SHADER_DIR}/${shader}.spv")
+        add_custom_command(OUTPUT "${output}"
+            COMMAND "${Vulkan_GLSLC_EXECUTABLE}" --target-env=vulkan1.1 -O
+                "${CMAKE_CURRENT_SOURCE_DIR}/int8-shaders/${shader}.comp" -o "${output}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/int8-shaders/${shader}.comp"
+            VERBATIM)
+        list(APPEND ALTIRO_INT8_SPV "${output}")
+    endforeach()
+    add_custom_command(OUTPUT "${ALTIRO_INT8_SHADER_DIR}/int8-spirv.h"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/int8-shaders/embed.py"
+            "${ALTIRO_INT8_SHADER_DIR}/int8-spirv.h" "${ALTIRO_INT8_SHADER_DIR}"
+        DEPENDS ${ALTIRO_INT8_SPV} "${CMAKE_CURRENT_SOURCE_DIR}/int8-shaders/embed.py"
+        VERBATIM)
+    target_sources(altiro-transcribepsy PRIVATE "${ALTIRO_INT8_SHADER_DIR}/int8-spirv.h")
+    target_include_directories(altiro-transcribepsy PRIVATE "${ALTIRO_INT8_SHADER_DIR}")
     target_include_directories(ggml-vulkan PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${vulkan_hpp_SOURCE_DIR}" "${vulkan_headers_SOURCE_DIR}/include")
     target_link_libraries(ggml-vulkan PRIVATE SPIRV-Headers::SPIRV-Headers)
     set_source_files_properties("${transcribepsy_SOURCE_DIR}/ggml/src/ggml-vulkan/ggml-vulkan.cpp"

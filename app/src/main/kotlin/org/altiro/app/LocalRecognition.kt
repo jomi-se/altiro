@@ -473,7 +473,11 @@ class LocalRecognition(
                 mode == 3,
                 mode == 4,
                 mode == 5,
+                mode == 6,
             )
+        val plannedCases = orderedInputs.sumOf { input ->
+            cases.count { it.appliesTo(input.spec.id) }
+        }
         lab.begin(orderedInputs, cases, reverse)
         active = operation
         mutableBusy.value = true
@@ -489,7 +493,7 @@ class LocalRecognition(
                             operation.cancelled::get,
                         )
                     )
-                    for (case in cases) {
+                    for (case in cases.filter { it.appliesTo(input.spec.id) }) {
                         if (operation.cancelled.get()) break
                         if (case.id == "gpu-cache-empty")
                             check(
@@ -513,7 +517,7 @@ class LocalRecognition(
                             continue
                         }
                         val caseIndex = done
-                        main.post { update(caseIndex * 100 / (inputs.size * cases.size), case.id) }
+                        main.post { update(caseIndex * 100 / plannedCases, case.id) }
                         diagnostics.selectBackend(current.backend, current.window)
                         val call =
                             NativeCall(

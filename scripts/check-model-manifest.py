@@ -58,14 +58,18 @@ for output in preparation['outputs']:
 assert {notice['asset'] for notice in preparation['licenseTexts']} == {
     'TranscribePsy-NOTICE.txt', 'TranscribePsy-dr_wav-MIT-0.txt',
     'TranscribePsy-ggml-MIT.txt', 'TranscribePsy-runtime-Apache-2.0.txt',
-    'OpenCL-Headers-Apache-2.0.txt',
+    'OpenCL-Headers-Apache-2.0.txt', 'Arm-Compute-Library-kernels-MIT.txt',
 }
-assert len(preparation['licenseTexts']) == 5
+assert len(preparation['licenseTexts']) == 6
 opencl = preparation['openclHeaders']
 assert opencl['license'] == 'Apache-2.0'
 assert opencl['version'] == 'v2024.10.24'
 assert opencl['archiveSha256'] in runtime_cmake
 assert opencl['version'] in runtime_cmake
+acl = preparation['armComputeLibrary']
+assert acl['license'] == 'MIT'
+assert acl['revision'] in runtime_cmake and acl['archiveSha256'] in runtime_cmake
+assert set(acl['kernels']) == {'gemm_reshape_rhs_matrix_t', 'gemm_mm_reshaped_only_rhs_t'}
 for notice in preparation['licenseTexts']:
     assert Path(notice['asset']).name == notice['asset']
     assert hashlib.sha256((psy_assets / 'licenses' / notice['asset']).read_bytes()).hexdigest() == notice['sha256']

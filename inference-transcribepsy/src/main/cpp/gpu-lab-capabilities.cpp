@@ -29,6 +29,8 @@ bool extension(const char* text, const char* wanted) {
 }
 struct OpenCl {
     void* lib=nullptr;
+    // Quarantine outstanding driver work until this disposable worker exits.
+    bool pending=false;
 #define FN(name) decltype(&::name) name=nullptr
     FN(clGetPlatformIDs); FN(clGetDeviceIDs); FN(clGetDeviceInfo);
     FN(clCreateContext); FN(clCreateCommandQueue); FN(clCreateBuffer);
@@ -40,6 +42,7 @@ struct OpenCl {
     cl_context context=nullptr; cl_command_queue queue=nullptr;
     cl_mem buffer=nullptr; cl_program program=nullptr; cl_kernel kernel=nullptr;
     ~OpenCl() {
+        if (pending) return;
         if (kernel) clReleaseKernel(kernel);
         if (program) clReleaseProgram(program);
         if (buffer) clReleaseMemObject(buffer);
@@ -142,12 +145,16 @@ std::string altiro_opencl_capabilities(bool (*cancelled)(void*), void* opaque) {
     const size_t global=values.size();
     start=Clock::now();
     if(cl.clEnqueueNDRangeKernel(cl.queue,cl.kernel,1,nullptr,&global,nullptr,0,nullptr,nullptr)!=CL_SUCCESS) return result("enqueue_failed");
+    cl.pending=true;
     if(stop()) return result("cancelled");
     err=cl.clFinish(cl.queue);
+    if(err==CL_SUCCESS) cl.pending=false;
     fields << ",\"executeUs\":" << micros(start);
     if(stop()) return result("cancelled");
     if(err!=CL_SUCCESS) return result("finish_failed");
+    cl.pending=true;
     err=cl.clEnqueueReadBuffer(cl.queue,cl.buffer,CL_TRUE,0,sizeof(values),values.data(),0,nullptr,nullptr);
+    if(err==CL_SUCCESS) cl.pending=false;
     if(stop()) return result("cancelled");
     if(err!=CL_SUCCESS) return result("read_failed");
     for(size_t i=0;i<values.size();++i) if(values[i]!=float(i*2+1)) return result("verification_failed");

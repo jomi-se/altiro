@@ -11,6 +11,12 @@ data class EncoderExperiment(
     val wire: String
         get() = "$threads:$variant"
 
+    /** Synthetic OpenCL cases retain Vulkan only as their matched control backend. */
+    val candidateBackend: String
+        get() = if (isAcl(variant)) "OPENCL" else backend.name
+
+    fun appliesTo(modelId: String): Boolean = !isInt8(variant) || modelId == "transcribepsy-q8"
+
     companion object {
         // A full two-format suite has 40 workers, each with its own phase lifecycle.
         const val DIAGNOSTIC_PHASE_CAPACITY = 1024
@@ -33,6 +39,7 @@ data class EncoderExperiment(
             hunt: Boolean = false,
             tuning: Boolean = false,
             packed: Boolean = false,
+            accelerators: Boolean = false,
         ): List<EncoderExperiment> {
             fun cpu(n: Int, suffix: String = "") =
                 EncoderExperiment("cpu-$n$suffix", RecognitionBackend.CPU, n)
@@ -46,7 +53,19 @@ data class EncoderExperiment(
             val planned = buildList {
                 add(cpu(4, "-start"))
                 add(gpu("gpu-start"))
-                if (packed) {
+                if (accelerators) {
+                    add(gpu("gpu-capabilities", 70))
+                    add(cpu(2, "-start"))
+                    add(gpu("gpu-accelerator-f32-start", 30))
+                    add(gpu("acl-recording", 90))
+                    add(gpu("int8-recording", 80))
+                    add(gpu("acl-145", 91))
+                    add(gpu("int8-145", 81))
+                    add(gpu("acl-201", 92))
+                    add(gpu("int8-201", 82))
+                    add(gpu("gpu-accelerator-f32-end", 30))
+                    add(cpu(2, "-end"))
+                } else if (packed) {
                     add(gpu("gpu-capabilities", 70))
                     add(cpu(2, "-start"))
                     add(gpu("gpu-packed-f32-start", 30))
@@ -126,6 +145,13 @@ data class EncoderExperiment(
             }
             if (!reverse) return planned
             val end = planned.indexOfFirst { it.id == "gpu-end" }
+            if (accelerators) {
+                val first = planned.indexOfFirst { isAcl(it.variant) || isInt8(it.variant) }
+                val last = planned.indexOfLast { isAcl(it.variant) || isInt8(it.variant) }
+                return planned.take(first) +
+                    planned.subList(first, last + 1).reversed() +
+                    planned.drop(last + 1)
+            }
             if (packed) {
                 val first = planned.indexOfFirst { isPacked(it.variant) }
                 val last = planned.indexOfLast { isPacked(it.variant) }
@@ -159,11 +185,17 @@ data class EncoderExperiment(
                         variant in 20..36 ||
                         variant in 40..46 ||
                         isPacked(variant) ||
-                        variant == 70)
+                        variant == 70 ||
+                        isAcl(variant) ||
+                        isInt8(variant))
             )
                 threads to variant
             else null
         }
+
+        fun isAcl(variant: Int): Boolean = variant in 90..92
+
+        fun isInt8(variant: Int): Boolean = variant in 80..82
 
         fun isPacked(variant: Int): Boolean = variant in 60..63
 

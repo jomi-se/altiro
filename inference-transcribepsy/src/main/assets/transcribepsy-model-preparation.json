@@ -48,6 +48,10 @@
     {
       "asset": "OpenCL-Headers-Apache-2.0.txt",
       "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+    },
+    {
+      "asset": "Arm-Compute-Library-kernels-MIT.txt",
+      "sha256": "b01c633afd1124f87de2e494fa5c4516e43829388deb35864f08124b75e8661e"
     }
   ],
   "openclHeaders": {
@@ -56,5 +60,16 @@
     "archiveSha256": "159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93",
     "license": "Apache-2.0",
     "use": "Public build headers for the optional ordinary-app OpenCL capability probe; no OpenCL library is bundled."
+  },
+  "armComputeLibrary": {
+    "revision": "80bbedb606746dcc1451cffedf3931d9fec3f53c",
+    "archiveSha256": "1afeccd2c8f757cc26b130360d62b7f0a5da590d732626a94f385c5070b3fb92",
+    "sourceUrl": "https://github.com/ARM-software/ComputeLibrary/tree/80bbedb606746dcc1451cffedf3931d9fec3f53c",
+    "license": "MIT",
+    "kernels": [
+      "gemm_reshape_rhs_matrix_t",
+      "gemm_mm_reshaped_only_rhs_t"
+    ],
+    "use": "Pinned unchanged upstream OpenCL kernels with verified textual includes; no full ACL host library or OpenCL implementation bundled."
   }
 }

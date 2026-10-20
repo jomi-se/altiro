@@ -44,7 +44,7 @@ inline int altiro_lab_fusion() {
 }
 inline bool altiro_lab_boundary() {
     return altiro_encoder_lab && altiro_encoder_lab->measuring &&
-        (altiro_focused_variant(altiro_encoder_lab->variant) || altiro_packed_variant(altiro_encoder_lab->variant));
+        (altiro_focused_variant(altiro_encoder_lab->variant) || altiro_packed_variant(altiro_encoder_lab->variant) || altiro_int8_variant(altiro_encoder_lab->variant) || altiro_acl_variant(altiro_encoder_lab->variant));
 }
 inline void altiro_lab_count(const char * name, uint64_t value = 1) {
     if (altiro_encoder_lab && altiro_encoder_lab->measuring)
