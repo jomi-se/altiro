@@ -11,8 +11,14 @@ INT8 cases and retains matched controls and content-free diagnostics. See
 tests, 54 Python checks, native layout and fake-driver lifecycle checks, and
 host-JNI dispatch/cancellation smoke checks. Android app/fixture builds, lint,
 instrumentation APK compilation, notices, installability and 16 KiB alignment
-checks pass. New OpenCL/INT8 GPU execution, cancellation and speed remain phone
-gates. Everyday recognition defaults remain unchanged.
+checks pass. The [completed phone campaign](../research/mali-kernel-hunt.md#completed-069-opencl-and-int8-campaign)
+passes 27/27 cases, including all 24 ACL and 12 INT8 shape records. INT8 improves
+both large matrix families by 1.23–2.04× against matched Q8 controls, including
+per-call quantization, with 0.329–0.437% floating-reference output error. ACL is
+mixed and contraction loses. These synthetic results motivate a selective
+full-encoder experiment, not a measured model-level gain. Thermal/baseline drift
+limits generalization; new-kernel cancellation and transcription-quality gates
+remain open. Everyday recognition defaults remain unchanged.
 
 Version **0.6.8-packed-gpu** implements the next opt-in **Packed GPU**
 experiment: original register-blocked Vulkan matrix kernels, complete GGML

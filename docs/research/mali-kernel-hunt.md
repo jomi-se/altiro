@@ -1,12 +1,80 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: 0.6.6 Kernel hunt, 0.6.7 targeted GPU tuning and 0.6.8 packed GPU
-phone campaigns complete.
-No new ordinary recognition defaults are selected. The subsequent
-[web/source reassessment](transcribepsy-gpu-reassessment.md) identifies untested
-packed-kernel and runtime alternatives; these campaigns do not establish a
+Status: Kernel hunt, targeted GPU tuning, packed GPU, and 0.6.9 OpenCL/INT8
+phone campaigns complete. No new ordinary recognition defaults are selected.
+The independent [web/source reassessment](transcribepsy-gpu-reassessment.md)
+motivated the later kernel comparisons; these campaigns do not establish a
 CPU-only architectural limit.
 
+## Completed 0.6.9 OpenCL and INT8 campaign
+
+One **17.20-second** recording with **216 encoder frames**, Q8 before FP16
+and forward treatment order completed **27/27 cases** with the live relay
+enabled. All **24 ACL and 12 INT8 shape records** pass their declared numerical
+screens, with positive GPU intervals throughout. Across six repeats per shape,
+this covers 216 complete candidate calls and 216 matched control calls. The
+ordinary app executed the pinned upstream Arm OpenCL kernels and actual Vulkan
+signed packed dot instructions on the Pixel 7's Mali-G710.
+
+The INT8 performance control retains the original Q8_0 weights with F32
+accumulation. Both routes receive the same half-rounded activations; the
+candidate additionally quantizes them per block on the GPU. These are synthetic
+matrices at encoder dimensions, not measured complete feed-forward blocks or
+model encoders. Complete-call times include activation quantization, submissions
+and waits; static weight packing and pipeline setup are separate. Medians use
+warm repetitions 1–5 with alternating candidate/control order.
+
+| Frames | Expansion INT8 / GGML ms | Speedup | Contraction INT8 / GGML ms | Speedup |
+| --- | ---: | ---: | ---: | ---: |
+| 145 | 9.144 / 18.432 | 2.02× | 12.842 / 19.111 | 1.49× |
+| 201 | 9.274 / 18.928 | 2.04× | 17.675 / 21.807 | 1.23× |
+| 216 | 10.348 / 17.047 | 1.65× | 13.836 / 19.500 | 1.41× |
+
+Expansion is `2560×N×640`, contraction `640×N×2560`. INT8 wins in 29 of
+30 paired warm large-shape repetitions. Matched GPU intervals also improve, so
+the advantage is not solely host submission overhead. Per-call activation
+quantization costs 1.37–4.93 ms at the large shapes. The small ragged matrices
+lose, so this is a selective implementation lead rather than a universal
+replacement for matrix operations.
+
+Maximum relative RMS error versus the full quantized integer/double oracle is
+**0.0000163%**. Error versus the floating-input reference is **0.329–0.437%**:
+integer arithmetic passes, while activation quantization intentionally changes
+the result. This is not precision equivalence or a speech-quality measurement.
+Pipeline creation costs 220–635 ms per isolated INT8 case; static weight packing
+costs 0.70–8.01 ms per shape. Neither cost may disappear from eventual startup
+or memory accounting merely because it is excluded from warm calls.
+
+The tested ACL route uses actual reshaped-RHS FP16 kernels with half
+accumulation/output, plus F32-to-F16 input and F16-to-F32 output transforms in
+every complete call. Its control uses F16 weights and F32 accumulation. Maximum
+ACL relative RMS error is **0.820%**. Expansion sometimes wins, but contraction
+loses in all six format/width medians. At recording width 216, expansion is only
+4% faster for Q8-derived weights and 6% slower for FP16. This fixed buffer/tile
+configuration does not justify a general backend switch; it does not test the
+complete ACL dispatcher, all configurations or mixed-precision alternatives.
+
+Existing full-encoder controls remain unchanged, excluding setup and decoder:
+
+| Case | Q8 start / end ms | FP16 start / end ms |
+| --- | ---: | ---: |
+| CPU, two threads | 2386.6 / 2511.8 | 7880.5 / 7664.1 |
+| CPU, four threads | 3071.5 / 6256.7 | 6128.5 / 8311.9 |
+| Stock Vulkan | 1682.2 / 2196.2 | 1883.8 / 1779.5 |
+| F32 Vulkan | 1746.8 / 2015.7 | 2101.5 / 1927.1 |
+
+Thermal status ranges LIGHT–MODERATE; battery temperature rises from 30.9 to
+37.4°C. Q8 four-thread CPU time more than doubles and stock GPU drifts by 31%.
+Paired local comparisons are more useful here than cross-format or historical
+baseline rankings. One network-active run does not establish broad stability
+or repeated production performance.
+
+The next useful measurement is selective INT8 integration at the two large
+feed-forward shapes, with resident static packing and activation quantization
+inside the existing graph submission. Compare full-encoder outputs, actual
+transcription, cold/warm latency and memory against unchanged controls. Do not
+multiply this local speedup into a predicted encoder speedup. New-kernel
+cancellation and pending-work recovery still require their separate phone tests.
 
 ## Completed 0.6.8 packed GPU campaign
 
