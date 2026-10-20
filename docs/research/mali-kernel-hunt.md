@@ -1,7 +1,72 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: corrected 48-case phone campaign complete; targeted optimization experiments
-implemented for the next phone campaign.
+Status: 0.6.6 Kernel hunt and 0.6.7 targeted GPU tuning phone campaigns complete.
+No new ordinary recognition defaults are selected.
+
+
+## Completed 0.6.7 GPU tuning campaign
+
+One **16.04-second** recording, 201 encoder frames and secondary width 401 drove
+both formats with forward treatment order and the live relay enabled. All
+**42/42 cases** finished. All **112 focused shapes** passed placement, requested
+route, finiteness and the provisional 1% numerical screen: 672 reported focused
+graph calls. All graph-boundary GPU timestamps were available. Maximum focused
+RMS error was 0.0328%; both fusion variants matched complete unfused GPU outputs
+exactly in the recorded comparisons. This accepts execution of these routes
+for this campaign; it does not establish speech quality or broad GPU stability.
+
+Warm full-encoder medians below exclude setup, model loading, reference work,
+preprocessing, decoder and delivery. Every treatment uses F32 accumulation.
+
+| Case | Q8 encoder ms | FP16 encoder ms |
+| --- | ---: | ---: |
+| F32 GPU control, start / end | 1857.88 / 1861.49 | 1679.84 / 1674.77 |
+| Blocking final fence | 1856.84 | 1678.24 |
+| 256-thread 64×64 tile | 2456.77 | 2253.36 |
+| Selective split-K2 | 1835.12 | 1663.05 |
+| Selective split-K4 | 1845.46 | 1664.74 |
+| Dense bias fusion | 1883.67 | 1649.96 |
+| Dense bias + SiLU fusion | 1858.89 | 1639.95 |
+
+The strongest observed change is CPU work, not encoder latency. Blocking the
+final fence reduces warm full-encoder process CPU time from **347.43 to 21.96
+ms** for Q8 and **315.84 to 20.69 ms** for FP16, about 15–16 times less, with
+virtually unchanged wall time and numerical output. Energy savings were not
+measured. The 256-thread tile is 32–34% slower; preserving tile reuse and changing
+register ownership did not yield a useful gain in this trial.
+
+Split-K changes all 48 targeted contractions per full repetition but improves
+whole-encoder time only around 1% here. FP16 bias+SiLU fusion reaches 1639.95 ms,
+about 2.2% below the midpoint of its F32 controls; Q8 fusion is essentially flat.
+These small differences need repeats with reversed order and relay disconnected.
+They are candidate effects, not a new production policy or a large hidden win.
+Default-accumulation FP16 stock GPU is about 1628 ms, also illustrating why
+precision-matched comparisons matter.
+
+The full FP16 F32 feature RMS difference from CPU is 0.1248%; Q8 is 1.5803%,
+remaining above the provisional full-encoder screen. Synthetic double-reference
+agreement and exact fusion-versus-unfused GPU agreement do not erase that
+same-format CPU/GPU arithmetic difference or establish transcription accuracy.
+
+CPU controls drift substantially: Q8 two-thread warm time goes from 1355 to
+2503 ms, FP16 from 3035 to 2702 ms. Battery temperature spans 27.2–33.2 degrees C;
+Android thermal status reaches LIGHT. F32 GPU controls stay within 0.4%.
+This supports comparing the GPU treatments to their own controls but prevents a
+confident CPU/GPU ranking from this sequential campaign. There is no CPU/GPU
+frequency residency trace.
+
+Focused graphs do not show a consistent wall-time gain from blocking either:
+the sum of eight shape medians rises from 67.25 to 99.93 ms for Q8 and from
+82.62 to 85.86 ms for FP16, while process CPU work falls. Boundary GPU interval
+sums also rise, so the wall difference cannot simply be labeled host fence
+wakeup overhead. The isolated workload, ordering, power management and gaps
+between calls need closer controls; this run does not identify their cause.
+Full-encoder measurements remain the practical latency evidence.
+
+The next useful measurements are repeated precision-matched fusion controls,
+interleaved isolated controls with scheduling/frequency telemetry where public
+APIs permit it, and the end-to-end preparation/worker lifecycle. A large warm
+encoder speedup is not demonstrated by these four source-guided leads.
 
 ## Completed 0.6.6 phone campaign
 
@@ -107,8 +172,8 @@ separate measurement. Wall time alone should not be labeled pure shader time.
 The blocking-wait, 256-thread tile, split-K and bias/SiLU candidates are
 implemented as opt-in experiments in 0.6.7; see
 [GPU tuning](../testing/encoder-tuning.md). They are not accepted production
-policies or measured speedups. The preceding campaign motivates them but does
-not measure their implementations. Queued multi-graph tests and contraction
+policies or established speedups. The 0.6.6 campaign motivates them; the
+0.6.7 campaign above measures their implementations. Queued multi-graph tests and contraction
 scale/residual fusion below remain possible follow-ups, not shipped cases.
 
 1. **Blocking-wait control and boundary timestamps.** Compare the current wait

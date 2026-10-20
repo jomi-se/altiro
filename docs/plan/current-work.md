@@ -16,8 +16,20 @@ ordinary cancellation pass. The dense fusion guard fixture checks consumers,
 views, outputs and rounding/reduction constraints. Android app/fixture builds,
 lint, instrumentation APK compilation, installability, runtime notices and 16 KiB
 packaging checks pass. The APK preserves its signing identity and the unchanged
-Whisper library. Physical GPU execution, gains and speech quality remain
-unverified. Ordinary recognition defaults and insertion behavior are unchanged.
+Whisper library. The following phone campaign confirms execution and bounded
+numerical checks; speech quality and ordinary product acceptance remain open.
+Ordinary recognition defaults and insertion behavior are unchanged.
+
+The 0.6.7 phone campaign completed **42/42 cases** on one 16.04-second clip:
+112 focused shapes and 672 reported graph calls pass the route/finite/numerical
+screen, all boundary timestamps are present, and fusion checks match complete
+unfused GPU outputs exactly. Blocking waits reduce full-encoder process CPU work
+about 15–16 times without reducing wall time. The 256-thread tile is slower;
+split-K is near flat and FP16 bias+SiLU fusion shows a roughly 2.2% candidate
+gain against stable F32 controls. Q8 CPU-reference feature error remains above
+the provisional full-encoder screen. CPU baselines drift and thermal status
+reaches LIGHT; no ordinary defaults change. See the
+[completed campaign analysis](../research/mali-kernel-hunt.md#completed-067-gpu-tuning-campaign).
 
 Version **0.6.6-kernel-fixes** corrects two defects exposed by the first live
 Q8 Kernel hunt campaign: GPU synthetic tests excluded integrated Vulkan
