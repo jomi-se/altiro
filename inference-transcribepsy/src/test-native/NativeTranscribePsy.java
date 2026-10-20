@@ -163,6 +163,46 @@ public final class NativeTranscribePsy {
     }
 
     public static void main(String[] args) throws Exception {
+        if (args.length == 1 && args[0].equals("--capabilities")) {
+            NativeTranscribePsy runtime = new NativeTranscribePsy();
+            final String missingModel = "must-not-open-capability-model.gguf";
+            final String missingAudio = "must-not-open-capability-audio.wav";
+            final int[] capabilities = {0};
+            Progress progress = new Progress() {
+                @Override public void onRuntime(String report) {
+                    super.onRuntime(report);
+                    require(report.length() <= 32768, "Capability event exceeded transport bound");
+                    require(!report.contains(missingModel) && !report.contains(missingAudio),
+                            "Capability event exposed input paths");
+                    require(!report.contains("\"event\":\"SAMPLE\"") && !report.contains("\"event\":\"KERNEL\""),
+                            "Capability probe unexpectedly executed a model or synthetic graph");
+                    if (report.contains("\"event\":\"CAPABILITY\"")) {
+                        require(report.contains("\"opencl\":{") && report.contains("\"vulkan\":{"),
+                                "Capability APIs missing");
+                        require(report.contains("\"status\":"), "Capability availability status missing");
+                        capabilities[0]++;
+                        System.out.println(report);
+                    }
+                }
+            };
+            long handle = runtime.create();
+            try {
+                require(runtime.benchmark(handle, missingModel, missingAudio, true, 2, 70, "", progress),
+                        "Capability JNI probe failed: " + progress.latest);
+                require(capabilities[0] == 1, "Expected exactly one bounded capability event");
+                require(progress.latest.contains("\"event\":\"FINISHED\""), "Capability completion missing");
+            } finally { runtime.release(handle); }
+            long cancelled = runtime.create();
+            try {
+                runtime.cancel(cancelled);
+                require(!runtime.benchmark(cancelled, missingModel, missingAudio, true, 2, 70, "", progress),
+                        "Pre-cancelled capability probe succeeded");
+                require(progress.latest.contains("\"event\":\"CANCELLED\""), "Capability cancellation missing");
+                require(capabilities[0] == 1, "Cancelled capability probe emitted a successful capability event");
+            } finally { runtime.release(cancelled); }
+            System.out.println("Capability JNI dispatch, availability reporting and pre-cancel passed.");
+            return;
+        }
         if ((args.length == 3 || args.length == 4) && args[0].equals("--kernel-hunt")) {
             NativeTranscribePsy runtime = new NativeTranscribePsy();
             int variant = args.length == 4 ? Integer.parseInt(args[3]) : 27;

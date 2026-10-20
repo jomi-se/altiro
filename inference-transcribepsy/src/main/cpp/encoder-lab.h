@@ -43,7 +43,8 @@ inline int altiro_lab_fusion() {
     return 0;
 }
 inline bool altiro_lab_boundary() {
-    return altiro_encoder_lab && altiro_encoder_lab->measuring && altiro_focused_variant(altiro_encoder_lab->variant);
+    return altiro_encoder_lab && altiro_encoder_lab->measuring &&
+        (altiro_focused_variant(altiro_encoder_lab->variant) || altiro_packed_variant(altiro_encoder_lab->variant));
 }
 inline void altiro_lab_count(const char * name, uint64_t value = 1) {
     if (altiro_encoder_lab && altiro_encoder_lab->measuring)
@@ -88,4 +89,6 @@ public:
 void altiro_lab_prepare_graph(ggml_backend_t backend, ggml_cgraph * graph);
 // Deterministic synthetic inputs only. Returns a fixed failure code or nullptr.
 const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantized, int encoder_frames,
+    std::atomic<bool> & cancelled, const std::function<void(const std::string &)> & emit);
+const char * altiro_packed_hunt(bool gpu, int variant, bool quantized, int encoder_frames,
     std::atomic<bool> & cancelled, const std::function<void(const std::string &)> & emit);

@@ -472,6 +472,7 @@ class LocalRecognition(
                 reverse,
                 mode == 3,
                 mode == 4,
+                mode == 5,
             )
         lab.begin(orderedInputs, cases, reverse)
         active = operation

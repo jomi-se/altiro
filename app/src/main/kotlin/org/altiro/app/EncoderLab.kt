@@ -66,7 +66,9 @@ class EncoderLab(private val context: Context) {
                 .put("android_api", android.os.Build.VERSION.SDK_INT)
                 .put(
                     "measurement",
-                    if (cases.any { EncoderExperiment.isKernel(it.variant) })
+                    if (cases.any { it.variant in 60..63 || it.variant == 70 })
+                        "packed GEMM: 1 first + 5 warm; complete calls include activation packing; capability probes are not timings of the encoder"
+                    else if (cases.any { EncoderExperiment.isKernel(it.variant) })
                         "full encoder: 1 first + 3 warm; synthetic kernels: 1 first + 5 warm; setup excluded"
                     else
                         "encoder only; first candidate call after CPU reference; then 3 resident warm calls",
@@ -103,6 +105,7 @@ class EncoderLab(private val context: Context) {
                 .put("phase", "WORKER_SETUP")
                 .put("samples", JSONArray())
                 .put("kernels", JSONArray())
+                .put("packed", JSONArray())
         report.getJSONArray("cases").put(current)
         save()
     }
@@ -164,9 +167,23 @@ class EncoderLab(private val context: Context) {
                 require(files in 0..1024 && bytes >= 0)
                 row.put(event.lowercase(), JSONObject().put("files", files).put("bytes", bytes))
             }
-            "BEGIN" ->
+            "BEGIN" -> {
+                require(row.getInt("variant") !in 60..70)
                 row.put("phase", "ENCODER")
                     .put("repeat", input.getInt("repeat").also { require(it in 0..3) })
+            }
+            "PACKED" -> acceptPacked(input, row)
+            "CAPABILITY" -> {
+                require(row.getInt("variant") == 70 && !row.has("capabilities"))
+                val source = input.getJSONObject("capabilities")
+                row.put(
+                    "capabilities",
+                    JSONObject()
+                        .put("opencl", capability(source.getJSONObject("opencl"), true))
+                        .put("vulkan", capability(source.getJSONObject("vulkan"), false)),
+                )
+                row.put("phase", "CAPABILITIES")
+            }
             "KERNEL" -> {
                 val kernels = row.getJSONArray("kernels")
                 val variant = row.getInt("variant")
@@ -315,6 +332,7 @@ class EncoderLab(private val context: Context) {
                 row.put("phase", "KERNEL ${kernels.length()}/$expected")
             }
             "SAMPLE" -> {
+                require(row.getInt("variant") !in 60..70)
                 val samples = row.getJSONArray("samples")
                 require(samples.length() < 4)
                 val sample = JSONObject()
@@ -381,7 +399,13 @@ class EncoderLab(private val context: Context) {
             }
             "FINISHED" -> {
                 require(
-                    if (EncoderExperiment.isKernel(row.getInt("variant")))
+                    if (row.getInt("variant") == 70)
+                        row.optJSONObject("capabilities")?.let {
+                            it.optJSONObject("opencl") != null && it.optJSONObject("vulkan") != null
+                        } == true
+                    else if (row.getInt("variant") in 60..63)
+                        row.getJSONArray("packed").length() == 4
+                    else if (EncoderExperiment.isKernel(row.getInt("variant")))
                         row.getJSONArray("kernels").length() ==
                             EncoderExperiment.kernelCount(row.getInt("variant"))
                     else row.getJSONArray("samples").length() == 4
@@ -391,6 +415,316 @@ class EncoderLab(private val context: Context) {
             else -> error("Invalid lab event")
         }
         save()
+    }
+
+    private fun acceptPacked(input: JSONObject, row: JSONObject) {
+        val variant = row.getInt("variant")
+        require(variant in 60..63 && row.getString("backend_requested") == "VULKAN")
+        val records = row.getJSONArray("packed")
+        val sequence = input.getInt("sequence")
+        require(sequence == records.length() && sequence in 0..3)
+        val frames = input.getInt("encoder_frames").also { require(it in 1..1000) }
+        if (records.length() > 0)
+            require(frames == records.getJSONObject(0).getInt("encoder_frames"))
+        val width = if (variant == 61) 145 else if (variant == 62) 201 else frames
+        val shape =
+            listOf(
+                listOf(2560, width, 640),
+                listOf(640, width, 2560),
+                listOf(65, 65, 96),
+                listOf(63, 63, 64),
+            )[sequence]
+        val streams = if (variant == 63) 2 else 1
+        val full = shape[0] * shape[1] <= 8192
+        val record = JSONObject()
+        val integers =
+            mapOf(
+                "sequence" to sequence,
+                "encoder_frames" to frames,
+                "m" to shape[0],
+                "n" to shape[1],
+                "k" to shape[2],
+                "streams" to streams,
+                "complete_calls_per_repeat" to streams,
+                "reference_cells" to (if (full) shape[0] * shape[1] else 64) * streams,
+                "candidate_gpu_dispatches_per_repeat" to streams * 2,
+                "candidate_shared_memory_bytes" to 0,
+                "physical_device_count" to 1,
+            )
+        for ((key, expected) in integers) {
+            require(input.get(key) is Number && input.getDouble(key) == expected.toDouble())
+            record.put(key, expected)
+        }
+        val strings =
+            mapOf(
+                "source_type" to
+                    if (row.getString("model") == "transcribepsy-q8") "q8_0" else "f16",
+                "storage_type" to "f16",
+                "backend" to "Vulkan",
+                "control_backend" to "Vulkan",
+                "implementation" to "altiro_packed_register4_v1",
+                "weight_layout" to "m4_k_mlane",
+                "activation_layout" to "n4_k_nlane_f32",
+                "activation_input_rounding" to "f16_then_f32",
+                "reference_mode" to "double_dot_half_rounded_inputs",
+                "execution_order" to "alternating_candidate_first_even",
+            )
+        for ((key, expected) in strings) {
+            require(input.get(key) == expected)
+            record.put(key, expected)
+        }
+        for ((key, expected) in
+            mapOf(
+                "f32_accumulation" to true,
+                "wall_includes_activation_pack" to true,
+                "weight_pack_checked" to true,
+                "activation_pack_checked" to true,
+                "full_reference" to full,
+                "same_device_verified" to true,
+            )) {
+            require(input.get(key) == expected)
+            record.put(key, expected)
+        }
+        require(input.get("finite") is Boolean)
+        record.put("finite", input.getBoolean("finite"))
+        for ((key, expected) in
+            mapOf(
+                "workgroup" to listOf(8, 8, 1),
+                "register_tile" to listOf(4, 4),
+                "dispatch" to listOf((shape[0] + 31) / 32, (shape[1] + 31) / 32, 1),
+                "packing_workgroup" to listOf(64, 1, 1),
+                "specialization_constants" to emptyList(),
+            )) {
+            val values = input.getJSONArray(key)
+            require(values.length() == expected.size)
+            for (i in expected.indices) require(
+                values.get(i) is Number && values.getDouble(i) == expected[i].toDouble()
+            )
+            record.put(key, JSONArray(expected))
+        }
+        for (key in
+            listOf(
+                "resident_bytes",
+                "scratch_bytes",
+                "control_resident_bytes",
+                "pipeline_setup_ms",
+                "setup_ms",
+                "weight_pack_wall_ms",
+                "source_rounding_max_abs",
+                "host_reference_bytes",
+            )) {
+            record.put(key, boundedNumber(input, key, 0.0, 1e12))
+        }
+        for (key in
+            listOf(
+                "candidate_vendor_id",
+                "candidate_device_id",
+                "candidate_driver_version",
+                "timestamp_valid_bits",
+                "candidate_memory_flags_all",
+            )) {
+            val value =
+                boundedNumber(
+                    input,
+                    key,
+                    0.0,
+                    if (key == "timestamp_valid_bits") 65.0 else 4_294_967_296.0,
+                )
+            require(value == value.toLong().toDouble())
+            record.put(key, value.toLong())
+        }
+        val memoryFlags = record.getLong("candidate_memory_flags_all")
+        require((memoryFlags and 6L) == 6L)
+        require(input.get("candidate_all_memory_device_local") is Boolean)
+        val deviceLocal = input.getBoolean("candidate_all_memory_device_local")
+        require(deviceLocal == ((memoryFlags and 1L) != 0L))
+        record.put("candidate_all_memory_device_local", deviceLocal)
+        record.put("timestamp_period_ns", boundedNumber(input, "timestamp_period_ns", 0.0, 1e9))
+        for (key in listOf("candidate_device", "control_device")) {
+            val value = input.getString(key)
+            require(value.length <= 64 && value.matches(Regex("[A-Za-z0-9 ._\\-]*")))
+            record.put(key, value)
+        }
+        if (records.length() > 0) {
+            val first = records.getJSONObject(0)
+            for (key in
+                listOf(
+                    "candidate_device",
+                    "control_device",
+                    "candidate_vendor_id",
+                    "candidate_device_id",
+                    "candidate_driver_version",
+                    "timestamp_valid_bits",
+                    "timestamp_period_ns",
+                )) require(record.get(key) == first.get(key))
+        }
+        if (input.has("sampled_peak_pss_kib"))
+            record.put(
+                "sampled_peak_pss_kib",
+                boundedNumber(input, "sampled_peak_pss_kib", -1.0, 1e12),
+            )
+        for (key in
+            listOf(
+                "relative_rmse",
+                "max_abs_error",
+                "control_relative_rmse",
+                "control_max_abs_error",
+                "control_reference_relative_rmse",
+            )) {
+            record.put(key, boundedNumber(input, key, -1.0, 1e12))
+        }
+        record.put(
+            "weight_pack_gpu_ns",
+            if (input.has("weight_pack_gpu_ns") && input.isNull("weight_pack_gpu_ns"))
+                JSONObject.NULL
+            else boundedNumber(input, "weight_pack_gpu_ns", 0.0, 1e18),
+        )
+        for (key in
+            listOf(
+                "wall_ms",
+                "process_cpu_ms",
+                "activation_pack_wall_ms",
+                "activation_pack_gpu_ns",
+                "compute_gpu_ns",
+                "boundary_gpu_ns",
+                "readback_check_ms",
+                "control_wall_ms",
+                "control_boundary_gpu_ns",
+            )) {
+            val source = input.getJSONArray(key)
+            require(source.length() == 6)
+            val values = JSONArray()
+            for (i in 0..5) {
+                if (key.endsWith("_ns") && source.isNull(i)) values.put(JSONObject.NULL)
+                else {
+                    require(source.get(i) is Number)
+                    val value = source.getDouble(i)
+                    require(
+                        value.isFinite() &&
+                            value >= 0 &&
+                            value < if (key.endsWith("_ns")) 1e18 else 1e9
+                    )
+                    values.put(value)
+                }
+            }
+            record.put(key, values)
+        }
+        for (key in listOf("control_counts", "control_shaders")) record.put(
+            key,
+            measurementMap(input.getJSONObject(key)),
+        )
+        record.put("environment", environment())
+        records.put(record)
+        row.put("phase", "PACKED ${records.length()}/4")
+    }
+
+    private fun boundedNumber(source: JSONObject, key: String, min: Double, max: Double): Double {
+        require(source.get(key) is Number)
+        return source.getDouble(key).also { require(it.isFinite() && it >= min && it < max) }
+    }
+
+    private fun capability(source: JSONObject, opencl: Boolean): JSONObject {
+        val api = if (opencl) "opencl" else "vulkan"
+        require(source.getString("api") == api)
+        val statuses =
+            if (opencl)
+                setOf(
+                    "cancelled",
+                    "library_unavailable_in_app",
+                    "symbols_unavailable",
+                    "platform_query_failed",
+                    "platform_limit_exceeded",
+                    "device_query_failed",
+                    "device_limit_exceeded",
+                    "gpu_with_compiler_unavailable",
+                    "context_failed",
+                    "queue_failed",
+                    "buffer_failed",
+                    "program_failed",
+                    "compile_failed",
+                    "kernel_failed",
+                    "argument_failed",
+                    "enqueue_failed",
+                    "finish_failed",
+                    "read_failed",
+                    "verification_failed",
+                    "verified",
+                )
+            else
+                setOf(
+                    "cancelled",
+                    "properties2_unavailable",
+                    "extension_query_failed",
+                    "version_query_failed",
+                    "instance_failed",
+                    "device_query_failed",
+                    "gpu_unavailable",
+                    "not_built",
+                    "queried",
+                )
+        val status = source.getString("status").also { require(it in statuses) }
+        val result = JSONObject().put("api", api).put("status", status)
+        val booleans =
+            if (opencl)
+                listOf(
+                    "verified",
+                    "gpuSelected",
+                    "extensionsKnown",
+                    "fp16Extension",
+                    "integerDotExtension",
+                    "matrixMultiplyExtension",
+                    "fp16ConfigKnown",
+                    "fp16Arithmetic",
+                )
+            else
+                listOf(
+                    "int8QueryAvailable",
+                    "dotQueryAvailable",
+                    "shaderInt8",
+                    "shaderFloat16",
+                    "shaderIntegerDotProduct",
+                    "integerDotProduct8BitSignedAccelerated",
+                    "integerDotProduct8BitUnsignedAccelerated",
+                    "integerDotProduct8BitMixedSignednessAccelerated",
+                    "integerDotProduct4x8BitPackedSignedAccelerated",
+                    "integerDotProduct4x8BitPackedUnsignedAccelerated",
+                    "integerDotProduct4x8BitPackedMixedSignednessAccelerated",
+                    "integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated",
+                )
+        for (key in booleans) if (source.has(key)) {
+            require(source.get(key) is Boolean)
+            result.put(key, source.getBoolean(key))
+        }
+        if (opencl) {
+            require(
+                result.has("verified") && result.getBoolean("verified") == (status == "verified")
+            )
+            if (result.has("gpuSelected")) require(result.getBoolean("gpuSelected"))
+            if (status == "verified") require(result.optBoolean("gpuSelected"))
+        }
+        for (key in
+            if (opencl) listOf("deviceName", "deviceVendor", "driverVersion")
+            else listOf("deviceName")) if (source.has(key)) {
+            val value = source.getString(key)
+            require(value.length <= 80 && value.matches(Regex("[A-Za-z0-9 ._()\\-]*")))
+            result.put(key, value)
+        }
+        if (opencl)
+            for (key in
+                listOf("maxWorkGroupSize", "localMemoryBytes", "compileUs", "executeUs")) if (
+                source.has(key)
+            ) {
+                val value =
+                    boundedNumber(
+                        source,
+                        key,
+                        0.0,
+                        if (key.endsWith("Us")) 1e12 else 2_147_483_648.0,
+                    )
+                require(value == value.toLong().toDouble())
+                result.put(key, value.toLong())
+            }
+        return result
     }
 
     @Synchronized
@@ -497,6 +831,33 @@ class EncoderLab(private val context: Context) {
                     )
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
+                        if (row.optInt("variant") == 70) {
+                            val capabilities = row.optJSONObject("capabilities")
+                            appendLine(
+                                "${row.getString("model")} · ${row.getString("id")} · ${row.optString("status")} · OpenCL ${capabilities?.optJSONObject("opencl")?.optString("status") ?: "pending"} · Vulkan ${capabilities?.optJSONObject("vulkan")?.optString("status") ?: "pending"}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
+                            )
+                            continue
+                        }
+                        if (row.optInt("variant") in 60..63) {
+                            val packed = row.optJSONArray("packed")
+                            append(
+                                "${row.getString("model")} · ${row.getString("id")} · ${packed?.length() ?: 0}/4 packed shapes · ${row.optString("status")}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
+                            )
+                            if (
+                                packed != null &&
+                                    (0 until packed.length()).any {
+                                        val item = packed.getJSONObject(it)
+                                        !item.getBoolean("finite") ||
+                                            item.getDouble("relative_rmse") > 0.0001 ||
+                                            item.getDouble("control_relative_rmse") > 0.002 ||
+                                            item.getDouble("control_reference_relative_rmse") >
+                                                0.002
+                                    }
+                            )
+                                append(" · CHECK NUMERICS")
+                            appendLine()
+                            continue
+                        }
                         val kernels = row.optJSONArray("kernels")
                         if (EncoderExperiment.isKernel(row.optInt("variant"))) {
                             append(

@@ -84,3 +84,11 @@ Source data provenance and release redistribution qualification remain separate.
 
 Verification checks actual ELF segments and uncompressed APK
 entries for 16 KiB alignment; this does not replace a page-size device run.
+
+The optional GPU capability probe builds against Khronos OpenCL-Headers
+**v2024.10.24**, pinned by archive SHA-256 in the native CMake file. Its Apache-2.0
+license is retained as `OpenCL-Headers-Apache-2.0.txt` in the TranscribePsy assets.
+The APK does not bundle an OpenCL implementation. Android may expose an optional
+`libOpenCL.so` through the ordinary app linker namespace; lack of access is
+reported without trying private vendor paths. The independent packed Vulkan
+shaders are original Altiro experiments, not Arm Compute Library kernels.

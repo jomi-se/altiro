@@ -31,7 +31,7 @@
   "licenseTexts": [
     {
       "asset": "TranscribePsy-NOTICE.txt",
-      "sha256": "fbbbe7c71170cacd9c5c5c1baffb9403d0f24d7ce56ff7f3b9296a7693c89327"
+      "sha256": "8fbc920a4e069c42f332eefae185c8a4d19b1b72629f2c7ec5892731bc548782"
     },
     {
       "asset": "TranscribePsy-dr_wav-MIT-0.txt",
@@ -44,6 +44,17 @@
     {
       "asset": "TranscribePsy-runtime-Apache-2.0.txt",
       "sha256": "b3d93544983502f226707a106525dd81127839d41591fa0fdac5e82068515648"
+    },
+    {
+      "asset": "OpenCL-Headers-Apache-2.0.txt",
+      "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
     }
-  ]
+  ],
+  "openclHeaders": {
+    "version": "v2024.10.24",
+    "sourceUrl": "https://github.com/KhronosGroup/OpenCL-Headers/tree/v2024.10.24",
+    "archiveSha256": "159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93",
+    "license": "Apache-2.0",
+    "use": "Public build headers for the optional ordinary-app OpenCL capability probe; no OpenCL library is bundled."
+  }
 }

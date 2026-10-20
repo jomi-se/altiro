@@ -11,6 +11,20 @@ listed under Python Dependencies are optional and apply only to scripts/
 C++ Dependencies
 =========================================================================
 
+--- apache-2.0 (Apache License 2.0) ---
+
+  OpenCL-Headers v2024.10.24
+    Copyright (c) 2008-2020 The Khronos Group Inc.
+    https://github.com/KhronosGroup/OpenCL-Headers/tree/v2024.10.24
+    SHA256 of source archive:
+    159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93
+    Header-only ABI declarations for an opt-in public OpenCL loader probe.
+    No OpenCL implementation or driver is bundled.
+    License: OpenCL-Headers-Apache-2.0.txt.
+
+  The Altiro packed register4 Vulkan kernels are original experimental code.
+  They do not include Arm Compute Library source and are not ACL kernels.
+
 --- mit (MIT License) ---
 
   ggml

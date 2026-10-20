@@ -2,13 +2,14 @@
 #include <cstdint>
 
 inline bool altiro_focused_variant(int v) { return v >= 40 && v <= 46; }
-inline bool altiro_synthetic_variant(int v) { return (v >= 20 && v <= 29) || altiro_focused_variant(v); }
+inline bool altiro_packed_variant(int v) { return v >= 60 && v <= 63; }
+inline bool altiro_synthetic_variant(int v) { return (v >= 20 && v <= 29) || altiro_focused_variant(v) || altiro_packed_variant(v); }
 inline bool altiro_supported_variant(int v) {
-    return (v >= 0 && v <= 16) || altiro_synthetic_variant(v) || (v >= 30 && v <= 36);
+    return (v >= 0 && v <= 16) || altiro_synthetic_variant(v) || (v >= 30 && v <= 36) || v == 70;
 }
 inline bool altiro_f32_variant(int v) {
     return v == 6 || v == 13 || v == 14 || v == 15 || v == 16 ||
-        (v >= 23 && v <= 29) || (v >= 30 && v <= 36) || altiro_focused_variant(v);
+        (v >= 23 && v <= 29) || (v >= 30 && v <= 36) || altiro_focused_variant(v) || altiro_packed_variant(v);
 }
 inline int altiro_split_factor(int v, uint32_t m, uint32_t k, bool disabled) {
     if (disabled || m != 640 || k != 2560) return 1;

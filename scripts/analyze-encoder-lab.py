@@ -42,8 +42,12 @@ def summarize(report):
         if case.get('backend_requested') not in ('CPU', 'VULKAN'):
             raise ValueError('Invalid requested backend')
         variant = case.get('variant')
-        if type(variant) is not int or variant not in (*range(17), *range(20,37), *range(40,47)):
+        if type(variant) is not int or variant not in (*range(17), *range(20,37), *range(40,47), *range(60,64), 70):
             raise ValueError('Unknown native variant')
+        special = variant in range(60,64) or variant == 70
+        packed = packed_rows(case) if variant in range(60,64) else []
+        capability = capability_row(case) if variant == 70 else None
+        if special and case.get('samples', []): raise ValueError('Unexpected full encoder samples')
         kernels = (focused_rows(case) if variant in range(40,47) else kernel_rows(case)) if is_kernel(variant) else []
         samples = case.get('samples', [])
         if not isinstance(samples, list) or len(samples) > 4:
@@ -70,9 +74,9 @@ def summarize(report):
             routing = routing and any(s.get('counts',{}).get(tile,0) > 0 for s in samples)
         rows.append(dict(model=model, name=name, samples=samples, median=statistics.median(warm) if warm else None,
                          low=min(warm) if warm else None, high=max(warm) if warm else None,
-                         eligible=complete and numerics and placement and routing and same_work and not profile,
+                         eligible=not special and complete and numerics and placement and routing and same_work and not profile,
                          complete=complete, numerics=numerics, placement=placement, routing=routing, profile=profile,
-                         kernels=kernels, variant=variant,
+                         kernels=kernels, packed=packed, capability=capability, variant=variant,
                          status=case.get('status'), error=max((s['relative_rmse'] for s in samples), default=None)))
     return rows
 
@@ -224,6 +228,184 @@ def render_focused(rows):
     return lines
 
 
+def bounded_number(value, maximum=1e12):
+    value = number(value)
+    if value > maximum: raise ValueError('Measurement exceeds bound')
+    return value
+
+
+def validate_environment(obj):
+    bounds={'elapsed_ms':(0,1e15),'thermal_status':(0,6),'battery_deci_c':(-1000,2000),
+            'battery_percent':(-1,100),'plugged':(-1,15)}
+    if not isinstance(obj,dict) or set(obj)!=(set(bounds)|{'power_save','cpu_sample_khz'}): raise ValueError('Invalid environment fields')
+    for key,(low,high) in bounds.items():
+        if type(obj[key]) is not int or not low<=obj[key]<=high: raise ValueError('Invalid environment value')
+    if type(obj['power_save']) is not bool: raise ValueError('Invalid power flag')
+    values=obj['cpu_sample_khz']
+    if not isinstance(values,list) or len(values)>8: raise ValueError('Invalid frequency samples')
+    for value in values:
+        if value is not None and (type(value) is not int or not 0<=value<=100000000): raise ValueError('Invalid frequency')
+
+
+def packed_rows(case):
+    records = case.get('packed', [])
+    if not isinstance(records, list) or len(records) > 4 or (case['status'] == 'FINISHED' and len(records) != 4):
+        raise ValueError('Incomplete packed shape set')
+    rows = []
+    for i, record in enumerate(records):
+        if not isinstance(record, dict): raise ValueError('Invalid packed record')
+        frames = record.get('encoder_frames')
+        if i and frames != records[0].get('encoder_frames'): raise ValueError('Changing packed frame count')
+        if type(frames) is not int or not 1 <= frames <= 1000: raise ValueError('Invalid packed frame count')
+        n = 145 if case['variant'] == 61 else 201 if case['variant'] == 62 else frames
+        shape = ((2560,n,640),(640,n,2560),(65,65,96),(63,63,64))[i]
+        streams = 2 if case['variant'] == 63 else 1
+        cells = shape[0]*shape[1]
+        contract = dict(sequence=i,m=shape[0],n=shape[1],k=shape[2],streams=streams,
+            complete_calls_per_repeat=streams,source_type='q8_0' if case['model']=='transcribepsy-q8' else 'f16',
+            storage_type='f16',backend='Vulkan',control_backend='Vulkan',implementation='altiro_packed_register4_v1',
+            weight_layout='m4_k_mlane',activation_layout='n4_k_nlane_f32',activation_input_rounding='f16_then_f32',
+            f32_accumulation=True,workgroup=[8,8,1],register_tile=[4,4],dispatch=[(shape[0]+31)//32,(shape[1]+31)//32,1],
+            packing_workgroup=[64,1,1],full_reference=cells<=8192,reference_cells=(cells if cells<=8192 else 64)*streams,
+            reference_mode='double_dot_half_rounded_inputs',wall_includes_activation_pack=True,weight_pack_checked=True,
+            activation_pack_checked=True,candidate_gpu_dispatches_per_repeat=streams*2,candidate_shared_memory_bytes=0,
+            specialization_constants=[],physical_device_count=1,same_device_verified=True,
+            execution_order='alternating_candidate_first_even')
+        arrays = ('wall_ms','process_cpu_ms','activation_pack_wall_ms','activation_pack_gpu_ns','compute_gpu_ns',
+                  'boundary_gpu_ns','readback_check_ms','control_wall_ms','control_boundary_gpu_ns')
+        scalar = ('resident_bytes','scratch_bytes','control_resident_bytes','pipeline_setup_ms','setup_ms',
+                  'weight_pack_wall_ms','source_rounding_max_abs','host_reference_bytes')
+        errors = ('relative_rmse','max_abs_error','control_relative_rmse','control_max_abs_error','control_reference_relative_rmse')
+        allowed = set(contract) | set(arrays) | set(scalar) | set(errors) | {'encoder_frames','weight_pack_gpu_ns','finite','control_counts','control_shaders','lab','event','environment',
+            'candidate_device','control_device','candidate_vendor_id','candidate_device_id','candidate_driver_version',
+            'timestamp_valid_bits','timestamp_period_ns','candidate_memory_flags_all','candidate_all_memory_device_local','sampled_peak_pss_kib'}
+        if set(record)-allowed: raise ValueError('Unknown packed field')
+        for key, expected in contract.items():
+            value = record.get(key)
+            if type(value) is not type(expected) or value != expected: raise ValueError('Wrong packed work contract')
+            if isinstance(value,list) and any(type(v) is not int for v in value): raise ValueError('Invalid dispatch shape')
+        if 'event' in record and record['event'] != 'PACKED': raise ValueError('Wrong packed event')
+        if 'lab' in record and record['lab'] is not True: raise ValueError('Wrong packed event')
+        if i:
+            for key in ('candidate_device','control_device','candidate_vendor_id','candidate_device_id','candidate_driver_version','timestamp_valid_bits','timestamp_period_ns'):
+                if record.get(key) != records[0].get(key): raise ValueError('Changing packed device identity')
+        if 'sampled_peak_pss_kib' in record:
+            value=number(record['sampled_peak_pss_kib'],True)
+            if value>1e12: raise ValueError('Invalid PSS sample')
+        for key in ('candidate_device','control_device'):
+            if not isinstance(record.get(key),str) or not re.fullmatch(r'[A-Za-z0-9 ._-]{0,64}',record[key]): raise ValueError('Unsafe packed device')
+        for key in ('candidate_vendor_id','candidate_device_id','candidate_driver_version','timestamp_valid_bits','candidate_memory_flags_all'):
+            value=record.get(key)
+            if type(value) is not int or not 0<=value<=(64 if key=='timestamp_valid_bits' else 4294967295): raise ValueError('Invalid packed device property')
+        if type(record.get('candidate_all_memory_device_local')) is not bool or record['candidate_memory_flags_all'] & 6 != 6 or record['candidate_all_memory_device_local'] != bool(record['candidate_memory_flags_all'] & 1): raise ValueError('Invalid memory placement')
+        bounded_number(record.get('timestamp_period_ns'),1e9)
+        if 'environment' in record: validate_environment(record['environment'])
+        for key in arrays:
+            values = record.get(key)
+            if not isinstance(values,list) or len(values)!=6: raise ValueError('Incomplete packed repetitions')
+            for value in values:
+                if key.endswith('_gpu_ns') and value is None: continue
+                bounded_number(value,1e18 if key.endswith('_ns') else 1e9)
+        for key in scalar: bounded_number(record.get(key))
+        if record.get('weight_pack_gpu_ns') is not None: bounded_number(record['weight_pack_gpu_ns'],1e18)
+        elif 'weight_pack_gpu_ns' not in record: raise ValueError('Missing packed GPU interval')
+        if type(record.get('finite')) is not bool: raise ValueError('Invalid packed finite flag')
+        for key in errors:
+            value = number(record.get(key),not record['finite'])
+            if value>1e12: raise ValueError('Packed error exceeds bound')
+        for key in ('control_counts','control_shaders'):
+            values=record.get(key)
+            if not isinstance(values,dict) or len(values)>100: raise ValueError('Invalid packed counters')
+            for label,value in values.items():
+                if not isinstance(label,str) or not re.fullmatch(r'[A-Za-z0-9_:.-]{1,120}',label): raise ValueError('Invalid packed counter')
+                bounded_number(value)
+        for whole, part in zip(record['wall_ms'],record['activation_pack_wall_ms']):
+            if part > whole + 0.01: raise ValueError('Packing exceeds complete wall time')
+        screen = (case['status']=='FINISHED' and record['finite'] and case['backend_requested']=='VULKAN'
+                  and 0<=record['relative_rmse']<=.0001 and 0<=record['control_relative_rmse']<=.002
+                  and 0<=record['control_reference_relative_rmse']<=.002)
+        gpu=record['boundary_gpu_ns'][1:]
+        rows.append(dict(shape=shape,streams=streams,eligible=screen,first=record['wall_ms'][0],
+            median=statistics.median(record['wall_ms'][1:]),control=statistics.median(record['control_wall_ms'][1:]),
+            packing=statistics.median(record['activation_pack_wall_ms'][1:]),
+            gpu_ms=statistics.median(gpu)/1e6 if all(v is not None for v in gpu) else None,
+            weight_pack=record['weight_pack_wall_ms'],scratch=record['scratch_bytes'],error=record['relative_rmse']))
+    return rows
+
+
+OPENCL_STATUS = set(('cancelled library_unavailable_in_app symbols_unavailable platform_query_failed platform_limit_exceeded '
+    'device_query_failed device_limit_exceeded gpu_with_compiler_unavailable context_failed queue_failed buffer_failed '
+    'program_failed compile_failed kernel_failed argument_failed enqueue_failed finish_failed read_failed verification_failed verified').split())
+VULKAN_STATUS = set(('queried properties2_unavailable extension_query_failed version_query_failed instance_failed '
+    'device_query_failed gpu_unavailable cancelled not_built').split())
+CL_BOOLS = set('verified gpuSelected extensionsKnown fp16Extension integerDotExtension matrixMultiplyExtension fp16ConfigKnown fp16Arithmetic'.split())
+VK_BOOLS = set(('int8QueryAvailable dotQueryAvailable shaderInt8 shaderFloat16 shaderIntegerDotProduct '
+    'integerDotProduct8BitSignedAccelerated integerDotProduct8BitUnsignedAccelerated integerDotProduct8BitMixedSignednessAccelerated '
+    'integerDotProduct4x8BitPackedSignedAccelerated integerDotProduct4x8BitPackedUnsignedAccelerated '
+    'integerDotProduct4x8BitPackedMixedSignednessAccelerated integerDotProductAccumulatingSaturating4x8BitPackedSignedAccelerated').split())
+
+
+def capability_row(case):
+    result = case.get('capabilities')
+    if result is None and case['status']!='FINISHED': return None
+    if not isinstance(result,dict) or set(result)!={'opencl','vulkan'}: raise ValueError('Incomplete capability object')
+    for api, statuses, booleans in (('opencl',OPENCL_STATUS,CL_BOOLS),('vulkan',VULKAN_STATUS,VK_BOOLS)):
+        obj=result[api]
+        text={'deviceName','deviceVendor','driverVersion'} if api=='opencl' else {'deviceName'}
+        numbers={'maxWorkGroupSize','localMemoryBytes','compileUs','executeUs'} if api=='opencl' else set()
+        if not isinstance(obj,dict) or set(obj)-({'api','status'}|booleans|text|numbers): raise ValueError('Unknown capability field')
+        if obj.get('api')!=api or obj.get('status') not in statuses: raise ValueError('Invalid capability identity')
+        for key in booleans & obj.keys():
+            if type(obj[key]) is not bool: raise ValueError('Invalid capability flag')
+        for key in text & obj.keys():
+            if not isinstance(obj[key],str) or not re.fullmatch(r'[A-Za-z0-9 ._()+:-]{0,80}',obj[key]): raise ValueError('Unsafe capability identifier')
+        for key in numbers & obj.keys():
+            if type(obj[key]) is not int or not 0<=obj[key]<=2147483647: raise ValueError('Invalid capability integer')
+        if api=='opencl':
+            if type(obj.get('verified')) is not bool or obj['verified'] != (obj['status']=='verified'): raise ValueError('Contradictory OpenCL result')
+            if obj['verified'] and (obj.get('gpuSelected') is not True or not {'compileUs','executeUs'}<=obj.keys()): raise ValueError('Missing OpenCL execution evidence')
+            for flag,gate in (('fp16Extension','extensionsKnown'),('integerDotExtension','extensionsKnown'),('matrixMultiplyExtension','extensionsKnown'),('fp16Arithmetic','fp16ConfigKnown')):
+                if flag in obj and obj.get(gate) is not True: raise ValueError('Ungated OpenCL claim')
+        else:
+            if obj['status']=='queried' and not {'int8QueryAvailable','dotQueryAvailable'}<=obj.keys(): raise ValueError('Missing Vulkan query gates')
+            for key in (booleans-{'int8QueryAvailable','dotQueryAvailable'}) & obj.keys():
+                gate='int8QueryAvailable' if key in ('shaderInt8','shaderFloat16') else 'dotQueryAvailable'
+                if obj.get(gate) is not True: raise ValueError('Ungated Vulkan claim')
+    return result
+
+
+def render_packed(rows):
+    cases=[r for r in rows if r['variant'] in range(60,64)]
+    if not cases: return []
+    lines=['','Packed synthetic GEMM: same F16-rounded weights and activations; first call + five warm calls.',
+        'Candidate wall time includes activation packing, GPU submissions and waits. Control uses the same inputs and call count.',
+        'Weight packing/setup is separate. GPU intervals may be unavailable; synthetic results never rank as full encoder latency.',
+        '', '| Model | Case | M×N×K | Calls | First ms | Warm wall ms | Control ms | Pack ms | GPU ms | Weight pack ms | Scratch bytes | State |',
+        '| --- | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |']
+    for case in cases:
+        for row in case['packed']:
+            gpu=f"{row['gpu_ms']:.3f}" if row['gpu_ms'] is not None else 'unavailable'
+            lines.append(f"| {case['model']} | {case['name']} | {'×'.join(map(str,row['shape']))} | {row['streams']} | {row['first']:.3f} | {row['median']:.3f} | {row['control']:.3f} | {row['packing']:.3f} | {gpu} | {row['weight_pack']:.3f} | {row['scratch']:.0f} | {'screened' if row['eligible'] else 'excluded'} |")
+    return lines
+
+
+def render_capabilities(rows):
+    cases=[r for r in rows if r['variant']==70]
+    if not cases: return []
+    lines=['','GPU capability probes: app-visible access only. OpenCL verification is one fixed FP32 kernel, not a model backend.',
+        'Vulkan semantic support and advertised acceleration are separate; neither establishes measured throughput.',
+        '', '| Case | API | Field | Value |','| --- | --- | --- | --- |']
+    for case in cases:
+        if case['capability'] is None:
+            lines.append(f"| {case['name']} | — | status | incomplete |")
+            continue
+        for api,obj in case['capability'].items():
+            for key,value in sorted(obj.items()):
+                if key=='api': continue
+                lines.append(f"| {case['name']} | {api} | {key} | {str(value).lower() if type(value) is bool else value} |")
+    return lines
+
+
 def render(report):
     rows = summarize(report)
     lines = ['Encoder-only measurements; setup and decoder excluded.',
@@ -234,6 +416,10 @@ def render(report):
     if report.get('live_relay_enabled'):
         lines.insert(0, 'Live relay enabled: network activity can perturb benchmark timings.\n')
     for row in rows:
+        if row['variant'] in range(60,64) or row['variant'] == 70:
+            label = f"{len(row['packed'])}/4 packed shapes" if row['variant'] != 70 else 'capability probe'
+            lines.append(f"| {row['model']} | {row['name']} | — | {label} | — | {row['status']} |")
+            continue
         if is_kernel(row['variant']):
             lines.append(f"| {row['model']} | {row['name']} | — | {len(row['kernels'])}/{8 if row['variant'] in range(40,47) else 32} kernel shapes | — | {row['status']} |")
             continue
@@ -271,6 +457,8 @@ def render(report):
                     lines.append(f'  {key}: {value/1e6:.2f} ms (shape group; includes batches).')
         lines.extend(render_kernels(matching))
         lines.extend(render_focused(matching))
+        lines.extend(render_packed(matching))
+        lines.extend(render_capabilities(matching))
     lines += ['', 'Host timers overlap (synchronization and shader registration are nested inside compute).',
               'Compare profiled hotspots with unprofiled cases; timestamps include dependency effects.',
               'Read thermal_status, battery_deci_c, CPU frequency samples and process_cpu_ms in the JSON before drawing conclusions.']

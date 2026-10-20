@@ -167,6 +167,40 @@ class EncoderExperimentTest {
     }
 
     @Test
+    fun packedSuitePreservesControlsAndBoundsDistinctMeasurementFamilies() {
+        for (profile in listOf(false, true)) {
+            val forward = EncoderExperiment.suite(false, profile, packed = true)
+            val reverse = EncoderExperiment.suite(false, profile, reverse = true, packed = true)
+            val first = forward.indexOfFirst { EncoderExperiment.isPacked(it.variant) }
+            val last = forward.indexOfLast { EncoderExperiment.isPacked(it.variant) }
+            assertEquals(forward.take(first), reverse.take(first))
+            assertEquals(forward.drop(last + 1), reverse.drop(last + 1))
+            assertEquals(
+                forward.subList(first, last + 1).reversed(),
+                reverse.subList(first, last + 1),
+            )
+            assertEquals(
+                setOf(60, 61, 62, 63),
+                forward
+                    .filter { EncoderExperiment.isPacked(it.variant) }
+                    .map { it.variant }
+                    .toSet(),
+            )
+            assertEquals(1, forward.count { it.variant == 70 })
+            assertEquals(2, forward.count { it.variant == 30 })
+            assertTrue(forward.all { EncoderExperiment.options(it.wire) != null })
+            assertTrue(forward.map { it.id }.distinct().size == forward.size)
+            assertTrue(forward.size * 2 <= 64)
+            assertTrue(forward.size * 2 * 12 < EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY)
+            assertTrue((60..63).all { !EncoderExperiment.isKernel(it) })
+            assertFalse(EncoderExperiment.isKernel(70))
+        }
+        for (variant in listOf(48, 49, 50, 59, 64, 69, 71)) assertNull(
+            EncoderExperiment.options("4:$variant")
+        )
+    }
+
+    @Test
     fun tuningKeepsMatchedControlsAndReversesOnlyTreatments() {
         val forward = EncoderExperiment.suite(false, true, tuning = true)
         val reverse = EncoderExperiment.suite(false, true, reverse = true, tuning = true)

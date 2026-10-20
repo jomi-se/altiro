@@ -188,5 +188,123 @@ def kernel_case():
     return value
 
 
+
+
+def packed_case(variant=60):
+    value=case('packed-test','VULKAN',variant)
+    value.update(samples=[],packed=[])
+    frames=145
+    n=201 if variant==62 else frames
+    streams=2 if variant==63 else 1
+    for m,n,k in ((2560,n,640),(640,n,2560),(65,65,96),(63,63,64)):
+        cells=m*n
+        record=dict(sequence=len(value['packed']),m=m,n=n,k=k,streams=streams,complete_calls_per_repeat=streams,
+            encoder_frames=frames,source_type='q8_0',storage_type='f16',backend='Vulkan',control_backend='Vulkan',
+            implementation='altiro_packed_register4_v1',weight_layout='m4_k_mlane',activation_layout='n4_k_nlane_f32',
+            activation_input_rounding='f16_then_f32',f32_accumulation=True,workgroup=[8,8,1],register_tile=[4,4],
+            dispatch=[(m+31)//32,(n+31)//32,1],packing_workgroup=[64,1,1],full_reference=cells<=8192,
+            reference_cells=(cells if cells<=8192 else 64)*streams,reference_mode='double_dot_half_rounded_inputs',
+            wall_includes_activation_pack=True,weight_pack_checked=True,activation_pack_checked=True,
+            candidate_gpu_dispatches_per_repeat=streams*2,candidate_shared_memory_bytes=0,specialization_constants=[],
+            finite=True,weight_pack_gpu_ns=None,control_counts={},control_shaders={},
+            physical_device_count=1,same_device_verified=True,execution_order='alternating_candidate_first_even',
+            candidate_device='Example GPU',control_device='Example GPU',candidate_vendor_id=1,candidate_device_id=1,
+            candidate_driver_version=1,timestamp_valid_bits=64,timestamp_period_ns=1.0,
+            candidate_memory_flags_all=7,candidate_all_memory_device_local=True,sampled_peak_pss_kib=-1,
+            environment=dict(elapsed_ms=100,thermal_status=0,power_save=False,battery_deci_c=300,
+                battery_percent=80,plugged=0,cpu_sample_khz=[1000000,None,None,None,None,None,None,None]))
+        for key in ('relative_rmse','max_abs_error','control_relative_rmse','control_max_abs_error','control_reference_relative_rmse'): record[key]=0
+        for key in ('resident_bytes','scratch_bytes','control_resident_bytes','pipeline_setup_ms','setup_ms','weight_pack_wall_ms','source_rounding_max_abs','host_reference_bytes'): record[key]=1.0
+        for key in ('wall_ms','process_cpu_ms','activation_pack_wall_ms','activation_pack_gpu_ns','compute_gpu_ns','boundary_gpu_ns','readback_check_ms','control_wall_ms','control_boundary_gpu_ns'): record[key]=[1000,2,3,4,5,6]
+        value['packed'].append(record)
+    return value
+
+
+def capability_case():
+    value=case('capability-test','VULKAN',70)
+    value.update(samples=[],capabilities=dict(opencl=dict(api='opencl',status='library_unavailable_in_app',verified=False),
+        vulkan=dict(api='vulkan',status='queried',int8QueryAvailable=True,dotQueryAvailable=True,shaderInt8=True,
+                    shaderIntegerDotProduct=True,integerDotProduct4x8BitPackedSignedAccelerated=False)))
+    return value
+
+
+class NewGpuAnalysisTest(unittest.TestCase):
+    def report(self,value): return dict(schema=1,cases=[value])
+
+    def test_packed_variants_are_separate_and_first_excluded(self):
+        for variant in range(60,64):
+            report=self.report(packed_case(variant))
+            row=analysis.summarize(report)[0]
+            self.assertFalse(row['eligible'])
+            self.assertEqual(4,len(row['packed']))
+            self.assertEqual(4,row['packed'][0]['median'])
+            self.assertTrue(all(k['eligible'] for k in row['packed']))
+            self.assertNotIn('Fastest completed',analysis.render(report))
+            self.assertIn('activation packing',analysis.render(report))
+            self.assertIn('| Model | Case |',analysis.render(report))
+
+    def test_packed_rejects_incomplete_wrong_work_nonfinite_and_privacy_fields(self):
+        for mutate in (
+            lambda v:v['packed'].pop(),lambda v:v['packed'][0]['wall_ms'].pop(),
+            lambda v:v['packed'][0].update(m=True),lambda v:v['packed'][0].update(control_backend='CPU'),
+            lambda v:v['packed'][0].update(activation_input_rounding='f32'),
+            lambda v:v['packed'][0].update(wall_includes_activation_pack=False),
+            lambda v:v['packed'][0].update(relative_rmse=float('nan')),
+            lambda v:v['packed'][0].update(private_path='/private'),
+            lambda v:v['packed'][0].update(boundary_gpu_ns=[float('inf')]*6),
+            lambda v:v['packed'][0].update(activation_pack_wall_ms=[999999]*6),
+            lambda v:v['packed'][0].update(workgroup=[True,8,1]),
+            lambda v:v['packed'][0]['environment'].update(private_path='/private'),
+            lambda v:v['packed'][0].update(same_device_verified=False),
+            lambda v:v['packed'][0].update(sampled_peak_pss_kib=float('nan')),
+            lambda v:v['packed'][1].update(candidate_device='Different GPU'),
+        ):
+            value=packed_case();mutate(value)
+            with self.assertRaises(ValueError):analysis.summarize(self.report(value))
+
+    def test_packed_nullable_gpu_and_numerical_screen(self):
+        value=packed_case()
+        value['packed'][0].update(boundary_gpu_ns=[None]*6,relative_rmse=.001)
+        row=analysis.summarize(self.report(value))[0]['packed'][0]
+        self.assertIsNone(row['gpu_ms']);self.assertFalse(row['eligible'])
+        self.assertIn('unavailable',analysis.render(self.report(value)))
+
+    def test_capability_unavailable_is_valid_but_never_latency(self):
+        report=self.report(capability_case())
+        self.assertFalse(analysis.summarize(report)[0]['eligible'])
+        output=analysis.render(report)
+        self.assertIn('library_unavailable_in_app',output)
+        self.assertIn('integerDotProduct4x8BitPackedSignedAccelerated',output)
+        self.assertNotIn('Fastest completed',output)
+
+    def test_capability_missing_contradictory_unknown_or_private_rejected(self):
+        for mutate in (
+            lambda v:v.pop('capabilities'),lambda v:v['capabilities'].pop('vulkan'),
+            lambda v:v['capabilities']['opencl'].update(verified=True),
+            lambda v:v['capabilities']['opencl'].update(driverVersion='/vendor/private'),
+            lambda v:v['capabilities']['opencl'].update(buildLog='private'),
+            lambda v:v['capabilities']['opencl'].update(compileUs=float('nan')),
+            lambda v:v['capabilities']['opencl'].update(fp16Arithmetic=True),
+            lambda v:v['capabilities']['vulkan'].update(dotQueryAvailable=False),
+            lambda v:v['capabilities']['vulkan'].update(shaderInt8=1),
+        ):
+            value=capability_case();mutate(value)
+            with self.assertRaises(ValueError):analysis.summarize(self.report(value))
+
+    def test_failed_partial_special_cases_keep_campaign_readable(self):
+        packed=packed_case();packed.update(status='FAILED',packed=[])
+        capability=capability_case();capability.update(status='FAILED');capability.pop('capabilities')
+        report=dict(schema=1,cases=[packed,capability,case()])
+        self.assertIn('incomplete',analysis.render(report))
+        self.assertTrue(analysis.summarize(report)[2]['eligible'])
+
+    def test_capability_verified_requires_gpu_and_execution(self):
+        value=capability_case()
+        value['capabilities']['opencl'].update(status='verified',verified=True,gpuSelected=True,compileUs=500,executeUs=10)
+        self.assertIsNotNone(analysis.summarize(self.report(value))[0]['capability'])
+        del value['capabilities']['opencl']['executeUs']
+        with self.assertRaises(ValueError):analysis.summarize(self.report(value))
+
+
 if __name__ == '__main__':
     unittest.main()

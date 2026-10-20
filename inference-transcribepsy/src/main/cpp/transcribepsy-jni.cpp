@@ -2,6 +2,7 @@
 #include "gguf.h"
 #include "parakeet/engine.h"
 #include "run-control.h"
+#include "gpu-lab-capabilities.h"
 #include <algorithm>
 #include <atomic>
 #include <chrono>
@@ -409,6 +410,16 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
     altiro_encoder_lab = &metrics;
     struct ResetLab { ~ResetLab() { altiro_encoder_lab = nullptr; altiro_run_control = nullptr; } } reset;
     try {
+        if (variant == 70) {
+            const auto cancelled = [](void * opaque) {
+                return static_cast<Operation *>(opaque)->cancelled.load();
+            };
+            const auto capabilities = altiro_gpu_capabilities(cancelled, op.get());
+            if (op->cancelled.load()) throw Failure{"NONE"};
+            lab_emit(progress, "{\"lab\":true,\"event\":\"CAPABILITY\",\"capabilities\":" + capabilities + "}");
+            lab_emit(progress, "{\"lab\":true,\"event\":\"FINISHED\"}");
+            return true;
+        }
 #if defined(__aarch64__)
         const auto hw = getauxval(AT_HWCAP);
         if (!(hw & HWCAP_FPHP) || !(hw & HWCAP_ASIMDHP) || !(hw & HWCAP_ASIMDDP)) throw Failure{"CPU_UNSUPPORTED"};
@@ -448,7 +459,7 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
                 throw Failure{"MODEL_IDENTITY_INVALID"};
             const bool quantized = filename == "transcribepsy-250m-eu-sub.gguf";
             int encoder_frames = 0;
-            if (altiro_focused_variant(variant)) {
+            if (altiro_focused_variant(variant) || altiro_packed_variant(variant)) {
                 std::unique_ptr<gguf_context, decltype(&gguf_free)> metadata(
                     gguf_init_from_file(model.data, {true, nullptr}), gguf_free);
                 if (!metadata) throw Failure{"MODEL_IDENTITY_INVALID"};
@@ -463,8 +474,10 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
                 encoder_frames = altiro_encoder_frames(audio.size(), hop, causal);
                 if (encoder_frames < 1 || encoder_frames > 1000) throw Failure{"MODEL_IDENTITY_INVALID"};
             }
-            const char * failure = altiro_kernel_hunt(gpu,threads,variant,quantized,encoder_frames,op->cancelled,
-                [&](const std::string & event) { lab_emit(progress,event); });
+            const auto emit = [&](const std::string & event) { lab_emit(progress,event); };
+            const char * failure = altiro_packed_variant(variant)
+                ? altiro_packed_hunt(gpu,variant,quantized,encoder_frames,op->cancelled,emit)
+                : altiro_kernel_hunt(gpu,threads,variant,quantized,encoder_frames,op->cancelled,emit);
             if (failure) throw Failure{failure};
             return true;
         }

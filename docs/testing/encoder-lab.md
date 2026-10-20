@@ -156,3 +156,8 @@ the content-free JSON; inspect it before sharing. No trace uploads automatically
 These optional ADB commands have not been executed against the maintainer's phone.
 See the official [ATrace documentation](https://perfetto.dev/docs/data-sources/atrace)
 and [system tracing guide](https://perfetto.dev/docs/getting-started/system-tracing).
+
+The separate [Packed GPU campaign](packed-gpu.md) compares an original packed
+register kernel against complete GGML matrix calls and probes ordinary-app GPU
+capabilities. These synthetic and capability records are distinct from the
+full-encoder ranking.

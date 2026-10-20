@@ -32,6 +32,13 @@ endif()
 option(ALTIRO_VULKAN "Build the explicit Vulkan experiment" ${ANDROID})
 set(GGML_VULKAN ${ALTIRO_VULKAN} CACHE BOOL "" FORCE)
 include(FetchContent)
+# Header-only Khronos ABI declarations; the probe never links an OpenCL loader.
+FetchContent_Declare(opencl_headers
+    URL https://codeload.github.com/KhronosGroup/OpenCL-Headers/tar.gz/refs/tags/v2024.10.24
+    URL_HASH SHA256=159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93
+    SOURCE_SUBDIR altiro-no-auto-subdir
+    DOWNLOAD_EXTRACT_TIMESTAMP TRUE)
+FetchContent_MakeAvailable(opencl_headers)
 if(ALTIRO_VULKAN)
     FetchContent_Declare(vulkan_headers
         URL https://codeload.github.com/KhronosGroup/Vulkan-Headers/tar.gz/2cd90f9d20df57eac214c148f3aed885372ddcfe
@@ -81,16 +88,36 @@ execute_process(COMMAND ${Python3_EXECUTABLE}
 add_subdirectory(${transcribepsy_SOURCE_DIR} ${transcribepsy_BINARY_DIR})
 target_include_directories(qvac-parakeet PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
 target_include_directories(ggml PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp kernel-hunt.cpp)
+add_library(altiro-transcribepsy SHARED transcribepsy-jni.cpp run-control.cpp kernel-hunt.cpp packed-kernel.cpp gpu-lab-capabilities.cpp)
+target_include_directories(altiro-transcribepsy PRIVATE "${opencl_headers_SOURCE_DIR}")
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/src")
 target_include_directories(altiro-transcribepsy PRIVATE "${transcribepsy_SOURCE_DIR}/ggml/src")
-target_link_libraries(altiro-transcribepsy PRIVATE qvac-parakeet)
+target_link_libraries(altiro-transcribepsy PRIVATE qvac-parakeet ${CMAKE_DL_LIBS})
 target_link_options(altiro-transcribepsy PRIVATE "-Wl,--exclude-libs,ALL" "-Wl,-Bsymbolic")
 if(NOT ANDROID)
     find_package(JNI REQUIRED)
     target_include_directories(altiro-transcribepsy PRIVATE ${JNI_INCLUDE_DIRS})
 endif()
 if(ALTIRO_VULKAN)
+    set(ALTIRO_PACKED_SHADER_DIR "${CMAKE_CURRENT_BINARY_DIR}/packed-shaders")
+    file(MAKE_DIRECTORY "${ALTIRO_PACKED_SHADER_DIR}")
+    set(ALTIRO_PACKED_SPV)
+    foreach(shader pack-weights pack-activations register4)
+        set(output "${ALTIRO_PACKED_SHADER_DIR}/${shader}.spv")
+        add_custom_command(OUTPUT "${output}"
+            COMMAND "${Vulkan_GLSLC_EXECUTABLE}" --target-env=vulkan1.1 -O
+                "${CMAKE_CURRENT_SOURCE_DIR}/packed-shaders/${shader}.comp" -o "${output}"
+            DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/packed-shaders/${shader}.comp"
+            VERBATIM)
+        list(APPEND ALTIRO_PACKED_SPV "${output}")
+    endforeach()
+    add_custom_command(OUTPUT "${ALTIRO_PACKED_SHADER_DIR}/packed-spirv.h"
+        COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/packed-shaders/embed.py"
+            "${ALTIRO_PACKED_SHADER_DIR}/packed-spirv.h" "${ALTIRO_PACKED_SHADER_DIR}"
+        DEPENDS ${ALTIRO_PACKED_SPV} "${CMAKE_CURRENT_SOURCE_DIR}/packed-shaders/embed.py"
+        VERBATIM)
+    target_sources(altiro-transcribepsy PRIVATE "${ALTIRO_PACKED_SHADER_DIR}/packed-spirv.h")
+    target_include_directories(altiro-transcribepsy PRIVATE "${ALTIRO_PACKED_SHADER_DIR}")
     target_include_directories(ggml-vulkan PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}" "${vulkan_hpp_SOURCE_DIR}" "${vulkan_headers_SOURCE_DIR}/include")
     target_link_libraries(ggml-vulkan PRIVATE SPIRV-Headers::SPIRV-Headers)
     set_source_files_properties("${transcribepsy_SOURCE_DIR}/ggml/src/ggml-vulkan/ggml-vulkan.cpp"

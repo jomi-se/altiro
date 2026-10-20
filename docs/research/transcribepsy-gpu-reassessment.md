@@ -166,3 +166,13 @@ Session preparation, pipeline caching and work while recording remain a
 separate product lane. They can reduce after-Stop waiting without making the
 encoder itself execute faster. This research does not change ordinary settings,
 model selection, microphone lifecycle or delivery authority.
+
+## Accepted first implementation step
+
+[Decision 0023](../decisions/0023-packed-gpu-experiments.md) implements the
+ordinary-app capability probe and an independent packed/register Vulkan kernel
+comparison as the first bounded continuation. This is an original dataflow
+experiment, not an actual ACL backend or evidence about ACL performance.
+OpenCL availability, integer acceleration properties and measured complete-call
+results determine subsequent integration choices. Positional caching and
+whole-block/runtime migrations remain separate follow-ups.

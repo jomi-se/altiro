@@ -2,6 +2,19 @@
 
 Updated: 2026-10-20.
 
+Version **0.6.8-packed-gpu** implements the next opt-in **Packed GPU**
+experiment: original register-blocked Vulkan matrix kernels, complete GGML
+controls, fixed/recording-derived shapes, independent products and ordinary-app
+OpenCL/Vulkan capability probes. See [decision 0023](../decisions/0023-packed-gpu-experiments.md)
+and the [phone procedure](../testing/packed-gpu.md). Host verification passes: 73 JVM tests, 40 Python checks, native packing/output
+ownership and fake OpenCL lifecycle tests, plus actual host-JNI capability
+dispatch/cancellation and JSON-schema checks. Android app/fixture builds, lint,
+instrumentation APK compilation, notices, installability and 16 KiB alignment
+checks pass. The signing identity and unchanged Whisper library match the
+previous verified APK. Physical-phone GPU execution and performance remain
+unverified for these new kernels. This does not include an ACL backend or
+change everyday recognition defaults.
+
 A fresh independent Astra web/source review after the GPU tuning campaign finds
 credible untested implementation leads, especially Arm's G710-specific packed
 GEMM family, exact device capability/counter evidence and verified Fabric graph

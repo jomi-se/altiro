@@ -32,6 +32,7 @@ data class EncoderExperiment(
             reverse: Boolean = false,
             hunt: Boolean = false,
             tuning: Boolean = false,
+            packed: Boolean = false,
         ): List<EncoderExperiment> {
             fun cpu(n: Int, suffix: String = "") =
                 EncoderExperiment("cpu-$n$suffix", RecognitionBackend.CPU, n)
@@ -45,7 +46,17 @@ data class EncoderExperiment(
             val planned = buildList {
                 add(cpu(4, "-start"))
                 add(gpu("gpu-start"))
-                if (tuning) {
+                if (packed) {
+                    add(gpu("gpu-capabilities", 70))
+                    add(cpu(2, "-start"))
+                    add(gpu("gpu-packed-f32-start", 30))
+                    add(gpu("packed-recording", 60))
+                    add(gpu("packed-independent-streams", 63))
+                    add(gpu("packed-145", 61))
+                    add(gpu("packed-201", 62))
+                    add(gpu("gpu-packed-f32-end", 30))
+                    add(cpu(2, "-end"))
+                } else if (tuning) {
                     add(cpu(2, "-start"))
                     add(gpu("gpu-tuning-f32-start", 30))
                     for ((index, label) in
@@ -115,6 +126,13 @@ data class EncoderExperiment(
             }
             if (!reverse) return planned
             val end = planned.indexOfFirst { it.id == "gpu-end" }
+            if (packed) {
+                val first = planned.indexOfFirst { isPacked(it.variant) }
+                val last = planned.indexOfLast { isPacked(it.variant) }
+                return planned.take(first) +
+                    planned.subList(first, last + 1).reversed() +
+                    planned.drop(last + 1)
+            }
             if (tuning) {
                 val firstTreatment = planned.indexOfFirst { it.variant == 31 }
                 val lastTreatment = planned.indexOfLast { it.variant == 46 }
@@ -136,11 +154,18 @@ data class EncoderExperiment(
             val threads = parts[0].toIntOrNull() ?: return null
             val variant = parts[1].toIntOrNull() ?: return null
             return if (
-                threads in 1..8 && (variant in 0..16 || variant in 20..36 || variant in 40..46)
+                threads in 1..8 &&
+                    (variant in 0..16 ||
+                        variant in 20..36 ||
+                        variant in 40..46 ||
+                        isPacked(variant) ||
+                        variant == 70)
             )
                 threads to variant
             else null
         }
+
+        fun isPacked(variant: Int): Boolean = variant in 60..63
 
         fun isKernel(variant: Int): Boolean = variant in 20..29 || variant in 40..46
 

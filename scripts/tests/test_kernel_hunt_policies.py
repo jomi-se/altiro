@@ -9,6 +9,18 @@ ROOT = Path(__file__).resolve().parents[2]
 
 class KernelHuntPoliciesTest(unittest.TestCase):
     @unittest.skipUnless(shutil.which('c++'), 'Host C++ compiler unavailable')
+    def test_packed_layout_bits_padding_ownership_and_numerics(self):
+        with tempfile.TemporaryDirectory() as directory:
+            executable = Path(directory) / 'packed'
+            subprocess.run([
+                'c++', '-std=c++17', '-O2', '-Wall', '-Wextra', '-Werror',
+                '-I', str(ROOT / 'inference-transcribepsy/src/main/cpp'),
+                str(ROOT / 'inference-transcribepsy/src/test-native/PackedLayoutPolicies.cpp'),
+                '-o', str(executable),
+            ], check=True, capture_output=True, text=True)
+            subprocess.run([str(executable)], check=True)
+
+    @unittest.skipUnless(shutil.which('c++'), 'Host C++ compiler unavailable')
     def test_device_selection_and_shader_output_ownership(self):
         # Minimal public GGML API declarations for this isolated policy test.
         # The Android build also checks production headers; a real-header host
