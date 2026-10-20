@@ -16,9 +16,8 @@
   0.6.3 uses an explicitly bounded lab budget. The physical Full run completed
   all 40 cases and 160 samples.
 - [0006 — Kernel hunt GPU selection and small tiles](0006-kernel-hunt-gpu-selection-and-small-tiles.md):
-  the first live run exposed an integrated-GPU selection bug and invalid
-  subgroup-16 small-tile geometry. Source corrections and host regressions
-  pass; phone acceptance is pending.
+  accepted on hardware: 0.6.6 completed all 48 cases, all 640 synthetic
+  numerical screens, and finite forced-small full-encoder repetitions.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.

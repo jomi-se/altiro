@@ -13,10 +13,31 @@ builds and lint, instrumentation APK compilation, installability, notices and
 16 KiB packaging. Production-JNI CPU checks cover 64 synthetic shapes (384
 reported graph calls), both speech formats and cancellation. TranscribePsy
 was rebuilt for Android; the unchanged Whisper library matches the prior
-verified APK byte for byte. Phone numerical acceptance remains pending.
+verified APK byte for byte. The following phone campaign accepts the two
+specific harness defects; model-quality acceptance remains separate.
 Everyday dictation settings and the opt-in relay are unchanged. The receiver
 serves its current APK only at the generic download route, avoiding stale
 version-specific aliases.
+
+The 0.6.6 live phone campaign completed **48/48 cases** on one 11.56-second
+recording, with both formats and profiling. All **640 synthetic shapes** pass
+the finite/1% RMS screen, including 576 GPU shapes; there are 3,840 reported
+synthetic graph calls. Forced-small full-encoder features now match stock GPU
+numerics, including finite small-F32 output. Defect 0006 is accepted on hardware.
+Warm encoder medians are 0.923 s for Q8/CPU two threads, 1.815 s for FP16/CPU
+two threads, and roughly 1.45–1.49 s for stock GPU. These exclude setup/decoder.
+Global tile overrides do not provide a large win. The profiler attributes
+80% of encoder wall time to matrix multiplication, with two shape families
+accounting for about 47%. See the [completed campaign analysis](../research/mali-kernel-hunt.md#completed-066-phone-campaign).
+
+Next investigation: timestamp isolated GEMMs at actual encoder widths, separate
+submission/wait costs from shader time, and test shape-specific policies with
+interleaved controls. CPU baselines drift and the relay was enabled; repeat
+close timing rankings disconnected. FP16/F32 reduces feature error to 0.121%;
+Q8's GPU feature difference remains above the provisional full-encoder screen.
+Neither numerical screens nor this encoder-only campaign establish dictation
+quality or everyday end-to-end latency. Earlier invalid small-tile offline
+compiler results remain withdrawn pending regeneration.
 
 The 0.6.5 live relay is now confirmed on the phone: all 23 planned Q8 case
 records arrived, including the final `FINISHED_WITH_FAILURES` snapshot.
@@ -27,14 +48,6 @@ Warm GPU encoder medians were about 1.42–1.45 seconds; two CPU threads reached
 0.825 seconds, with drifting four-thread baselines. Rectangular F32 candidates
 did not improve timings in this run. These observations do not establish a
 stable ranking or speech quality. See [the investigation](../research/mali-kernel-hunt.md).
-
-The next phone campaign is **0.6.6 Kernel hunt**, both formats with GPU profiling,
-using the [phone procedure](../testing/kernel-hunt.md). The live relay can retain
-completed-case checkpoints; repeat promising timing candidates disconnected.
-The prior host campaign covered 256 synthetic CPU shape records, both real
-encoders and cancellation. Earlier small-tile static compiler results used an
-invalid mapping and are withdrawn pending regeneration. Physical GPU kernel
-measurements, corrected full-encoder numerics and speech quality remain open.
 
 The 0.6.3 physical-phone Full run completed all 40 cases and 160 samples on one
 11.08-second recording. Disk-seeded pipeline caching reduced FP16 first-encoder

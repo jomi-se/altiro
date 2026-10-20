@@ -1,6 +1,111 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: first Q8 phone campaign received; corrected GPU synthetic/small-tile campaign pending.
+Status: corrected 48-case phone campaign complete; targeted optimization remains open.
+
+## Completed 0.6.6 phone campaign
+
+One **11.56-second** recording, with 145 encoder frames, drove both formats in
+reverse interior order with profiling and the live relay enabled. All **48/48
+cases** finished. All **640 synthetic shapes** passed the finite/1% RMS screen:
+576 GPU and 64 CPU shapes, containing 3,840 reported graph calls. Maximum
+synthetic relative RMS difference was 0.8313%. Raw reports and generated
+analysis are retained outside Git.
+
+The integrated-GPU lookup and forced-small geometry corrections are accepted
+on the phone; see [defect 0006](../issues/0006-kernel-hunt-gpu-selection-and-small-tiles.md).
+Full-encoder small-tile differences now match stock GPU output, and small-F32
+matches its F32 control. Neither produces the prior corruption/nonfinite output.
+
+### Full-encoder timings
+
+These are **warm encoder medians**, excluding model loading, preprocessing,
+the decoder and delivery. They are not after-Stop dictation latency.
+
+| Format | CPU, 2 threads | Stock GPU, start / end | Small GPU | GPU, cached F32 accumulation |
+| --- | ---: | ---: | ---: | ---: |
+| FP16 | 1.815 s | 1.460 / 1.451 s | 1.406 s | 1.509 s |
+| Q8 | 0.923 s | 1.477 / 1.486 s | 1.504 s | 1.559 s |
+
+GPU is faster than CPU for FP16 here; Q8 with two CPU threads is fastest
+overall. Forcing small tiles globally gives no substantial improvement.
+Forcing large tiles is much worse: 2.691 s FP16 and 4.067 s Q8. Rectangular
+F32 variants also lose at full-encoder scale in this run.
+
+Four-thread CPU baselines drifted from 2.360 to 1.947 s for FP16 and from
+1.274 to 1.479 s for Q8. GPU start/end medians stayed within 1%. The phone
+reported thermal status 0 throughout and remained unplugged; battery temperature
+rose from 23.7 to 29.4 degrees C. The relay and sequential case order remain
+confounders. Repeat close timing differences with interleaved controls and
+without the relay before promoting a policy.
+
+FP16's stock GPU feature difference from same-format CPU is 0.648%; F32
+accumulation reduces it to 0.121%. Q8 is 1.344% for stock and 1.387% for F32,
+above the provisional full-encoder screen. These are feature comparisons,
+not speech-quality scores or proof that the CPU reference has exact arithmetic.
+The CPU quantized path also quantizes activations; the deterministic synthetic
+reference instead uses double-precision dot products of reconstructed weights.
+
+### Where warm GPU time goes
+
+The last profiled repetition gives:
+
+| Format | Encoder wall | GPU MUL_MAT intervals | Share of wall | Top two matrix-shape groups |
+| --- | ---: | ---: | ---: | ---: |
+| FP16 | 1,522.6 ms | 1,226.3 ms | 80.5% | 723.8 ms |
+| Q8 | 1,535.5 ms | 1,230.1 ms | 80.1% | 719.4 ms |
+
+The two largest groups are `M=640,K=2560,N=145` and
+`M=2560,K=640,N=145`, each called 48 times. Together they occupy about 47%
+of profiled encoder wall time. They are concrete targets for kernel work.
+Both profiles have 1,613 dispatches, 18 submit batches and zero integer-dot
+routes. Q8 continues to use a dequantizing floating-point matrix path.
+
+The host upload timer is 0.14–0.19 ms, output readback 0.30–0.48 ms and
+synchronization 0.11–0.78 ms. Synchronization overlaps compute; these host
+timers are not additive. Upload/readback exclude cold model-weight upload,
+and GPU-internal copies are separate: `CONT` takes roughly 44–50 ms.
+External transfer or cold compilation does not explain the warm matrix intervals.
+After matrix multiplication, ADD is about 97–124 ms and IM2COL about 49–54 ms.
+
+### What the synthetic cases establish
+
+Small tiles can help narrow shapes without helping the entire encoder.
+For FP16 `M=640,N=32,K=640`, stock takes 3.253 ms and small takes 1.033 ms.
+At `M=640,N=139,K=2560`, small loses: 12.472 ms versus 11.740 ms stock.
+A universal small-tile override would therefore promote the wrong policy.
+
+Summing per-shape warm medians, Q8 pre-dequantization improves the F32 case
+by only 1.044 times. The FP16 deliberate no-op control improves by 1.033 times.
+That comparison does not support a large isolated dequantization bottleneck.
+Setup cost and additional resident storage are excluded from these compute times.
+
+Eight independent streams in one graph improve aggregate throughput by
+1.675 times for FP16 and 1.716 times for Q8. This can reflect amortized graph
+submission/wait costs as well as GPU occupancy. It does not establish an
+equivalent speedup for dependent layers in one dictation.
+
+The isolated graph also differs from embedded execution. For example, FP16
+`M=2560,N=139,K=640` takes 11.492 ms wall time in isolation, while the nearby
+`N=145` profiled encoder group averages 6.649 ms per call. Isolated process
+CPU time is near wall time; full-encoder process CPU time is much lower,
+especially with profiling. Fixed submission costs, driver waiting and frequency
+behavior are hypotheses, not established causes. Wall time alone should not
+be labeled pure shader execution time.
+
+### Next measurements
+
+Prioritize the two dominant matrix families at **actual recording widths**,
+including 145 and the secondary width 289 in this report. Add `M=640,K=1280`,
+which contributes another 85–89 ms and is absent from the current synthetic grid.
+Keep precision and layout matched while interleaving stock and candidate tiles.
+
+Add GPU timestamp intervals to isolated matrix cases alongside existing
+wall/process-CPU timings, and compare individual submissions with queued or
+batched repetitions. This can distinguish arithmetic improvements from
+submission amortization before designing another global routing policy.
+Retain full-encoder controls and numerical checks when returning a candidate
+to the model. Persistent pipeline preparation addresses cold latency separately;
+these measurements do not implement or validate an everyday warmup lifecycle.
 
 ## First live Q8 campaign
 

@@ -1,6 +1,6 @@
 # 0006 — Kernel hunt rejects integrated GPUs and misconfigures small tiles
 
-Status: in-progress; source corrections and host regressions pass, phone acceptance pending.
+Status: done; corrected GPU selection and forced-small geometry accepted on the phone.
 
 ## Reproduction and impact
 
@@ -36,7 +36,7 @@ The static shader-analysis script uses the corrected forced-small constants.
 Earlier small-tile compiler results describe the invalid geometry and must
 not guide performance choices.
 
-## Verification and remaining acceptance
+## Verification and phone acceptance
 
 An executable C++ regression covers integrated/discrete GPU selection, CPU
 selection, absent/empty Vulkan registries, rejected CPU/accelerator/meta devices
@@ -48,8 +48,17 @@ Production-JNI CPU checks also pass for 64 synthetic shapes across both model
 formats (384 reported graph calls), both speech reference phrases, invalid
 audio, pre-cancellation and cancellation during work.
 
-Run 0.6.6 Kernel hunt on the phone with both formats and GPU profiling. Confirm
-GPU synthetic cases produce shape records on `Vulkan0`, inspect all finite/RMS
-screens, and verify forced-small full-encoder repetitions no longer corrupt
-features. Hardware numerical acceptance, speech quality and any performance
-benefit remain open; host coordinate checks cannot establish them.
+The subsequent 0.6.6 phone campaign completed all 48 cases with both formats
+and profiling. All 640 synthetic shapes passed finiteness and the 1% RMS
+screen, including 576 GPU shapes on `Vulkan0`. Their 3,840 reported graph calls
+retain actual shader/routing evidence. Both forced-small synthetic cases used
+the requested 32×32 family.
+
+All four full-encoder repetitions for each forced-small format are finite.
+Their maximum relative RMS differences match the corresponding stock GPU
+case exactly: approximately 0.648% for FP16 and 1.344% for Q8. The corrected
+small-F32 cases also match their F32 controls, with no nonfinite results.
+This accepts the two specific harness defects. Q8's full-encoder difference
+still exceeds the provisional 1% feature screen; speech quality and promotion
+of performance variants require separate evidence. See the [measurement
+analysis](../research/mali-kernel-hunt.md#completed-066-phone-campaign).
