@@ -54,8 +54,10 @@ On **Home**, tap **Download** to install the selected stock model once. **Models
 shows each model's size, installation state and source, with file import retained
 for offline transfer. Small Q8 is 264 MB; Small FP16 is 488 MB; multilingual Base
 is 148 MB. Downloads use pinned HTTPS sources and exact size/SHA-256 checks before
-atomic installation. Downloading is explicit; recording and recognition never
-make network requests. Test airplane mode after installation.
+atomic installation. Downloading is explicit; everyday recording and recognition
+stay local. Debug builds also offer a separately enabled
+[live lab relay](docs/decisions/0021-live-lab-relay.md) for content-free benchmark
+results. Test airplane mode after installation.
 
 The experimental Chilean Small Q8/FP16 variants are visible in Models. Prepare
 or obtain the exact converted file, select its profile and choose **Import file**.

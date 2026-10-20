@@ -9,6 +9,21 @@ Use **0.6.4 or later**. Install it as an update; existing models remain availabl
 5. Leave that screen visible while the sequential batch finishes. It stays awake.
 6. Tap **Share lab** and send the exported file, including if some cases failed.
 
+In debug builds **0.6.5 or later**, you can instead open the paired receiver
+page, copy its **Receiver link**, then use **Console → Encoder lab → Live
+results → Connect** before recording. Each completed case and the final report
+are sent over your Tailnet. **Received by…** confirms an exact saved-payload
+receipt; **Not received** means check Tailscale and reconnect, or use Share lab.
+The browser page shows the latest automatic analysis and also accepts a saved
+Share lab file. Keep the complete pairing link private. Restarting Altiro clears
+the connection. Disconnect stops new uploads; a request already in flight can
+finish. Clear diagnostics also disconnects, but does not delete receiver files.
+
+Live relay activity can affect timings. Reports mark it explicitly. Use this
+for failure investigation and repeat promising timing candidates disconnected.
+No remote commands, audio or transcripts are sent. Receiving results does not
+automatically wake an inactive investigator session. See [decision 0021](../decisions/0021-live-lab-relay.md).
+
 No remote access or additional app is required. The recording feeds full-encoder
 cases only; synthetic cases use generated numbers. No transcripts are produced
 or inserted. Audio is deleted at the end or cancellation. Reports survive restart;

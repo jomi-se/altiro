@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Explicit model downloads only; see docs/decisions/0008-explicit-model-acquisition.md. -->
+    <!-- Explicit model downloads and opt-in debug lab relay; decisions 0008 and 0021. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />

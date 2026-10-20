@@ -7,6 +7,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import org.altiro.core.RecognitionEngine
 
@@ -101,5 +102,51 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
         }
         if (expanded) Text(summary, style = MaterialTheme.typography.bodySmall)
     }
+    if (BuildConfig.DEBUG) LabRelayTools(controller.encoderLab, available)
     HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+}
+
+@Composable
+private fun LabRelayTools(lab: EncoderLab, available: Boolean) {
+    var expanded by remember { mutableStateOf(false) }
+    var link by remember { mutableStateOf("") }
+    var invalid by remember { mutableStateOf(false) }
+    val status by lab.relay.status.collectAsState()
+    TextButton(onClick = { expanded = !expanded }) { Text("Live results") }
+    if (expanded) {
+        Text("Lab timings only · Tailscale", style = MaterialTheme.typography.bodySmall)
+        OutlinedTextField(
+            value = link,
+            onValueChange = {
+                link = it.take(256)
+                invalid = false
+            },
+            label = { Text("Receiver link") },
+            singleLine = true,
+            enabled = available,
+            visualTransformation = PasswordVisualTransformation(),
+            isError = invalid,
+            supportingText = { Text(if (invalid) "Paste the receiver’s pairing link" else status) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(
+                onClick = {
+                    invalid = !lab.relay.connect(link, lab.export().toByteArray())
+                },
+                enabled = available && link.isNotBlank(),
+            ) {
+                Text("Connect")
+            }
+            TextButton(
+                onClick = {
+                    lab.relay.disconnect()
+                    link = ""
+                },
+                enabled = status != "Disconnected",
+            ) {
+                Text("Disconnect")
+            }
+        }
+    }
 }

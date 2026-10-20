@@ -130,6 +130,8 @@ def render(report):
              'Numerical error is relative to the same-format CPU encoder, not a speech-quality score.', '',
              '| Model | Case | First ms | Warm ms (range) | Relative RMS error | State |',
              '| --- | --- | ---: | ---: | ---: | --- |']
+    if report.get('live_relay_enabled'):
+        lines.insert(0, 'Live relay enabled: network activity can perturb benchmark timings.\n')
     for row in rows:
         if row['variant'] >= 20:
             lines.append(f"| {row['model']} | {row['name']} | — | {len(row['kernels'])}/32 kernel shapes | — | {row['status']} |")

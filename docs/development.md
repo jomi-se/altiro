@@ -125,7 +125,9 @@ an isolated cache. `./gradlew clean` removes configured build output. Keep
 retained APKs, recordings, reports, and screenshots outside Git repositories;
 clean disposable task tooling when finished.
 
-The app has Internet permission only for explicit model acquisition. Downloads
+The app uses Internet permission for explicit model acquisition and, in debug
+builds, the separately enabled [live lab relay](decisions/0021-live-lab-relay.md).
+Recognition stays local. Downloads
 and file-picker imports verify size/SHA-256 before atomic installation. Inference
 rechecks the model, takes ownership of the completed WAV after microphone
 release, and deletes audio after native work finishes, including cancellation.

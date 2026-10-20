@@ -1,6 +1,20 @@
 # Current work
 
-Updated: 2026-10-19.
+Updated: 2026-10-20.
+
+Version **0.6.5-live-lab** adds an explicit, process-memory-only debug Tailnet
+results relay. Completed-case and final lab snapshots receive a saved-byte
+receipt and automatic host analysis; offline Share lab remains available.
+Live transfers are marked as potentially perturbing benchmark timings.
+No inference/kernel/default changes or remote command channel are added.
+See [decision 0021](../decisions/0021-live-lab-relay.md) and the
+[phone procedure](../testing/kernel-hunt.md). Android phone transport acceptance
+is pending. Host verification passes: 71 JVM tests, 24 Python tests, Android
+builds/lint, instrumentation APK compilation, installability, runtime notices
+and 16 KiB packaging. Both native modules are unchanged; the packaged ARM64
+libraries are byte-identical to the verified 0.6.4 APK rather than rebuilt for
+this Kotlin-only increment. The receiver's paired API and restricted routes
+have also passed host HTTP checks. These are not phone transport acceptance.
 
 The next phone campaign is **0.6.4 Kernel hunt**: full-encoder tile experiments,
 persisted-cache/F32 accumulation, and 640 synthetic shape records for Q8 + FP16,
@@ -472,7 +486,8 @@ preservation were not supplied. The full accuracy and lifecycle gates remain
 unverified.
 
 Explicit in-app stock-model download or file-picker import acquires the model.
-The app has Internet permission for acquisition only. Both paths enforce byte size/SHA-256, bounded
+The app uses Internet permission for acquisition and the separately enabled
+debug lab relay (decision 0021). Both acquisition paths enforce byte size/SHA-256, bounded
 copy, cancellation, and atomic installation. Failed imports preserve a valid
 previous model. A model is reverified before native load. Replacement/deletion
 and new inference stay blocked until native work finishes.

@@ -1,5 +1,9 @@
 # Encoder lab on a phone
 
+Debug builds from 0.6.5 can optionally send completed-case checkpoints directly
+to a paired Tailnet receiver. See [live results setup](kernel-hunt.md). This marks
+the run as network-active; repeat timing candidates with the relay disconnected.
+
 For the deeper no-remote-access matrix investigation in 0.6.4, select
 [Kernel hunt](kernel-hunt.md). Quick and Full retain their existing matrix.
 

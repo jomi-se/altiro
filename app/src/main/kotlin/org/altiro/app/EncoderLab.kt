@@ -16,6 +16,7 @@ import org.json.JSONObject
 
 /** Content-free, bounded partial results survive native worker and app restarts. */
 class EncoderLab(private val context: Context) {
+    internal val relay = EncoderLabRelay()
     private val file = AtomicFile(File(context.filesDir, "encoder-lab.json"))
     private var report =
         try {
@@ -57,6 +58,7 @@ class EncoderLab(private val context: Context) {
         report =
             JSONObject()
                 .put("schema", 1)
+                .put("live_relay_enabled", relay.connected)
                 .put("status", "RUNNING")
                 .put("runtime", "transcribepsy-364ec361")
                 .put("app", BuildConfig.VERSION_NAME)
@@ -322,7 +324,7 @@ class EncoderLab(private val context: Context) {
             if (failure != null && !it.has("failure")) it.put("failure", failure)
             it.put("after", environment())
         }
-        save()
+        save(relaySnapshot = true)
     }
 
     private fun measurementMap(source: JSONObject): JSONObject {
@@ -349,11 +351,12 @@ class EncoderLab(private val context: Context) {
             "status",
             if (status == "FINISHED" && failed) "FINISHED_WITH_FAILURES" else status,
         )
-        save()
+        save(relaySnapshot = true)
     }
 
     @Synchronized
     fun clear() {
+        relay.disconnect()
         current = null
         report = JSONObject()
         file.delete()
@@ -392,7 +395,8 @@ class EncoderLab(private val context: Context) {
         return result.put("cpu_sample_khz", frequencies)
     }
 
-    private fun save() {
+    private fun save(relaySnapshot: Boolean = false) {
+        if (relay.connected && report.has("schema")) report.put("live_relay_enabled", true)
         val bytes = report.toString().toByteArray()
         require(bytes.size <= 8_388_608)
         val stream = file.startWrite()
@@ -404,6 +408,7 @@ class EncoderLab(private val context: Context) {
             throw failure
         }
         refresh()
+        if (relaySnapshot && report.has("schema")) relay.offer(bytes)
     }
 
     private fun refresh() {
