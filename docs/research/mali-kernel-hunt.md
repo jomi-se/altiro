@@ -88,24 +88,104 @@ The isolated graph also differs from embedded execution. For example, FP16
 `M=2560,N=139,K=640` takes 11.492 ms wall time in isolation, while the nearby
 `N=145` profiled encoder group averages 6.649 ms per call. Isolated process
 CPU time is near wall time; full-encoder process CPU time is much lower,
-especially with profiling. Fixed submission costs, driver waiting and frequency
-behavior are hypotheses, not established causes. Wall time alone should not
-be labeled pure shader execution time.
+especially with profiling. Source inspection explains an important difference:
+`ggml_vk_wait_for_fence` optionally blocks on an almost-ready fence, then polls
+completion with 1,000 ARM YIELD instructions per iteration. This processor hint
+does not put the thread to sleep. The almost-ready condition
+`(n_nodes-i) < n_nodes/5` cannot fire for the one-node or eight-node synthetic
+graphs; large graphs can block for most of their work. The profiler separately
+uses blocking `waitForFences`.
 
-### Next measurements
+This explains CPU usage without proving a wall-time penalty. CPU time overlaps
+GPU work and cannot be added to wall time or treated as recoverable latency.
+Submission cost, waiting policy, between-call gaps and GPU frequency still need
+separate measurement. Wall time alone should not be labeled pure shader time.
+
+### Source-guided optimization candidates
+
+These are unimplemented experiments against the pinned patched runtime,
+not accepted production policies or measured speedups.
+
+1. **Blocking-wait control and boundary timestamps.** Compare the current wait
+   with a blocking final fence on identical actual-shape graphs. Record CPU,
+   enqueue, wait, GPU interval and total wall separately; queue 1/2/8 repetitions
+   before waiting. Lower CPU consumption is plausible even with unchanged GPU
+   wall time. Shared power/cache effects and wakeup cost could move latency in
+   either direction. Avoid per-operation profiler serialization when testing
+   overlap. Keep shared-weight and distinct-weight repetitions separate.
+2. **Keep 64×64 reuse with 256 threads.** The scalar `mul_mm.comp` can be tested
+   with `BLOCK=256, BM=BN=64, BK=32, WM=WN=16, WMITER=2, TM=TN=2, WARP=16`.
+   Sixteen logical warps cover a 4×4 grid of 16×16 warp tiles. Each thread owns
+   16 scalar outputs instead of the stock 32, while preserving the 64×64
+   workgroup output tile and shared input footprint. Aligned four-element loads
+   advance 32 rows per iteration, covering each 64-row operand tile in two
+   iterations. This avoids the rectangular candidates' loss of workgroup reuse.
+   It could reduce register pressure/spills, but more threads can increase
+   barrier cost and need not improve actual occupancy. Validate ownership,
+   ragged boundaries, device limits and compiler allocation before phone tests.
+3. **Selective split-K.** The ordinary Mali initialization does not populate
+   the shader-core count used by `ggml_vk_guess_split_k`; a zero count leaves
+   automatic splitting inactive. Existing scalar kernels and reduction code
+   already support partial outputs. Test explicit lab-only factors 1/2/4 on
+   `M=640,K=2560,N=145`: stock has only 30 output workgroups and 80 BK32 steps
+   per group. More groups may help, but 30 does not itself prove inadequate
+   occupancy. Include reduction, scratch traffic and barriers in timing. Four
+   F32 partial outputs need about 1.48 MB versus 371 KB for the final output.
+   Preserve split alignment and reject empty tails; reduction changes rounding.
+   Do not insert a guessed physical core count into production heuristics.
+4. **Actual dense-GEMM epilogues.** `mm_add_ok` in the Vulkan graph optimizer
+   requires `ggml_nrows(mul)==1`, so existing matmul+bias fusion cannot handle
+   these N145 matrices. `conformer_ff_graph` has explicit matmul → bias → SiLU
+   → matmul → bias stages. A dense bias-only epilogue, then bias+SiLU and a
+   separate contraction bias+scale+residual epilogue, can eliminate passes and
+   intermediate traffic. Verify broadcasting, consumers, aliases and lifetimes
+   before eliminating graph nodes. Preserve the original output rounding before
+   F32 bias/activation; changing that is a separate numerical experiment. With
+   split-K, nonlinear epilogues must run after partial-sum reduction.
+
+Existing scalar shaders already use FMA, vector loads, shared buffers and
+multiple accumulators. Merely enabling FMA or FP16 is not a new candidate.
+An explicit packed FMA or weight layout should be justified by generated
+instructions/register reports; the driver may already emit equivalent code.
+Prepacking also needs its preparation/memory break-even included.
+
+Zero integer-dot routes leave another diagnostic question, not permission to
+force the route. The backend checks integer-dot support, packed signed-dot
+acceleration, a usable Q8_1 pipeline, layout and non-F32 precision. Export those
+individual gates before proposing an integer kernel; `shaderInt8` alone does
+not establish them. Activation quantization changes numerical semantics.
+
+### Next measurements and upside bounds
 
 Prioritize the two dominant matrix families at **actual recording widths**,
 including 145 and the secondary width 289 in this report. Add `M=640,K=1280`,
 which contributes another 85–89 ms and is absent from the current synthetic grid.
 Keep precision and layout matched while interleaving stock and candidate tiles.
 
-Add GPU timestamp intervals to isolated matrix cases alongside existing
-wall/process-CPU timings, and compare individual submissions with queued or
-batched repetitions. This can distinguish arithmetic improvements from
-submission amortization before designing another global routing policy.
-Retain full-encoder controls and numerical checks when returning a candidate
-to the model. Persistent pipeline preparation addresses cold latency separately;
-these measurements do not implement or validate an everyday warmup lifecycle.
+Use a short interleaved batch: stock/blocking wait, stock64/256-thread64 at
+matched precision, then split2/split4 on contraction only. Start with F32
+accumulation on both sides of each comparison and test default accumulation
+separately. Include before/after unprofiled full-encoder controls and numerical
+checks. Repeat without the live relay before promoting close rankings.
+
+At the current profiled shares, halving only the two dominant FF groups would
+reduce encoder time from about 1.53 to 1.18 seconds, roughly a 1.31× speedup.
+Halving all matrix intervals gives about 0.92 seconds, near the Q8 CPU2 result.
+These are conditional serialized-profile extrapolations, not predictions.
+Erasing all ADD alone would save at most 6–8%; a practical epilogue captures
+only part of that, although it can also affect memory work within matmul.
+Tile, split, packing and vector changes compete for overlapping matrix time;
+their gains cannot be multiplied. Fusion also overlaps that traffic.
+
+For an immediate product experiment, ordinary TranscribePsy JNI recognition
+still sets `options.n_threads=4`. The two-thread Q8 case is 28–38% shorter than
+this campaign's four-thread baselines, with CPU drift affecting that range.
+Validate a selectable two-thread path in ordinary dictation, including resource
+lifecycle and complete after-Stop time, before generalizing to other devices.
+This is independent of GPU kernel work.
+
+Persistent pipeline preparation addresses cold latency separately. The warm
+measurements do not implement or validate an everyday warmup lifecycle.
 
 ## First live Q8 campaign
 

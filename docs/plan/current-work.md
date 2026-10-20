@@ -30,9 +30,15 @@ Global tile overrides do not provide a large win. The profiler attributes
 80% of encoder wall time to matrix multiplication, with two shape families
 accounting for about 47%. See the [completed campaign analysis](../research/mali-kernel-hunt.md#completed-066-phone-campaign).
 
-Next investigation: timestamp isolated GEMMs at actual encoder widths, separate
-submission/wait costs from shader time, and test shape-specific policies with
-interleaved controls. CPU baselines drift and the relay was enabled; repeat
+Source review identifies explicit busy-spinning for small graphs, mat-vec-only
+bias fusion, and an unpopulated Mali core-count gate that disables automatic
+split-K. Next investigation: blocking waits plus boundary timestamps, a
+256-thread 64×64 specialization that preserves reuse, and selective split-K
+at actual encoder widths. Dense-GEMM epilogues are a separate bounded candidate.
+See the [source-guided candidates](../research/mali-kernel-hunt.md#source-guided-optimization-candidates).
+These are research proposals; no new runtime defaults are applied. Ordinary
+TranscribePsy still uses four CPU threads; a controlled two-thread product path
+is the immediate CPU candidate. CPU baselines drift and the relay was enabled; repeat
 close timing rankings disconnected. FP16/F32 reduces feature error to 0.121%;
 Q8's GPU feature difference remains above the provisional full-encoder screen.
 Neither numerical screens nor this encoder-only campaign establish dictation
