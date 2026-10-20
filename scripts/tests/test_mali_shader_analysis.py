@@ -21,6 +21,7 @@ class MaliAnalysisTest(unittest.TestCase):
         self.assertEqual([128,64,64,16,16,32,2,4,2,1,16],mali.constants('medium',16,False))
         self.assertEqual(32,mali.constants('small',16,True)[3])
         self.assertEqual(8,mali.constants('small',8,False)[4])
+        self.assertEqual(16,mali.constants('small',16,False)[4])
         self.assertEqual(128,mali.constants('large',16,False)[1])
 
     def test_rectangular_tiles_cover_outputs_without_fractional_warp_loops(self):

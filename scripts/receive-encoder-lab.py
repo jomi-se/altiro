@@ -150,7 +150,7 @@ def handler_for(inbox):
             elif self.path == '/status':
                 if self.authorized():
                     self.reply(200, json.dumps(inbox.latest).encode(), 'application/json')
-            elif self.path in ('/altiro-debug.apk', '/altiro-0.6.5.apk') and inbox.apk and inbox.apk.is_file():
+            elif self.path == '/altiro-debug.apk' and inbox.apk and inbox.apk.is_file():
                 with inbox.apk.open('rb') as stream:
                     self.send_response(200)
                     self.send_header('Content-Type', 'application/vnd.android.package-archive')

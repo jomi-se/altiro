@@ -1,5 +1,6 @@
 #pragma once
 #include "ggml-backend.h"
+#include "lab-small-tile.h"
 #include <chrono>
 #include <cstdint>
 #include <map>

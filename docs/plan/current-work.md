@@ -2,34 +2,39 @@
 
 Updated: 2026-10-20.
 
-Version **0.6.5-live-lab** adds an explicit, process-memory-only debug Tailnet
-results relay. Completed-case and final lab snapshots receive a saved-byte
-receipt and automatic host analysis; offline Share lab remains available.
-Live transfers are marked as potentially perturbing benchmark timings.
-No inference/kernel/default changes or remote command channel are added.
-See [decision 0021](../decisions/0021-live-lab-relay.md) and the
-[phone procedure](../testing/kernel-hunt.md). Android phone transport acceptance
-is pending. Host verification passes: 71 JVM tests, 24 Python tests, Android
-builds/lint, instrumentation APK compilation, installability, runtime notices
-and 16 KiB packaging. Both native modules are unchanged; the packaged ARM64
-libraries are byte-identical to the verified 0.6.4 APK rather than rebuilt for
-this Kotlin-only increment. The receiver's paired API and restricted routes
-have also passed host HTTP checks. These are not phone transport acceptance.
-
-The next phone campaign is **0.6.4 Kernel hunt**: full-encoder tile experiments,
-persisted-cache/F32 accumulation, and 640 synthetic shape records for Q8 + FP16,
-with shape-specific optional GPU profiling. See the [run procedure](../testing/kernel-hunt.md)
-and [decision 0020](../decisions/0020-kernel-hunt.md). It requires no remote access.
-Host validation and device acceptance are separate; physical-phone execution of
-this campaign is pending. Ordinary dictation defaults are unchanged.
-Host verification passed: 69 JVM tests, 18 Python tests, Android app/fixture
+Version **0.6.6-kernel-fixes** corrects two defects exposed by the first live
+Q8 Kernel hunt campaign: GPU synthetic tests excluded integrated Vulkan
+devices, and forced-small scalar tiles had invalid logical-warp geometry on
+subgroup-16 devices. See [defect 0006](../issues/0006-kernel-hunt-gpu-selection-and-small-tiles.md).
+The executable host regression checks explicit backend selection/failure and
+unique, bounded ownership of every output cell for four subgroup sizes.
+Host verification passes: 71 JVM tests, 25 Python checks, Android app/fixture
 builds and lint, instrumentation APK compilation, installability, notices and
-16 KiB packaging. Production-JNI CPU checks covered 256 synthetic shape records
-(1,536 measured graph calls), both real encoders and cancellation. All corrected
-synthetic records passed the numerical screen; incompatible strided CPU prepacking
-was rejected and guarded. Forty-four Mali-G710 static shader reports motivated
-the rectangular candidates; see [the investigation](../research/mali-kernel-hunt.md).
-These checks do not establish GPU execution, a speedup or speech quality on the phone.
+16 KiB packaging. Production-JNI CPU checks cover 64 synthetic shapes (384
+reported graph calls), both speech formats and cancellation. TranscribePsy
+was rebuilt for Android; the unchanged Whisper library matches the prior
+verified APK byte for byte. Phone numerical acceptance remains pending.
+Everyday dictation settings and the opt-in relay are unchanged. The receiver
+serves its current APK only at the generic download route, avoiding stale
+version-specific aliases.
+
+The 0.6.5 live relay is now confirmed on the phone: all 23 planned Q8 case
+records arrived, including the final `FINISHED_WITH_FAILURES` snapshot.
+Thirteen cases finished, ten failed; all nine GPU synthetic cases failed
+before producing shape measurements. Full-encoder GPU execution worked.
+Forced-small features were corrupt, including nonfinite F32 output.
+Warm GPU encoder medians were about 1.42–1.45 seconds; two CPU threads reached
+0.825 seconds, with drifting four-thread baselines. Rectangular F32 candidates
+did not improve timings in this run. These observations do not establish a
+stable ranking or speech quality. See [the investigation](../research/mali-kernel-hunt.md).
+
+The next phone campaign is **0.6.6 Kernel hunt**, both formats with GPU profiling,
+using the [phone procedure](../testing/kernel-hunt.md). The live relay can retain
+completed-case checkpoints; repeat promising timing candidates disconnected.
+The prior host campaign covered 256 synthetic CPU shape records, both real
+encoders and cancellation. Earlier small-tile static compiler results used an
+invalid mapping and are withdrawn pending regeneration. Physical GPU kernel
+measurements, corrected full-encoder numerics and speech quality remain open.
 
 The 0.6.3 physical-phone Full run completed all 40 cases and 160 samples on one
 11.08-second recording. Disk-seeded pipeline caching reduced FP16 first-encoder

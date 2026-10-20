@@ -1,4 +1,5 @@
 #include "encoder-lab.h"
+#include "kernel-backend.h"
 #include "run-control.h"
 #include "ggml-cpu.h"
 #include "ggml-alloc.h"
@@ -98,7 +99,7 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
     Resources resources;
     auto & lab = *altiro_encoder_lab;
     lab.variant = variant;
-    resources.backend = ggml_backend_init_by_type(gpu ? GGML_BACKEND_DEVICE_TYPE_GPU : GGML_BACKEND_DEVICE_TYPE_CPU, nullptr);
+    resources.backend = altiro_kernel_backend(gpu);
     if (!resources.backend) return "BACKEND_UNAVAILABLE";
     const std::string backend = ggml_backend_name(resources.backend);
     if ((gpu && backend.rfind("Vulkan", 0) != 0) || (!gpu && backend != "CPU")) return "BACKEND_MISMATCH";

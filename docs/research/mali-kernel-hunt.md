@@ -1,6 +1,30 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: implemented experiment; physical-phone execution pending.
+Status: first Q8 phone campaign received; corrected GPU synthetic/small-tile campaign pending.
+
+## First live Q8 campaign
+
+The 0.6.5 run used 10.32 seconds of audio and completed all 23 case records,
+without the optional profiler. Thirteen workers finished and ten failed.
+All nine GPU synthetic cases failed during backend selection, while actual
+full-encoder GPU execution worked. The harness requested a dedicated GPU type
+and missed the integrated Vulkan device. The forced 32×32 specialization also
+has invalid logical-warp coverage for subgroup size 16. See [defect 0006](../issues/0006-kernel-hunt-gpu-selection-and-small-tiles.md)
+for the source-level diagnosis, corrections and pending hardware checks.
+
+Stock Q8 GPU warm encoder medians were approximately 1.42–1.45 seconds.
+Two CPU threads reached 0.825 seconds, but four-thread baselines drifted
+from 1.76 seconds at the start to 1.14 seconds at the end. Rectangular F32
+candidates reached 1.63 and 2.01 seconds, without a speedup in this run.
+Stock GPU relative RMS feature difference was about 1.27%; rectangular F32
+was about 1.15%. Both exceed the provisional 1% screen. Forced-small outputs
+were corrupt and cannot support timing conclusions. These are encoder feature
+comparisons against same-format CPU output, not transcription-quality scores.
+
+Charging state changed during the suite and the live relay was enabled.
+Repeat promising candidates under consistent conditions without the relay
+before treating a timing difference as a stable ranking. The missing GPU
+synthetic shape records prevent attributing encoder time to individual GEMMs.
 
 The owner requested an investigation prepared autonomously, without remote phone
 access. The [phone procedure](../testing/kernel-hunt.md) runs a frozen batch and
@@ -37,10 +61,14 @@ At **candidate subgroup size 16**, the static reports give:
 
 | Weights / accumulation | 32×32 spill bytes | Stock 64×64 spill bytes | 128×128 spill bytes | 64×32 / 32×64 spill bytes |
 | --- | ---: | ---: | ---: | ---: |
-| FP16 / default FP16 | 0 | 8 | 16 | 0 / 0 |
-| FP16 / F32 | 0 | 44 | 0 | 0 / 0 |
-| Q8 / default FP16 | 44 | 0 | 0 | 0 / 0 |
-| Q8 / F32 | 316 | 8 | 0 | 0 / 0 |
+| FP16 / default FP16 | invalid geometry | 8 | 16 | 0 / 0 |
+| FP16 / F32 | invalid geometry | 44 | 0 | 0 / 0 |
+| Q8 / default FP16 | invalid geometry | 0 | 0 | 0 / 0 |
+| Q8 / F32 | invalid geometry | 8 | 0 | 0 / 0 |
+
+The original subgroup-16 small-tile reports used the invalid warp mapping
+identified by the phone follow-up. Their spill estimates are withdrawn.
+Regenerate them with the corrected 0.6.6 analysis script before comparison.
 
 Every listed specialization reports 64 work registers and 50% thread occupancy.
 Thus the rectangular candidates remove modeled spills in these reports; they
@@ -50,8 +78,7 @@ The rectangular kernels hold half as many output elements per thread but need
 more workgroups and can sacrifice input reuse. None of these observations
 establishes a net speedup on the phone.
 
-Subgroup size 16 here is a candidate configuration, not a previously measured
-phone property. The new phone export includes the actual device subgroup size,
+The first phone campaign confirms subgroup size 16. The export includes that,
 maximum workgroup invocations and shared-memory limit. Match those to a static
 report before applying its conclusions. The offline compiler backend also need
 not match the installed driver. The runtime's conditional FP16 round-to-even

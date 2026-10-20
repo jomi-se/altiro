@@ -96,6 +96,8 @@ class ReceiverTests(unittest.TestCase):
         self.inbox.apk = apk
         self.assertEqual((200, b'verified-apk-fixture'), self.request('GET', '/altiro-debug.apk'))
         self.assertEqual(404, self.request('GET', '/sample.apk')[0])
+        # A stale version-specific URL must not silently serve a newer APK.
+        self.assertEqual(404, self.request('GET', '/altiro-0.6.5.apk')[0])
 
 
 if __name__ == '__main__':

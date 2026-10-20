@@ -35,14 +35,14 @@ def specialization_ids(data):
 
 
 def constants(tile, subgroup, quantized):
-    """Exact non-coopmat specialization order from the pinned ggml source.
+    """Non-coopmat specialization order from the patched pinned ggml source.
 
     These are candidate subgroup sizes, not a claim about a connected phone.
     See ggml_vk_load_shaders and vulkan-shaders/mul_mm.comp at 364ec361.
     """
     if tile == 'small':
         return [max(subgroup,32),32,32,32 if quantized else 16,
-                8 if subgroup == 8 else 32,32,2,2,2,1,max(subgroup,8)]
+                subgroup if subgroup in (8,16) else 32,32,2,2,2,1,max(subgroup,8)]
     if tile == 'medium':
         return [128,64,64,32 if quantized else 16,max(subgroup,8),32,2,4,2,1,max(subgroup,8)]
     if tile == 'large':

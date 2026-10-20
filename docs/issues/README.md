@@ -15,6 +15,10 @@
   0.6.2 exhausted the ordinary 64-phase trace during a multi-model lab run;
   0.6.3 uses an explicitly bounded lab budget. The physical Full run completed
   all 40 cases and 160 samples.
+- [0006 — Kernel hunt GPU selection and small tiles](0006-kernel-hunt-gpu-selection-and-small-tiles.md):
+  the first live run exposed an integrated-GPU selection bug and invalid
+  subgroup-16 small-tile geometry. Source corrections and host regressions
+  pass; phone acceptance is pending.
 
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.

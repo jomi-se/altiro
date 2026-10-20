@@ -1,6 +1,9 @@
 # Kernel hunt
 
-Use **0.6.4 or later**. Install it as an update; existing models remain available.
+Use **0.6.6 or later** for GPU synthetic and forced-small measurements. Earlier
+versions reject integrated GPUs in the synthetic harness and use invalid
+subgroup-16 small-tile geometry; see [defect 0006](../issues/0006-kernel-hunt-gpu-selection-and-small-tiles.md).
+Install it as an update; existing models remain available.
 
 1. Select an installed TranscribePsy model in Models.
 2. Open **Console → Encoder lab → Kernel hunt**.

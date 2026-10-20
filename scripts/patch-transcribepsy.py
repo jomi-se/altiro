@@ -90,6 +90,8 @@ replace(ctc, '    if (altiro_status != GGML_STATUS_SUCCESS) return -4;',
         '    if (altiro_status != GGML_STATUS_SUCCESS) return -4; }\n'
         '    AltiroLabTimer lab_readback("readback_us");', count=2)
 vk = root / 'ggml/src/ggml-vulkan/ggml-vulkan.cpp'
+replace(vk, 'const uint32_t s_warptile_wm = device->subgroup_size == 8 ? 8 : 32;',
+        'const uint32_t s_warptile_wm = altiro_small_tile_wm(device->subgroup_size, device->coopmat_support, altiro_lab_tile() == 1);', count=2)
 replace(vk, 'ggml_vk_load_shaders(vk_device& device) {',
         'ggml_vk_load_shaders(vk_device& device) {\n    AltiroLabTimer lab_registry("shader_registry_compile_us");')
 replace(vk, '            compiles.push_back(std::async(ggml_vk_create_pipeline_func,',

@@ -235,3 +235,17 @@ malformed audio and cancellation. It does not establish Pixel latency or GPU
 support. See [phone acceptance](testing/transcribepsy.md) for the four-way
 same-recording experiment. The existing fail-fast comparison stops on the first
 failed pass, retaining diagnostics rather than partial transcript results.
+
+The Python verification suite also compiles and executes `KernelHuntPolicies.cpp`
+when a host C++ compiler is available. It tests integrated/discrete Vulkan
+selection, failure without retry, and scalar small-tile output ownership without
+a GPU driver. To additionally check the real pinned GGML declarations:
+
+```sh
+c++ -std=c++17 -Wall -Wextra -Werror -I /path/to/pinned-runtime/ggml/include -I inference-transcribepsy/src/main/cpp inference-transcribepsy/src/test-native/KernelHuntPolicies.cpp -o /path/outside/checkout/kernel-policies
+/path/outside/checkout/kernel-policies
+```
+
+These coordinate and API checks cannot establish correctness of an installed
+GPU driver's execution. The [Kernel hunt phone campaign](testing/kernel-hunt.md)
+remains necessary for numerical and timing evidence.
