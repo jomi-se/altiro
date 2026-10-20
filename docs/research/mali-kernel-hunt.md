@@ -1,7 +1,10 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
 Status: 0.6.6 Kernel hunt and 0.6.7 targeted GPU tuning phone campaigns complete.
-No new ordinary recognition defaults are selected.
+No new ordinary recognition defaults are selected. The subsequent
+[web/source reassessment](transcribepsy-gpu-reassessment.md) identifies untested
+packed-kernel and runtime alternatives; these campaigns do not establish a
+CPU-only architectural limit.
 
 
 ## Completed 0.6.7 GPU tuning campaign

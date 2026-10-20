@@ -2,6 +2,14 @@
 
 Updated: 2026-10-20.
 
+A fresh independent Astra web/source review after the GPU tuning campaign finds
+credible untested implementation leads, especially Arm's G710-specific packed
+GEMM family, exact device capability/counter evidence and verified Fabric graph
+deltas. It does not establish an architectural CPU-only limit or promise a GPU
+speedup. The [reassessment](../research/transcribepsy-gpu-reassessment.md) records
+immutable source pins, arithmetic estimates, ranked bounded experiments and
+stop criteria. Research only; no backend migration or new runtime defaults.
+
 Version **0.6.7-encoder-tuning** implements the authorized opt-in follow-up to
 source review: blocking fence waits, a 256-thread 64×64 scalar tile, selective
 split-K two/four and dense bias/SiLU epilogues. The separate **GPU tuning** campaign
