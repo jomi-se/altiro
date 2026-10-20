@@ -11,9 +11,21 @@ ownership and fake OpenCL lifecycle tests, plus actual host-JNI capability
 dispatch/cancellation and JSON-schema checks. Android app/fixture builds, lint,
 instrumentation APK compilation, notices, installability and 16 KiB alignment
 checks pass. The signing identity and unchanged Whisper library match the
-previous verified APK. Physical-phone GPU execution and performance remain
-unverified for these new kernels. This does not include an ACL backend or
-change everyday recognition defaults.
+previous verified APK. The phone campaign below verifies the exercised paths;
+broad stability and speech quality remain open. This does not include an ACL
+backend or change everyday recognition defaults.
+
+The **0.6.8 phone campaign completed 26/26 cases** on one 18.48-second recording:
+32 packed shape records pass numerical/placement checks, with all GPU timestamps
+available. The original packed expansion reduces matched warm complete-call
+time by 11–31% across single-product shapes, while contraction increases it by
+16–55%; no whole-encoder packed gain has been measured. The app successfully
+executes its OpenCL FP32 probe, and Vulkan reports accelerated signed packed
+8-bit dot products. Actual ACL and scale-correct integer kernels are now viable
+experiments, not measured wins. See the
+[completed campaign analysis](../research/mali-kernel-hunt.md#completed-068-packed-gpu-campaign).
+CPU drift and NONE–LIGHT thermal status qualify comparisons. Defaults remain
+unchanged.
 
 A fresh independent Astra web/source review after the GPU tuning campaign finds
 credible untested implementation leads, especially Arm's G710-specific packed

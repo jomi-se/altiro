@@ -1,11 +1,75 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: 0.6.6 Kernel hunt and 0.6.7 targeted GPU tuning phone campaigns complete.
+Status: 0.6.6 Kernel hunt, 0.6.7 targeted GPU tuning and 0.6.8 packed GPU
+phone campaigns complete.
 No new ordinary recognition defaults are selected. The subsequent
 [web/source reassessment](transcribepsy-gpu-reassessment.md) identifies untested
 packed-kernel and runtime alternatives; these campaigns do not establish a
 CPU-only architectural limit.
 
+
+## Completed 0.6.8 packed GPU campaign
+
+One **18.48-second** recording with **232 encoder frames**, FP16 before Q8 and
+reversed treatment order completed **26/26 cases** with the live relay enabled.
+All **32 packed shape records** pass the numerical/placement screen: 192 repeat
+batches cover 240 candidate matrix products and 240 matched GGML control products
+(the independent-stream cases execute two products per repeat). GPU timestamps
+are present throughout; all candidate allocations report device-local coherent
+host-visible memory. Maximum packed-versus-double relative RMS error is
+0.0001032%; full-output packed-versus-GGML error is at most 0.0000801%.
+These are synthetic checks on half-rounded inputs, not transcription acceptance.
+
+The ordinary app **compiled, executed and verified** the fixed FP32 OpenCL GPU
+kernel on Mali-G710. The driver advertises FP16 arithmetic and the Khronos
+integer-dot extension; the Arm matrix-multiply extension is absent. Vulkan
+reports signed and unsigned packed 4×8-bit dot products accelerated, including
+the signed accumulating-saturating property; mixed-signedness acceleration is
+false. This unblocks testing actual ACL kernels and a signed-integer Vulkan
+implementation. It does not establish their throughput, FP16 kernel execution,
+or lossless compatibility with Q8_0 block scales and activation quantization.
+
+Warm complete-call medians include activation packing and both candidate
+submissions/waits. Weight packing and pipeline creation are separate. Candidate
+and control order alternate within each six-repeat shape; medians use repeats
+1–5. The following single-product results use synthetic Q8-reconstructed or F16
+weights rounded to F16, matched half-rounded activations and F32 arithmetic.
+
+| Source / frames | Expansion packed / GGML ms | Expansion time reduction | Contraction packed / GGML ms | Contraction time increase |
+| --- | ---: | ---: | ---: | ---: |
+| FP16 / 145 | 12.713 / 16.416 | 22.6% | 17.700 / 14.169 | 24.9% |
+| FP16 / 201 | 13.468 / 18.595 | 27.6% | 16.849 / 11.274 | 49.5% |
+| FP16 / 232 | 13.802 / 15.927 | 13.3% | 21.005 / 15.380 | 36.6% |
+| Q8 / 145 | 11.862 / 17.184 | 31.0% | 15.421 / 10.855 | 42.1% |
+| Q8 / 201 | 14.499 / 19.247 | 24.7% | 21.451 / 13.863 | 54.7% |
+| Q8 / 232 | 11.909 / 13.413 | 11.2% | 18.809 / 16.224 | 15.9% |
+
+The expansion layout is a selective candidate, especially at the two fixed
+widths; using it for contraction loses. Two independent products retain an
+expansion win (FP16 8.2%, Q8 30.5% less complete wall time), while contraction
+still loses (39.1% and 21.8% more wall time). Ragged small shapes are slower too.
+Combining the expansion candidate with the existing contraction would reduce
+these synthetic pairs by roughly 5–19%; that arithmetic is not a measured FF
+block or full-encoder gain. Do not sum unrelated shape wins or promote a whole
+backend from this result.
+
+Existing full-encoder controls, excluding setup and decoder:
+
+| Case | Q8 start / end ms | FP16 start / end ms |
+| --- | ---: | ---: |
+| CPU, two threads | 1727.6 / 1608.6 | 2960.7 / 3217.6 |
+| CPU, four threads | 2258.3 / 2441.5 | 3216.3 / 3460.9 |
+| Stock Vulkan | 1783.2 / 1776.0 | 1775.3 / 1779.6 |
+| F32 Vulkan | 1870.1 / 1864.1 | 1832.8 / 1830.4 |
+
+GPU controls are stable; CPU controls drift. Thermal status ranges NONE–LIGHT,
+with battery temperature 30.6–33.9°C. FP16 stock GPU is substantially faster than
+its CPU controls in this campaign, while two-thread Q8 CPU remains faster than
+stock GPU. Q8 GPU feature error versus its CPU reference remains above the
+provisional 1% screen (stock 1.42%, F32 1.21%); FP16 is below it (0.787% and
+0.111%). These feature errors are not word-error rates. One network-active run
+accepts the exercised paths and motivates selective follow-ups, not broad
+stability, speech quality or a repeated production performance claim.
 
 ## Completed 0.6.7 GPU tuning campaign
 
