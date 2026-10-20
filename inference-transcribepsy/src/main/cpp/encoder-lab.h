@@ -1,6 +1,7 @@
 #pragma once
 #include "ggml-backend.h"
 #include "lab-small-tile.h"
+#include "lab-experiments.h"
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -11,6 +12,8 @@
 // Only installed for an explicit lab call, on the sole inference thread.
 struct AltiroEncoderLab {
     int variant = 0;
+    uint64_t boundary_gpu_ns = 0;
+    bool boundary_available = false;
     bool measuring = false;
     std::map<std::string, double> us;
     std::map<std::string, uint64_t> counts;
@@ -28,12 +31,19 @@ inline int altiro_lab_tile() {
     if (altiro_lab_variant(12) || altiro_lab_variant(22)) return 3;
     if (altiro_lab_variant(15) || altiro_lab_variant(28)) return 4;
     if (altiro_lab_variant(16) || altiro_lab_variant(29)) return 5;
+    if (altiro_lab_variant(32) || altiro_lab_variant(42)) return 6;
     return 0;
 }
 inline bool altiro_lab_f32() {
-    return altiro_lab_variant(6) || altiro_lab_variant(13) || altiro_lab_variant(14) ||
-        altiro_lab_variant(15) || altiro_lab_variant(16) ||
-        (altiro_encoder_lab && altiro_encoder_lab->variant >= 23);
+    return altiro_encoder_lab && altiro_f32_variant(altiro_encoder_lab->variant);
+}
+inline int altiro_lab_fusion() {
+    if (altiro_lab_variant(35) || altiro_lab_variant(45)) return 1;
+    if (altiro_lab_variant(36) || altiro_lab_variant(46)) return 2;
+    return 0;
+}
+inline bool altiro_lab_boundary() {
+    return altiro_encoder_lab && altiro_encoder_lab->measuring && altiro_focused_variant(altiro_encoder_lab->variant);
 }
 inline void altiro_lab_count(const char * name, uint64_t value = 1) {
     if (altiro_encoder_lab && altiro_encoder_lab->measuring)
@@ -77,5 +87,5 @@ public:
 };
 void altiro_lab_prepare_graph(ggml_backend_t backend, ggml_cgraph * graph);
 // Deterministic synthetic inputs only. Returns a fixed failure code or nullptr.
-const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantized,
+const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantized, int encoder_frames,
     std::atomic<bool> & cancelled, const std::function<void(const std::string &)> & emit);

@@ -66,7 +66,7 @@ class EncoderLab(private val context: Context) {
                 .put("android_api", android.os.Build.VERSION.SDK_INT)
                 .put(
                     "measurement",
-                    if (cases.any { it.variant >= 20 })
+                    if (cases.any { EncoderExperiment.isKernel(it.variant) })
                         "full encoder: 1 first + 3 warm; synthetic kernels: 1 first + 5 warm; setup excluded"
                     else
                         "encoder only; first candidate call after CPU reference; then 3 resident warm calls",
@@ -169,7 +169,10 @@ class EncoderLab(private val context: Context) {
                     .put("repeat", input.getInt("repeat").also { require(it in 0..3) })
             "KERNEL" -> {
                 val kernels = row.getJSONArray("kernels")
-                require(row.getInt("variant") in 20..29 && kernels.length() < 32)
+                val variant = row.getInt("variant")
+                val focused = variant in 40..46
+                val expected = EncoderExperiment.kernelCount(variant)
+                require(EncoderExperiment.isKernel(variant) && kernels.length() < expected)
                 require(input.getInt("sequence") == kernels.length())
                 val kernel = JSONObject()
                 for (key in
@@ -191,17 +194,88 @@ class EncoderLab(private val context: Context) {
                     require(value.isFinite() && value >= -1 && value < 1e12)
                     kernel.put(key, value)
                 }
-                require(kernel.getInt("m") in listOf(640, 1920, 2560))
-                require(kernel.getInt("n") in listOf(32, 64, 65, 128, 129, 139, 256, 384))
-                require(kernel.getInt("k") in listOf(640, 2560))
-                require(kernel.getInt("streams") in listOf(1, 8))
-                val variant = row.getInt("variant")
-                require(
-                    kernel.getInt("m") to kernel.getInt("k") in
-                        listOf(2560 to 640, 640 to 2560, 1920 to 640, 640 to 640)
-                )
+                if (focused) {
+                    val frames = input.getInt("encoder_frames").also { require(it in 1..4096) }
+                    val sequence = input.getInt("sequence")
+                    val shape = listOf(kernel.getInt("m"), kernel.getInt("n"), kernel.getInt("k"))
+                    require(
+                        shape ==
+                            listOf(
+                                listOf(2560, frames, 640),
+                                listOf(640, frames, 2560),
+                                listOf(640, frames, 1280),
+                                listOf(640, 2 * frames - 1, 640),
+                                listOf(64, 63, 64),
+                                listOf(65, 65, 96),
+                                listOf(640, 129, 2560),
+                                listOf(640, 257, 2560),
+                            )[sequence]
+                    )
+                    require(input.getBoolean("focused"))
+                    require(
+                        input.getString("shape_family") ==
+                            if (sequence < 4) "recording" else "boundary"
+                    )
+                    require(input.getString("reference_mode") == "double_dot_f32_bias_silu")
+                    require(input.getBoolean("bias_requested"))
+                    require(input.getString("activation_requested") == "silu")
+                    require(
+                        input.getInt("fusion_requested") ==
+                            if (variant == 45) 1 else if (variant == 46) 2 else 0
+                    )
+                    val split =
+                        if (shape[0] == 640 && shape[2] == 2560) {
+                            if (variant == 43) 2 else if (variant == 44) 4 else 1
+                        } else 1
+                    require(input.getInt("split_requested") == split)
+                    val cells = kernel.getInt("m") * kernel.getInt("n")
+                    require(input.getBoolean("full_reference") == (cells <= 8192))
+                    require(kernel.getInt("reference_cells") == if (cells <= 8192) cells else 64)
+                    for (key in
+                        listOf(
+                            "focused",
+                            "encoder_frames",
+                            "shape_family",
+                            "reference_mode",
+                            "full_reference",
+                            "bias_requested",
+                            "activation_requested",
+                            "fusion_requested",
+                            "split_requested",
+                        )) kernel.put(key, input.get(key))
+                    val compared = input.getBoolean("unfused_compared")
+                    require(compared == (variant in 45..46))
+                    kernel.put("unfused_compared", compared)
+                    for (key in listOf("unfused_relative_rmse", "unfused_max_abs_error")) {
+                        if (!compared) {
+                            require(input.has(key) && input.isNull(key))
+                            kernel.put(key, JSONObject.NULL)
+                        } else {
+                            val value = input.getDouble(key)
+                            require(value.isFinite() && value >= -1 && value < 1e12)
+                            kernel.put(key, value)
+                        }
+                    }
+                    for (key in listOf("boundary_gpu_ns", "enqueue_us", "fence_wait_us")) {
+                        val values = input.getJSONArray(key)
+                        require(values.length() == 6)
+                        for (i in 0 until values.length()) {
+                            if (key == "boundary_gpu_ns" && values.isNull(i)) continue
+                            val value = values.getDouble(i)
+                            require(value.isFinite() && value >= 0 && value < 1e18)
+                        }
+                        kernel.put(key, values)
+                    }
+                    kernel.put("us", measurementMap(input.getJSONObject("us")))
+                } else {
+                    require(
+                        kernel.getInt("m") to kernel.getInt("k") in
+                            listOf(2560 to 640, 640 to 2560, 1920 to 640, 640 to 640)
+                    )
+                    require(kernel.getInt("n") in listOf(32, 64, 65, 128, 129, 139, 256, 384))
+                    require(kernel.getInt("reference_cells") == kernel.getInt("streams") * 64)
+                }
                 require(kernel.getInt("streams") == if (variant == 26) 8 else 1)
-                require(kernel.getInt("reference_cells") == kernel.getInt("streams") * 64)
                 require(kernel.getInt("activation_row_padding") == if (variant == 25) 32 else 0)
                 val sourceType = if (row.getString("model") == "transcribepsy-q8") "q8_0" else "f16"
                 require(input.getString("source_type") == sourceType)
@@ -238,7 +312,7 @@ class EncoderLab(private val context: Context) {
                 )
                 kernel.put("environment", environment())
                 kernels.put(kernel)
-                row.put("phase", "KERNEL ${kernels.length()}/32")
+                row.put("phase", "KERNEL ${kernels.length()}/$expected")
             }
             "SAMPLE" -> {
                 val samples = row.getJSONArray("samples")
@@ -307,7 +381,9 @@ class EncoderLab(private val context: Context) {
             }
             "FINISHED" -> {
                 require(
-                    if (row.getInt("variant") >= 20) row.getJSONArray("kernels").length() == 32
+                    if (EncoderExperiment.isKernel(row.getInt("variant")))
+                        row.getJSONArray("kernels").length() ==
+                            EncoderExperiment.kernelCount(row.getInt("variant"))
                     else row.getJSONArray("samples").length() == 4
                 )
                 row.put("status", event)
@@ -422,9 +498,9 @@ class EncoderLab(private val context: Context) {
                     for (i in 0 until rows.length()) {
                         val row = rows.getJSONObject(i)
                         val kernels = row.optJSONArray("kernels")
-                        if (row.optInt("variant") >= 20) {
+                        if (EncoderExperiment.isKernel(row.optInt("variant"))) {
                             append(
-                                "${row.getString("model")} · ${row.getString("id")} · ${kernels?.length() ?: 0}/32 kernels · ${row.optString("status")}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
+                                "${row.getString("model")} · ${row.getString("id")} · ${kernels?.length() ?: 0}/${EncoderExperiment.kernelCount(row.optInt("variant"))} kernels · ${row.optString("status")}${if(row.has("failure")) " · ${row.getString("failure")}" else ""}"
                             )
                             if (
                                 kernels != null &&

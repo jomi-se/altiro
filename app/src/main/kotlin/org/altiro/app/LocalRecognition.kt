@@ -465,7 +465,14 @@ class LocalRecognition(
         val operation = Operation()
         val reverse = lab.reverseNextSuite()
         val orderedInputs = if (reverse) inputs.reversed() else inputs
-        val cases = org.altiro.core.EncoderExperiment.suite(mode == 2, profile, reverse, mode == 3)
+        val cases =
+            org.altiro.core.EncoderExperiment.suite(
+                mode == 2,
+                profile,
+                reverse,
+                mode == 3,
+                mode == 4,
+            )
         lab.begin(orderedInputs, cases, reverse)
         active = operation
         mutableBusy.value = true

@@ -153,7 +153,9 @@ class EncoderExperimentTest {
                 "9:0",
                 "4:17",
                 "4:19",
-                "4:30",
+                "4:37",
+                "4:39",
+                "4:47",
                 "4:-1",
                 "4:0:1",
                 "env=X",
@@ -162,6 +164,34 @@ class EncoderExperimentTest {
             assertNull(invalid, EncoderExperiment.options(invalid))
         }
         assertEquals(4 to 0, EncoderExperiment.options("4:0"))
+    }
+
+    @Test
+    fun tuningKeepsMatchedControlsAndReversesOnlyTreatments() {
+        val forward = EncoderExperiment.suite(false, true, tuning = true)
+        val reverse = EncoderExperiment.suite(false, true, reverse = true, tuning = true)
+        assertTrue(forward.size * 2 <= 64)
+        assertEquals(forward.size, forward.map { it.id }.distinct().size)
+        assertEquals(forward.take(4), reverse.take(4))
+        assertEquals(forward.takeLast(5), reverse.takeLast(5))
+        assertEquals(forward.subList(4, 17).reversed(), reverse.subList(4, 17))
+        assertEquals(
+            (30..36).toSet(),
+            forward.filter { it.variant in 30..36 }.map { it.variant }.toSet(),
+        )
+        assertEquals(
+            (40..46).toSet(),
+            forward.filter { EncoderExperiment.isKernel(it.variant) }.map { it.variant }.toSet(),
+        )
+        assertTrue(forward.all { EncoderExperiment.options(it.wire) != null })
+        assertTrue(
+            forward.filter { it.variant >= 30 }.all { it.backend == RecognitionBackend.VULKAN }
+        )
+        assertFalse(EncoderExperiment.isKernel(30))
+        assertFalse(EncoderExperiment.isKernel(36))
+        assertEquals(8, EncoderExperiment.kernelCount(40))
+        assertEquals(32, EncoderExperiment.kernelCount(20))
+        assertTrue(forward.size * 2 * 12 < EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY)
     }
 
     @Test

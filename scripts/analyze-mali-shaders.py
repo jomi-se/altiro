@@ -40,6 +40,10 @@ def constants(tile, subgroup, quantized):
     These are candidate subgroup sizes, not a claim about a connected phone.
     See ggml_vk_load_shaders and vulkan-shaders/mul_mm.comp at 364ec361.
     """
+    if tile == '256-thread64':
+        if subgroup != 16:
+            raise ValueError('256-thread64 is supported only at subgroup16')
+        return [256,64,64,32,16,16,2,2,2,1,16]
     if tile == 'small':
         return [max(subgroup,32),32,32,32 if quantized else 16,
                 subgroup if subgroup in (8,16) else 32,32,2,2,2,1,max(subgroup,8)]
@@ -105,7 +109,7 @@ def main():
     parser.add_argument('--shader-dir',required=True,type=Path,help='Pinned build vulkan-shaders.spv directory')
     parser.add_argument('--output',required=True,type=Path)
     parser.add_argument('--subgroups',nargs='+',type=int,choices=(8,16,32),default=[8,16,32])
-    parser.add_argument('--tiles',nargs='+',choices=('small','medium','large','64x32','32x64'),default=['small','medium','large'])
+    parser.add_argument('--tiles',nargs='+',choices=('small','medium','large','64x32','32x64','256-thread64'),default=['small','medium','large'])
     args = parser.parse_args()
     try: return run(args)
     except (OSError,ValueError,subprocess.TimeoutExpired) as error:

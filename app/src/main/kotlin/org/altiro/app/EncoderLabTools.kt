@@ -49,6 +49,12 @@ internal fun EncoderLabTools(controller: DictationController, microphoneAllowed:
                 label = { Text("Kernel hunt") },
             )
             FilterChip(
+                selected = mode == 4,
+                onClick = { mode = 4 },
+                enabled = available,
+                label = { Text("GPU tuning") },
+            )
+            FilterChip(
                 selected = both,
                 onClick = { both = !both },
                 enabled =

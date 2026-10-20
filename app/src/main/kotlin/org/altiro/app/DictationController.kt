@@ -168,7 +168,7 @@ class DictationController(private val context: Context) {
         encoderLabProfile: Boolean = false,
     ): SessionId? {
         checkMain()
-        if (encoderLabMode !in 0..3) return null
+        if (encoderLabMode !in 0..4) return null
         if (
             encoderLabMode != 0 &&
                 (!explicit ||

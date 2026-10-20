@@ -1,5 +1,8 @@
 # Encoder lab on a phone
 
+For source-guided wait, tile, split-K and fusion experiments in 0.6.7, choose
+[GPU tuning](encoder-tuning.md). Existing suites keep their previous variants.
+
 Debug builds from 0.6.5 can optionally send completed-case checkpoints directly
 to a paired Tailnet receiver. See [live results setup](kernel-hunt.md). This marks
 the run as network-active; repeat timing candidates with the relay disconnected.

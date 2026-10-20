@@ -1,4 +1,5 @@
 #include <jni.h>
+#include "gguf.h"
 #include "parakeet/engine.h"
 #include "run-control.h"
 #include <algorithm>
@@ -395,7 +396,7 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
     jstring cache_path, jobject receiver) {
     auto op = lookup(id);
     if (!op || !model_path || !wav_path || !receiver || threads < 1 || threads > 8 ||
-        !((variant >= 0 && variant <= 16) || (variant >= 20 && variant <= 29))) return false;
+        !altiro_supported_variant(variant)) return false;
     auto cls = env->GetObjectClass(receiver);
     Progress progress{env, receiver, op.get(), env->GetMethodID(cls, "onPhase", "(I)V"),
         env->GetMethodID(cls, "onRuntime", "(Ljava/lang/String;)V")};
@@ -437,7 +438,7 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
 #endif
             setenv("GGML_VK_PERF_LOGGER", "1", 1);
         }
-        if (variant >= 20) {
+        if (altiro_synthetic_variant(variant)) {
             progress.stage(3);
             const std::string path(model.data);
             // Model identity is pinned and verified by the parent. The file is
@@ -446,7 +447,23 @@ Java_org_altiro_transcribepsy_NativeTranscribePsy_benchmark(JNIEnv * env, jobjec
             if (filename != "transcribepsy-250m-eu-sub.gguf" && filename != "transcribepsy-250m-eu-sub-f16.gguf")
                 throw Failure{"MODEL_IDENTITY_INVALID"};
             const bool quantized = filename == "transcribepsy-250m-eu-sub.gguf";
-            const char * failure = altiro_kernel_hunt(gpu,threads,variant,quantized,op->cancelled,
+            int encoder_frames = 0;
+            if (altiro_focused_variant(variant)) {
+                std::unique_ptr<gguf_context, decltype(&gguf_free)> metadata(
+                    gguf_init_from_file(model.data, {true, nullptr}), gguf_free);
+                if (!metadata) throw Failure{"MODEL_IDENTITY_INVALID"};
+                const auto hop_key = gguf_find_key(metadata.get(), "parakeet.preproc.hop_length");
+                const auto causal_key = gguf_find_key(metadata.get(), "parakeet.encoder.causal_downsampling");
+                if (hop_key >= 0 && gguf_get_kv_type(metadata.get(), hop_key) != GGUF_TYPE_UINT32)
+                    throw Failure{"MODEL_IDENTITY_INVALID"};
+                if (causal_key >= 0 && gguf_get_kv_type(metadata.get(), causal_key) != GGUF_TYPE_BOOL)
+                    throw Failure{"MODEL_IDENTITY_INVALID"};
+                const uint32_t hop = hop_key < 0 ? 160 : gguf_get_val_u32(metadata.get(), hop_key);
+                const bool causal = causal_key >= 0 && gguf_get_val_bool(metadata.get(), causal_key);
+                encoder_frames = altiro_encoder_frames(audio.size(), hop, causal);
+                if (encoder_frames < 1 || encoder_frames > 1000) throw Failure{"MODEL_IDENTITY_INVALID"};
+            }
+            const char * failure = altiro_kernel_hunt(gpu,threads,variant,quantized,encoder_frames,op->cancelled,
                 [&](const std::string & event) { lab_emit(progress,event); });
             if (failure) throw Failure{failure};
             return true;

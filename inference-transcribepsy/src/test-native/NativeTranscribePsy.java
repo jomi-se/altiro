@@ -166,6 +166,7 @@ public final class NativeTranscribePsy {
         if ((args.length == 3 || args.length == 4) && args[0].equals("--kernel-hunt")) {
             NativeTranscribePsy runtime = new NativeTranscribePsy();
             int variant = args.length == 4 ? Integer.parseInt(args[3]) : 27;
+            final boolean focused = variant >= 40 && variant <= 46;
             final int[] kernels = {0};
             Progress progress = new Progress() {
                 @Override public void onRuntime(String report) {
@@ -177,6 +178,17 @@ public final class NativeTranscribePsy {
                         require(error.find() && Double.parseDouble(error.group(1)) <= 0.01, "Synthetic CPU reference mismatch");
                         if(variant == 25) require(report.contains("\"cpu_repacked\":false"), "Strided CPU input used incompatible prepacking");
                         require(!report.contains(args[1]) && !report.contains(args[2]), "Paths in synthetic export");
+                        if (focused) {
+                            require(report.contains("\"focused\":true"), "Focused metadata missing");
+                            require(report.contains("\"sequence\":" + kernels[0] + ","), "Focused sequence mismatch");
+                            require(report.contains("\"shape_family\":\"" + (kernels[0] < 4 ? "recording" : "boundary") + "\""), "Focused shape family mismatch");
+                            require(report.contains("\"unfused_compared\":false") && report.contains("\"unfused_relative_rmse\":null") && report.contains("\"unfused_max_abs_error\":null"), "CPU must not claim an unfused GPU comparison");
+                            require(report.contains("\"boundary_gpu_ns\":[null,null,null,null,null,null]"), "CPU must not fabricate GPU timestamps");
+                            if (kernels[0] == 4 || kernels[0] == 5) {
+                                int cells = kernels[0] == 4 ? 4032 : 4225;
+                                require(report.contains("\"full_reference\":true") && report.contains("\"reference_cells\":" + cells + ","), "Boundary full-output check missing");
+                            }
+                        }
                         kernels[0]++;
                         System.out.println(report);
                     }
@@ -185,7 +197,7 @@ public final class NativeTranscribePsy {
             long handle = runtime.create();
             try {
                 require(runtime.benchmark(handle,args[1],args[2],false,2,variant,"",progress), "Synthetic suite failed: " + progress.latest);
-                require(kernels[0] == 32, "Missing synthetic shapes");
+                require(kernels[0] == (focused ? 8 : 32), "Missing synthetic shapes");
                 require(progress.latest.contains("FINISHED"), "Missing completion");
             } finally { runtime.release(handle); }
             long cancelled = runtime.create();

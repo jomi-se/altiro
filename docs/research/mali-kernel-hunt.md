@@ -1,6 +1,7 @@
 # Mali kernel hunt: hypotheses and measurement contract
 
-Status: corrected 48-case phone campaign complete; targeted optimization remains open.
+Status: corrected 48-case phone campaign complete; targeted optimization experiments
+implemented for the next phone campaign.
 
 ## Completed 0.6.6 phone campaign
 
@@ -103,8 +104,12 @@ separate measurement. Wall time alone should not be labeled pure shader time.
 
 ### Source-guided optimization candidates
 
-These are unimplemented experiments against the pinned patched runtime,
-not accepted production policies or measured speedups.
+The blocking-wait, 256-thread tile, split-K and bias/SiLU candidates are
+implemented as opt-in experiments in 0.6.7; see
+[GPU tuning](../testing/encoder-tuning.md). They are not accepted production
+policies or measured speedups. The preceding campaign motivates them but does
+not measure their implementations. Queued multi-graph tests and contraction
+scale/residual fusion below remain possible follow-ups, not shipped cases.
 
 1. **Blocking-wait control and boundary timestamps.** Compare the current wait
    with a blocking final fence on identical actual-shape graphs. Record CPU,

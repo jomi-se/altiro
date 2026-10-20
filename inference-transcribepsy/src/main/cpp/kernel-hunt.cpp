@@ -94,7 +94,7 @@ void clear_metrics(AltiroEncoderLab & lab) {
 }
 }
 
-const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantized,
+const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantized, int encoder_frames,
     std::atomic<bool> & cancelled, const std::function<void(const std::string &)> & emit) {
     Resources resources;
     auto & lab = *altiro_encoder_lab;
@@ -108,17 +108,28 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
     const int padded = variant == 25 ? 32 : 0;
     const auto source_type = quantized ? GGML_TYPE_Q8_0 : GGML_TYPE_F16;
     const auto storage_type = variant == 24 ? GGML_TYPE_F16 : source_type;
+    const bool focused = altiro_focused_variant(variant);
     const int shapes[][2] = {{2560,640}, {640,2560}, {1920,640}, {640,640}}; // M,K
     const int widths[] = {32,64,65,128,129,139,256,384};
+    struct Shape { int m,n,k; };
+    std::vector<Shape> cases;
+    if (focused) {
+        if (encoder_frames < 1) return "GRAPH_UNSUPPORTED";
+        cases = {{2560,encoder_frames,640},{640,encoder_frames,2560},{640,encoder_frames,1280},
+            {640,2*encoder_frames-1,640},{64,63,64},{65,65,96},{640,129,2560},{640,257,2560}};
+    } else for (const auto & shape : shapes) for (int n : widths) cases.push_back({shape[0],n,shape[1]});
     int sequence = 0;
-    for (const auto & shape : shapes) for (int n : widths) {
+    for (const auto & shape : cases) {
         if (cancelled.load()) return "NONE";
-        const int m = shape[0], k = shape[1];
+        const int m = shape.m, n = shape.n, k = shape.k;
+        const bool full_reference = focused && size_t(m)*n <= 8192;
+        const int checked = full_reference ? m*n : 64;
+        const auto index_at = [&](int p) { return full_reference ? size_t(p) : check_index(p,m,n); };
         const auto setup_start = Clock::now();
         resources.ctx = ggml_init({4 * 1024 * 1024, nullptr, true});
         if (!resources.ctx) return "OUT_OF_MEMORY";
         auto * graph = ggml_new_graph_custom(resources.ctx, 256, false);
-        struct Stream { ggml_tensor * w; ggml_tensor * base; ggml_tensor * x; ggml_tensor * y; };
+        struct Stream { ggml_tensor * w; ggml_tensor * base; ggml_tensor * x; ggml_tensor * y; ggml_tensor * bias; ggml_tensor * mm; };
         std::vector<Stream> tensors;
         for (int s = 0; s < streams; ++s) {
             auto * w = ggml_new_tensor_2d(resources.ctx, storage_type, k, m);
@@ -126,12 +137,15 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
             auto * x = padded ? ggml_view_2d(resources.ctx, base, k, n, base->nb[1], 0) : base;
             auto * y = ggml_mul_mat(resources.ctx, w, x);
             if (altiro_lab_f32()) ggml_mul_mat_set_prec(y, GGML_PREC_F32);
+            auto * mm = y;
+            auto * bias = focused ? ggml_new_tensor_1d(resources.ctx,GGML_TYPE_F32,m) : nullptr;
+            if (bias) y = ggml_silu(resources.ctx,ggml_add(resources.ctx,y,bias));
             ggml_build_forward_expand(graph, y);
-            tensors.push_back({w,base,x,y});
+            tensors.push_back({w,base,x,y,bias,mm});
         }
         std::vector<ggml_tensor *> weight_tensors;
         for (const auto & tensor : tensors) weight_tensors.push_back(tensor.w);
-        const bool repacked = !gpu && ggml_is_quantized(storage_type) && repack_weights(resources,weight_tensors,tensors[0].y);
+        const bool repacked = !gpu && ggml_is_quantized(storage_type) && repack_weights(resources,weight_tensors,tensors[0].mm);
         resources.buffer = ggml_backend_alloc_ctx_tensors(resources.ctx, resources.backend);
         if (!resources.buffer) return "OUT_OF_MEMORY";
         size_t resident_bytes = ggml_backend_buffer_get_size(resources.buffer);
@@ -158,6 +172,11 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
             for (int col = 0; col < n; ++col) for (int row = 0; row < k; ++row)
                 x[size_t(col) * (k + padded) + row] = datum(size_t(col) * k + row,31 + s);
             ggml_backend_tensor_set(tensors[s].base,x.data(),0,x.size() * sizeof(float));
+            if (focused) {
+                std::vector<float> bias(m);
+                for (int row=0; row<m; ++row) bias[row] = datum(row,57+s);
+                ggml_backend_tensor_set(tensors[s].bias,bias.data(),0,bias.size()*sizeof(float));
+            }
         }
         ggml_backend_synchronize(resources.backend);
         const double setup_ms = ms(setup_start);
@@ -165,26 +184,53 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
         // Fixed 64 well-spread output cells in EACH stream, computed in double.
         // Entire output is checked for finiteness after every measured call.
         std::vector<double> reference;
-        for (int s = 0; s < streams; ++s) for (int p = 0; p < 64; ++p) {
-            const size_t index = check_index(p,m,n);
+        for (int s = 0; s < streams; ++s) for (int p = 0; p < checked; ++p) {
+            const size_t index = index_at(p);
             const int row = index % m, col = index / m;
             double sum = 0;
             for (int j = 0; j < k; ++j) sum += double(weights[s][size_t(row) * k + j]) * activations[s][size_t(col) * (k + padded) + j];
+            if (focused) {
+                const float stored = static_cast<float>(sum);
+                const float biased = stored + datum(row,57+s);
+                const float activated = biased / (1.0f + std::exp(-biased));
+                sum = activated;
+            }
             reference.push_back(sum);
         }
         // Leave CPU reference generation and all transfers outside compute.
-        std::vector<double> walls, cpus, reads;
+        // Independent unfused GPU control on the exact same stored tensors.
+        // No graph mutation or buffer reallocation; only backend fusion is off.
+        std::vector<std::vector<float>> unfused;
+        if (focused && gpu && altiro_lab_fusion()) {
+            lab.variant = 40;
+            const auto status = ggml_backend_graph_compute(resources.backend,graph);
+            ggml_backend_synchronize(resources.backend);
+            lab.variant = variant;
+            if (status != GGML_STATUS_SUCCESS) return "KERNEL_COMPUTE_FAILED";
+            for (const auto & tensor : tensors) {
+                unfused.emplace_back(size_t(m)*n);
+                ggml_backend_tensor_get(tensor.y,unfused.back().data(),0,unfused.back().size()*sizeof(float));
+                for (float v : unfused.back()) if (!std::isfinite(v)) return "NONFINITE_OR_SHAPE";
+            }
+        }
+        std::vector<double> walls, cpus, reads, boundaries, enqueues, waits;
+        double unfused_rmse=0, unfused_abs=0;
         bool finite = true;
         double worst_rmse = 0, worst_abs = 0;
         clear_metrics(lab);
         for (int repeat = 0; repeat < 6; ++repeat) {
             if (cancelled.load()) return "NONE";
+            lab.boundary_available = false;
+            const double old_enqueue = lab.us["graph_enqueue_us"], old_wait = lab.us["final_fence_wait_us"];
             lab.measuring = true;
             const auto start = Clock::now(); const double cpu_start = cpu_ms();
             const auto status = ggml_backend_graph_compute(resources.backend,graph);
             ggml_backend_synchronize(resources.backend);
             walls.push_back(ms(start)); cpus.push_back(cpu_ms() - cpu_start);
             lab.measuring = false;
+            boundaries.push_back(lab.boundary_available ? double(lab.boundary_gpu_ns) : -1);
+            enqueues.push_back(lab.us["graph_enqueue_us"]-old_enqueue);
+            waits.push_back(lab.us["final_fence_wait_us"]-old_wait);
             if (status != GGML_STATUS_SUCCESS) return "KERNEL_COMPUTE_FAILED";
             if (cancelled.load()) return "NONE";
             const auto read_start = Clock::now();
@@ -193,9 +239,19 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
                 std::vector<float> output(size_t(m) * n);
                 ggml_backend_tensor_get(tensors[s].y,output.data(),0,output.size() * sizeof(float));
                 for (float v : output) finite &= std::isfinite(v);
-                for (int p = 0; p < 64; ++p) {
-                    const size_t index = check_index(p,m,n);
-                    const double expected = reference[s * 64 + p], actual = output[index];
+                if (!unfused.empty()) {
+                    double usq=0, ursq=0;
+                    for (size_t p=0; p<output.size(); ++p) {
+                        if (!std::isfinite(output[p])) continue;
+                        const double d = double(output[p])-unfused[s][p];
+                        usq += d*d; ursq += double(unfused[s][p])*unfused[s][p];
+                        unfused_abs = std::max(unfused_abs,std::abs(d));
+                    }
+                    unfused_rmse = std::max(unfused_rmse,std::sqrt(usq/std::max(ursq,1e-30)));
+                }
+                for (int p = 0; p < checked; ++p) {
+                    const size_t index = index_at(p);
+                    const double expected = reference[s * checked + p], actual = output[index];
                     if (!std::isfinite(actual)) continue;
                     const double delta = actual - expected;
                     sq += delta * delta; ref_sq += expected * expected;
@@ -216,12 +272,26 @@ const char * altiro_kernel_hunt(bool gpu, int threads, int variant, bool quantiz
             << ",\"setup_ms\":" << setup_ms << ",\"reference_cells\":" << reference.size()
             << ",\"finite\":" << (finite ? "true" : "false") << ",\"relative_rmse\":" << (finite ? worst_rmse : -1)
             << ",\"max_abs_error\":" << (finite ? worst_abs : -1);
+        if (focused) {
+            out << ",\"focused\":true,\"encoder_frames\":" << encoder_frames
+                << ",\"shape_family\":\"" << (sequence <= 4 ? "recording" : "boundary") << "\""
+                << ",\"reference_mode\":\"double_dot_f32_bias_silu\",\"full_reference\":" << (full_reference ? "true" : "false")
+                << ",\"bias_requested\":true,\"activation_requested\":\"silu\",\"fusion_requested\":" << altiro_lab_fusion()
+                << ",\"split_requested\":" << altiro_split_factor(variant,m,k,false)
+                << ",\"unfused_compared\":" << (!unfused.empty() ? "true" : "false")
+                << ",\"unfused_relative_rmse\":" << (unfused.empty() ? "null" : std::to_string(finite ? unfused_rmse : -1))
+                << ",\"unfused_max_abs_error\":" << (unfused.empty() ? "null" : std::to_string(finite ? unfused_abs : -1));
+        }
         const auto array = [&](const char * name,const std::vector<double> & values) {
             out << ",\"" << name << "\":[";
-            for (size_t i = 0; i < values.size(); ++i) { if (i) out << ','; out << values[i]; }
+            for (size_t i = 0; i < values.size(); ++i) { if (i) out << ','; if (values[i] < 0) out << "null"; else out << values[i]; }
             out << ']';
         };
         array("wall_ms",walls); array("process_cpu_ms",cpus); array("readback_check_ms",reads);
+        if (focused) {
+            array("boundary_gpu_ns",boundaries); array("enqueue_us",enqueues); array("fence_wait_us",waits);
+            map(out,"us",lab.us);
+        }
         map(out,"counts",lab.counts); map(out,"shaders",lab.shaders);
         out << '}'; emit(out.str());
         if (!finite) return "NONFINITE_OR_SHAPE";

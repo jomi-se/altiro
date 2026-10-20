@@ -24,6 +24,16 @@ class MaliAnalysisTest(unittest.TestCase):
         self.assertEqual(16,mali.constants('small',16,False)[4])
         self.assertEqual(128,mali.constants('large',16,False)[1])
 
+    def test_256_thread_tile_preserves_reuse_and_limits_subgroup(self):
+        for quantized in (False, True):
+            specs = mali.constants('256-thread64',16,quantized)
+            self.assertEqual([256,64,64,32,16,16,2,2,2,1,16],specs)
+            block,bm,bn,bk,wm,wn,wmiter,tm,tn,tk,warp = specs
+            self.assertEqual(block//warp,(bm//wm)*(bn//wn))
+            self.assertEqual(16,bm*bn//block)
+        for subgroup in (8,32):
+            with self.assertRaises(ValueError): mali.constants('256-thread64',subgroup,True)
+
     def test_rectangular_tiles_cover_outputs_without_fractional_warp_loops(self):
         for subgroup in (8,16,32):
             for tile in ('64x32','32x64'):

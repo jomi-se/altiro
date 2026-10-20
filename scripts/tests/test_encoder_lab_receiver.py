@@ -63,6 +63,22 @@ class ReceiverTests(unittest.TestCase):
             self.assertEqual(200, self.request('POST', '/reports', json.dumps(report).encode())[0])
         self.assertIn('can perturb', self.inbox.latest['analysis'])
 
+    def test_focused_and_full_tuning_checkpoints_arrive_without_schema_loss(self):
+        from test_encoder_lab_analysis import focused_case, case
+        report = json.loads(self.raw)
+        full = case('gpu-tuning-f32-start', 'VULKAN', 30)
+        for sample in full['samples']: sample['backend'] = 'Vulkan0'
+        focused = focused_case()
+        focused['status'] = 'RUNNING'
+        focused['kernels'] = focused['kernels'][:1]
+        report['cases'] = [full, focused]
+        self.assertEqual(200, self.request('POST', '/reports', json.dumps(report).encode())[0])
+        saved = json.loads((Path(self.directory.name) / 'latest.json').read_text())
+        self.assertEqual(30, saved['report']['cases'][0]['variant'])
+        self.assertEqual(145, saved['report']['cases'][1]['kernels'][0]['encoder_frames'])
+        self.assertIn('Focused GPU tuning', saved['receipt']['analysis'])
+        self.assertIn('1/8 kernel shapes', saved['receipt']['analysis'])
+
     def test_unauthenticated_and_cross_origin_requests_are_refused(self):
         for method in ('GET', 'POST'):
             path = '/reports' if method == 'POST' else '/status'

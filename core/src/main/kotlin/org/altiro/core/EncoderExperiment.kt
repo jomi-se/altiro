@@ -31,6 +31,7 @@ data class EncoderExperiment(
             profile: Boolean,
             reverse: Boolean = false,
             hunt: Boolean = false,
+            tuning: Boolean = false,
         ): List<EncoderExperiment> {
             fun cpu(n: Int, suffix: String = "") =
                 EncoderExperiment("cpu-$n$suffix", RecognitionBackend.CPU, n)
@@ -44,7 +45,37 @@ data class EncoderExperiment(
             val planned = buildList {
                 add(cpu(4, "-start"))
                 add(gpu("gpu-start"))
-                if (hunt) {
+                if (tuning) {
+                    add(cpu(2, "-start"))
+                    add(gpu("gpu-tuning-f32-start", 30))
+                    for ((index, label) in
+                        listOf(
+                                "blocking-wait",
+                                "tile-256",
+                                "split-2",
+                                "split-4",
+                                "fuse-bias",
+                                "fuse-silu",
+                            )
+                            .withIndex()) {
+                        add(gpu("gpu-tuning-$label", 31 + index))
+                    }
+                    for ((index, label) in
+                        listOf(
+                                "control",
+                                "blocking-wait",
+                                "tile-256",
+                                "split-2",
+                                "split-4",
+                                "fuse-bias",
+                                "fuse-silu",
+                            )
+                            .withIndex()) {
+                        add(gpu("focused-$label", 40 + index))
+                    }
+                    add(gpu("gpu-tuning-f32-end", 30))
+                    add(cpu(2, "-end"))
+                } else if (hunt) {
                     add(gpu("gpu-cache-empty", 8))
                     add(gpu("gpu-cache-seeded", 8))
                     add(cpu(2))
@@ -84,6 +115,13 @@ data class EncoderExperiment(
             }
             if (!reverse) return planned
             val end = planned.indexOfFirst { it.id == "gpu-end" }
+            if (tuning) {
+                val firstTreatment = planned.indexOfFirst { it.variant == 31 }
+                val lastTreatment = planned.indexOfLast { it.variant == 46 }
+                return planned.take(firstTreatment) +
+                    planned.subList(firstTreatment, lastTreatment + 1).reversed() +
+                    planned.drop(lastTreatment + 1)
+            }
             val middle = planned.subList(2, end)
             return planned.take(2) +
                 middle.filter { it.variant != 8 }.reversed() +
@@ -97,10 +135,16 @@ data class EncoderExperiment(
             if (parts.size != 2) return null
             val threads = parts[0].toIntOrNull() ?: return null
             val variant = parts[1].toIntOrNull() ?: return null
-            return if (threads in 1..8 && (variant in 0..16 || variant in 20..29))
+            return if (
+                threads in 1..8 && (variant in 0..16 || variant in 20..36 || variant in 40..46)
+            )
                 threads to variant
             else null
         }
+
+        fun isKernel(variant: Int): Boolean = variant in 20..29 || variant in 40..46
+
+        fun kernelCount(variant: Int): Int = if (variant in 40..46) 8 else 32
 
         fun median(samples: List<Double>): Double? {
             if (samples.isEmpty() || samples.any { !it.isFinite() || it < 0 }) return null

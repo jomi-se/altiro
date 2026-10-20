@@ -2,6 +2,23 @@
 
 Updated: 2026-10-20.
 
+Version **0.6.7-encoder-tuning** implements the authorized opt-in follow-up to
+source review: blocking fence waits, a 256-thread 64×64 scalar tile, selective
+split-K two/four and dense bias/SiLU epilogues. The separate **GPU tuning** campaign
+keeps F32 GPU and CPU controls, actual-length focused shapes, independent route
+counters, boundary GPU timestamps and double/unfused numerical checks. See
+[decision 0022](../decisions/0022-source-guided-encoder-tuning.md) and the
+[phone procedure](../testing/encoder-tuning.md). Host checks pass: 72 JVM tests,
+31 Python checks and production-JNI focused
+CPU execution for both formats (16 shapes, 96 reported graph calls), including
+full boundary references and cancellation. Both public-speech format checks and
+ordinary cancellation pass. The dense fusion guard fixture checks consumers,
+views, outputs and rounding/reduction constraints. Android app/fixture builds,
+lint, instrumentation APK compilation, installability, runtime notices and 16 KiB
+packaging checks pass. The APK preserves its signing identity and the unchanged
+Whisper library. Physical GPU execution, gains and speech quality remain
+unverified. Ordinary recognition defaults and insertion behavior are unchanged.
+
 Version **0.6.6-kernel-fixes** corrects two defects exposed by the first live
 Q8 Kernel hunt campaign: GPU synthetic tests excluded integrated Vulkan
 devices, and forced-small scalar tiles had invalid logical-warp geometry on
