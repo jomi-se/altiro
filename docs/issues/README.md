@@ -22,6 +22,14 @@
 - [0007 — OpenCL pending-work cleanup](0007-opencl-pending-work-cleanup.md):
   source fixed and fake-driver lifecycle checks pass; phone cancellation remains pending.
 
+- [0008 — Pending Copy touch target](0008-pending-copy-touch-target.md):
+  fallback actions now receive the 48 dp minimum; SDK-free checks pass,
+  Android build/lint and phone target verification are pending.
+- [0009 — Termux confirmation settings lock](0009-termux-confirmation-settings-lock.md):
+  open confirmation now checks current work state before changing preferences;
+  SDK-free checks pass, Android build/lint and phone interaction verification
+  are pending.
+
 Use focused numbered Markdown files with status, reproducible behavior,
 expected behavior, impact, and acceptance evidence. Index new defects here.
 Accepted feature work belongs in [plans](../plan/vertical-slice-build-order.md).

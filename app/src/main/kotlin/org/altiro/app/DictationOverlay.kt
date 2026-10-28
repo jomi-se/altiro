@@ -432,8 +432,8 @@ class DictationOverlay(
         note.text = shown?.let { n -> n.action?.let { "${n.text} · $it" } ?: n.text }.orEmpty()
         note.contentDescription = note.text
         note.visibility = if (shown == null) View.GONE else View.VISIBLE
-        note.minHeight = dp(if (shown?.onTap != null) 48 else 32)
         val onTap = shown?.onTap ?: if (mode == Mode.PENDING) ::copyResult else null
+        note.minHeight = dp(if (onTap != null) 48 else 32)
         if (onTap != null) note.setOnClickListener { onTap() }
         else {
             note.setOnClickListener(null)

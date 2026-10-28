@@ -111,12 +111,19 @@ internal fun SettingsContent(
             },
             confirmButton = {
                 TextButton(
+                    enabled = available,
                     onClick = {
+                        if (
+                            controller.session.value.busy ||
+                                controller.recognition.busy.value ||
+                                controller.models.busy.value
+                        )
+                            return@TextButton
                         termuxPaste = true
                         preferences.termuxPaste = true
                         confirmTermux = false
                         controller.refreshSettings?.invoke()
-                    }
+                    },
                 ) {
                     Text("Enable")
                 }

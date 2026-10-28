@@ -1,6 +1,16 @@
 # Current work
 
-Updated: 2026-10-20.
+Updated: 2026-10-28.
+
+Two local UI corrections are implemented: pending-result Copy notices derive
+their 48 dp minimum height from the effective action, and an already-open
+Termux paste confirmation honors the settings lock with a fresh busy-state
+check before changing preferences. See [issue 0008](../issues/0008-pending-copy-touch-target.md)
+and [issue 0009](../issues/0009-termux-confirmation-settings-lock.md).
+Independent source review, Kotlin formatting, repository/model/Python checks
+and core/network JVM tests pass. Android compilation/lint still need an Android
+SDK. Rendered touch-target and dialog/overlay interaction checks on a phone
+remain pending.
 
 Version **0.6.9-opencl-int8** implements the owner-authorized next GPU
 campaign with Astra: actual pinned Arm OpenCL kernels and a scale-preserving
