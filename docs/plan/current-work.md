@@ -1,6 +1,23 @@
 # Current work
 
-Updated: 2026-10-07.
+Updated: 2026-10-31.
+
+## Optional self-hosted recognition
+
+[`server/`](../../server/README.md) now contains the optional Python GPU API,
+browser client, fixed model provenance, locked dependencies, Windows launchers
+and a restricted dedicated WSL2 deployment, as requested by the maintainer.
+See [decision 0014](../decisions/0014-optional-self-hosted-server.md). The reference
+passed 18 containment checks plus real speech, silence, malformed audio and
+restart checks. The default sign-in launcher selects WSL2. Machine state,
+weights, environments, disks and measurements remain ignored.
+
+The Android transport is not connected yet. Endpoint consent/configuration,
+availability policy, cancellation and no-replay behavior require a separate
+increment. LLM cleanup and a hard native-job watchdog are not installed.
+Existing phone acceptance gates below are unchanged.
+
+## Android preview
 
 Version 0.5.5 corrects the active-window-only editor lookup after the maintainer
 reports missing controls in ChatGPT, Termux and Reddit even after fresh setup.

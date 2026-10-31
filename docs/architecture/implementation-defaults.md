@@ -24,6 +24,7 @@ or whole-field `ACTION_SET_TEXT` fallback.
 | `inference-whisper` | Pinned native runtime, JNI, model lifecycle, progress, cancellation |
 | `network` | Optional recognition and cleanup transports; no Android UI or screen access |
 | `editor-fixture` | Separate application exposing real editors and controlled mutations |
+| `server/` | Optional independently runnable GPU speech endpoint and portable WSL2 setup; outside Gradle |
 
 Keep Android objects out of the domain layer. The accessibility service owns
 editor access and overlay lifetime; the recording service owns capture. One

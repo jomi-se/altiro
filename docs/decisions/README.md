@@ -26,6 +26,11 @@ initial choices. No additional decision records are needed to restate it.
 - [0011 — Local vocabulary hints](0011-local-vocabulary-hints.md):
   bounded, explicit names and terms frozen per recording, with content-free diagnostics.
 
+- [0012 — Interface rewrite](0012-interface-rewrite.md): revised native overlay and navigation.
+- [0013 — Focused editor lookup](0013-focused-editor-lookup.md): bounded cross-window editor recovery.
+- [0014 — Optional self-hosted server](0014-optional-self-hosted-server.md): portable
+  GPU setup alongside Android, with private deployment state excluded.
+
 Record meaningful departures or newly resolved forks as numbered Markdown
 files with title, status, date, context, decision, consequences, and evidence.
 Use `proposed`, `accepted`, or `superseded`; a proposal does not authorize an

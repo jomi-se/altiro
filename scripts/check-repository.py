@@ -33,6 +33,8 @@ def main() -> int:
         errors.append("CLAUDE.md must import the canonical AGENTS.md.")
 
     documents = sorted(ROOT.glob("*.md")) + sorted((ROOT / "docs").rglob("*.md"))
+    documents += sorted((ROOT / "server").glob("*.md"))
+    documents += sorted((ROOT / "server" / "wsl").glob("*.md"))
     for document in documents:
         content = document.read_text(encoding="utf-8")
         # Code examples may describe future file paths; only prose links are checked.

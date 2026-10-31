@@ -67,6 +67,11 @@ Do not introduce desktop targets, a replacement keyboard, always-listening
 audio, broad screen extraction, cloud accounts, billing, automatic sending,
 automatic cross-provider failover, or a mandatory hosted backend.
 
+The optional independently runnable `server/` component is accepted in
+`docs/decisions/0014-optional-self-hosted-server.md`. Its portable setup belongs
+here; deployment state and private operator configuration do not. Read its
+scoped guidance before changing it. Android remote transport remains separate.
+
 ## Android correctness
 
 - Compile against public APIs. Accessibility `commitText(text, 1, null)` returns
@@ -126,8 +131,9 @@ or desktop workflows into Android guidance or claim an absent skill is installed
 ## Public repository and artifacts
 
 Keep product requirements and portable examples here. Private cross-project
-sequencing belongs outside this repository. Machine configuration and operator
-runbooks belong in the operator's bootstrap repository. Generated APKs,
+sequencing belongs outside this repository. Private machine configuration and
+operator runbooks belong in the operator's bootstrap repository. Generic setup
+for the optional server is maintained in `server/`. Generated APKs,
 recordings, screenshots, benchmark output, and dated execution logs belong
 outside Git; reference sanitized conclusions here.
 

@@ -1,0 +1,12 @@
+.runtime/
+.venv/
+.cache/
+.pytest_cache/
+models/
+samples/
+logs/
+__pycache__/
+*.pid
+*.local.json
+config.local.json
+*.stackdump

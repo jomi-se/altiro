@@ -106,6 +106,15 @@ See the [product interface checks](docs/testing/everyday-interface.md),
 [Gate A](docs/testing/gate-a.md), [Gate B](docs/testing/gate-b.md), and
 [recognition diagnostics](docs/testing/recognition-diagnostics.md).
 
+## Optional self-hosted speech server
+
+[`server/`](server/README.md) contains the independently runnable GPU speech
+endpoint, browser client, pinned dependencies/model downloads and portable
+Windows/WSL2 setup. The default worker runs in a restricted dedicated Linux
+environment, reachable through private Tailscale HTTPS. Android remote-provider
+integration is pending. See [the API](server/API.md) and
+[isolation policy](server/wsl/README.md).
+
 ## Development checks
 
 Use JDK 21, the pinned wrapper, Android SDK Platform 37.0, Build Tools 36.0.0,

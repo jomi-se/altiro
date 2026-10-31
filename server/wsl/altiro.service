@@ -1,0 +1,57 @@
+[Unit]
+Description=Isolated Altiro GPU transcription worker
+Requires=altiro-interop-guard.service
+After=local-fs.target altiro-interop-guard.service
+StartLimitIntervalSec=300
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User=altiro
+Group=altiro
+WorkingDirectory=/opt/altiro
+Environment=HF_HUB_OFFLINE=1 HF_HUB_DISABLE_TELEMETRY=1 DO_NOT_TRACK=1
+Environment=HOME=/var/empty
+EnvironmentFile=-/etc/altiro-server.env
+Environment=CUDA_CACHE_PATH=/tmp/cuda-cache
+Environment=LD_LIBRARY_PATH=/opt/altiro/.venv/lib/python3.12/site-packages/nvidia/cublas/lib:/opt/altiro/.venv/lib/python3.12/site-packages/nvidia/cudnn/lib:/opt/altiro/.venv/lib/python3.12/site-packages/nvidia/cuda_nvrtc/lib:/usr/lib/wsl/lib
+ExecStart=/opt/altiro/.venv/bin/python -m uvicorn server:app --uds /run/altiro/api.sock --no-access-log --log-level info
+Restart=on-failure
+RestartSec=5
+RuntimeDirectory=altiro
+RuntimeDirectoryMode=0750
+UMask=0077
+
+# Native dependencies run with no IPv4/IPv6/packet sockets. The host-facing
+# proxy communicates through the private Unix socket instead.
+RestrictAddressFamilies=AF_UNIX
+NoNewPrivileges=true
+CapabilityBoundingSet=
+AmbientCapabilities=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+PrivateMounts=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectKernelLogs=true
+ProtectControlGroups=true
+ProtectClock=true
+ProtectHostname=true
+RestrictNamespaces=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+SystemCallArchitectures=native
+SystemCallFilter=~@mount @raw-io @reboot @swap @obsolete @privileged @module @debug io_uring_setup io_uring_enter io_uring_register
+InaccessiblePaths=-/mnt -/media -/run/WSL -/run/dbus -/run/user
+TemporaryFileSystem=/run/systemd:ro
+DevicePolicy=closed
+DeviceAllow=/dev/dxg rw
+MemoryMax=3G
+MemorySwapMax=1G
+TasksMax=128
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
