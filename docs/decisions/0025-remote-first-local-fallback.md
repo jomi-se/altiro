@@ -68,3 +68,11 @@ The subsequent host wire tests exercise real loopback HTTPS with an ephemeral,
 per-connection test trust store, including default-trust and hostname rejection.
 They verify streamed multipart bytes and cancellation/replay boundaries using
 scripted server responses; they do not establish real GPU or phone execution.
+
+For live integration verification, the maintainer then supplied a recording so
+testing need not wait for an app-side run. Its canonical WAV conversion passed
+through the compiled production client to the actual private CUDA endpoint.
+Speech, valid empty silence output and the unavailable-endpoint routing decision
+were verified. This closes the server-integration check; broader physical-device
+and rendered-interface gates are unchanged. No endpoint identity, recording or
+transcript enters this repository.

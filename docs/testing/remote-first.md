@@ -7,6 +7,8 @@ origin or its full transcription URL, then **Save** and **Test**. For example,
 The app uses the phone's existing VPN connection; it does not configure Tailscale.
 The current settings support the server's private tailnet-only authentication
 profile. No personal endpoint is included in the app.
+Custom HTTPS ports belong in the same field, for example
+`https://speech.example.net:8443`. Neither hostname nor port requires a new build.
 
 Remote first is enabled for a newly configured server. Select/install a model
 in Models for offline fallback. The app also permits remote-only recording;
@@ -57,3 +59,19 @@ unavailable health without uploading, failed/redirected/lost POST responses
 without replay or credential forwarding, and cancellation while a TLS response
 body is pending. Server readiness and text are scripted fixture responses. These
 tests establish HTTP/TLS behavior, not CUDA inference or phone/VPN integration.
+
+## Real-server integration evidence
+
+The maintainer supplied an audio recording for verification without waiting for
+manual app-side testing. A temporary canonical WAV conversion passed through the
+compiled production client and routing helper to the actual private CUDA server,
+with default TLS trust and hostname checks enabled. It returned nonempty text.
+A separate digital-silence request returned an empty remote transcript without
+fallback. A controlled local connection refusal selected local fallback before
+any audio POST. No private recording or transcript was retained in test output;
+only content-free timing/count evidence remains outside Git.
+
+These checks verify the real client/server contract from the VM. They do not
+measure phone-network latency, transcription accuracy against a reference,
+rendered bubble appearance or Android editor insertion. The phone procedure
+above remains available for those broader device checks.
