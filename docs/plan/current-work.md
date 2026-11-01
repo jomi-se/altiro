@@ -23,13 +23,24 @@ See [decision 0025](../decisions/0025-remote-first-local-fallback.md) and
 [phone checks](../testing/remote-first.md). Verification passes: 99 JVM tests,
 54 Python checks, Android app/fixture builds, lint, instrumentation APK
 compilation, runtime notices, installability and native 16 KiB alignment.
-Independent source review fixes are included; no phone end-to-end networking,
-rendered bubble or real-server Android acceptance is claimed. LLM cleanup and
+Independent source review fixes are included; no rendered phone bubble or
+real-server Android runtime acceptance is claimed. LLM cleanup and
 a hard server native-job watchdog remain outside this increment.
 The additional five host wire tests use actual loopback TLS sockets for framing,
 trust/hostname rejection, redirect/replay refusal and late-response cancellation.
 They run without changing production code, dependencies or the verified Android
 APK; scripted server responses are not evidence of actual GPU execution.
+
+The maintainer supplied a recording explicitly for testing without waiting on
+an app-side test. The compiled production client successfully sent its canonical
+WAV conversion over HTTPS to the actual private large-v3-turbo/CUDA server and
+received nonempty text. A separate silence request returned a valid empty remote
+result; a controlled unavailable endpoint selected local fallback with zero POSTs.
+Default TLS verification stayed enabled, no bearer key was needed and no remote
+POST was retried. Only content-free measurements were retained outside Git.
+This verifies the client/server integration from the VM; phone networking,
+rendered route states and broader device gates remain separate follow-ups.
+The endpoint and HTTPS port are per-device settings, with no private default.
 
 ## Android preview
 Two local UI corrections are implemented: pending-result Copy notices derive
