@@ -1,0 +1,26 @@
+#version 450
+// One independent symmetric dynamic F32 scale per 32 activation values.
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Input { float source[]; };
+struct Block { uint q[8]; float scale; };
+layout(binding=1,std430) writeonly buffer Output { Block packed[]; };
+layout(push_constant) uniform Shape { uint m; uint n; uint k; } p;
+void main() {
+    uint i=gl_GlobalInvocationID.x,blocks=p.k/32;
+    if(i>=((p.n+3)/4)*4*blocks) return;
+    uint col=(i/(4*blocks))*4+i%4,block=(i/4)%blocks;
+    float maximum=0;
+    if(col<p.n) for(uint j=0;j<32;j++) maximum=max(maximum,abs(source[col*p.k+block*32+j]));
+    float scale=maximum/127.0;
+    packed[i].scale=scale;
+    for(uint j=0;j<8;j++) {
+        uint word=0;
+        for(uint lane=0;lane<4;lane++) {
+            float value=(col<p.n && scale>0)?source[col*p.k+block*32+j*4+lane]/scale:0;
+            int quantized=int(sign(value)*floor(abs(value)+0.5));
+            quantized=clamp(quantized,-127,127);
+            word|=(uint(quantized)&255u)<<(lane*8);
+        }
+        packed[i].q[j]=word;
+    }
+}

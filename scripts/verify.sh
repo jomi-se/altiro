@@ -4,6 +4,7 @@ repo_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 cd "$repo_root"
 python3 scripts/check-repository.py
 python3 scripts/check-model-manifest.py
+python3 -m unittest discover -s scripts/tests -p 'test_*.py'
 case "${1:-}" in
   --docs-only) exit 0 ;;
   --core-only)
@@ -13,6 +14,9 @@ case "${1:-}" in
     ;;
   --) shift ;;
 esac
+# Deliverable debug APKs must install through Android's ordinary package installer,
+# including when a caller narrows native compilation with an IDE ABI property.
+set -- "$@" -Pandroid.injected.testOnly=false
 # Format before compilation so parallel Gradle tasks never race source edits.
 ./gradlew --no-daemon spotlessApply "$@"
 exec ./gradlew --no-daemon :core:test :network:test checkNativePages checkRuntimeNotices \

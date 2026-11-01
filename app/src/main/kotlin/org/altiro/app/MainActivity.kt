@@ -18,7 +18,6 @@ import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
@@ -177,6 +176,13 @@ class MainActivity : ComponentActivity() {
                                                 )
                                         )
                                     },
+                                    { first ->
+                                        launchComparison(
+                                            "compare-precision-backends",
+                                            "gpu-first",
+                                            first,
+                                        )
+                                    },
                                 )
                             }
                         }
@@ -332,7 +338,7 @@ internal fun HomeContent(
                         Spacer(Modifier.width(8.dp))
                         Text("Download · ${(selected.spec.bytes+500_000)/1_000_000} MB")
                     }
-                else TextButton(onClick = models) { Text("Import Chilean model") }
+                else TextButton(onClick = models) { Text("Import model") }
             }
         }
     }
@@ -386,7 +392,7 @@ internal fun HomeContent(
             Text(text, style = MaterialTheme.typography.bodyLarge)
             Text(
                 if (session.attemptConsumed) "Insertion attempted. Check your editor."
-                else "Return to your editor to insert, or copy here.",
+                else session.message ?: "Text retained here.",
                 style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -398,17 +404,6 @@ internal fun HomeContent(
                 TextButton(onClick = controller::discard) { Text("Clear") }
             }
         }
-    HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
-    Row(
-        Modifier.fillMaxWidth().clickable(onClick = models).padding(vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        AltiroIcon(Glyph.MODEL)
-        Text("Chilean Small", modifier = Modifier.weight(1f))
-        Text("Experimental", style = MaterialTheme.typography.labelSmall)
-        AltiroIcon(Glyph.ARROW)
-    }
     if (connected)
         Text(
             "The floating mic follows your editor.",
@@ -514,6 +509,11 @@ internal fun MicrophoneDial(
 
 @Composable
 internal fun LanguageControls(controller: DictationController) {
+    val selected by controller.models.selected.collectAsState()
+    if (selected.engine == org.altiro.core.RecognitionEngine.TRANSCRIBEPSY) {
+        Text("Auto · EN, ES, FR +5", style = MaterialTheme.typography.labelLarge)
+        return
+    }
     val language by controller.language.collectAsState()
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
@@ -646,7 +646,7 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
             Modifier.fillMaxWidth()
                 .selectable(
                     profile.spec.id == selected.spec.id,
-                    enabled = available,
+                    enabled = available && controller.models.supported(profile),
                     role = Role.RadioButton,
                 ) {
                     controller.selectModel(profile.spec.id)
@@ -655,7 +655,11 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            RadioButton(profile.spec.id == selected.spec.id, onClick = null, enabled = available)
+            RadioButton(
+                profile.spec.id == selected.spec.id,
+                onClick = null,
+                enabled = available && controller.models.supported(profile),
+            )
             Column(Modifier.weight(1f)) {
                 Text(profile.name, style = MaterialTheme.typography.titleMedium)
                 Text(
@@ -667,7 +671,7 @@ private fun ModelsContent(controller: DictationController, importModel: (String)
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
     }
     var info by rememberSaveable { mutableStateOf(false) }
-    if (selected.experimental && selected.spec.id !in installed)
+    if (selected.experimental && selected.download == null && selected.spec.id !in installed)
         Text("Experimental · verified file import only", style = MaterialTheme.typography.bodySmall)
     Text(Uri.parse(selected.sourceUrl).host.orEmpty(), style = MaterialTheme.typography.bodySmall)
     if (selected.download != null && selected.spec.id !in installed)
@@ -722,7 +726,10 @@ internal fun ResultControls(controller: DictationController) {
             "${(diagnostic?.processingMillis ?: 0) / 1000}s after Stop",
             style = MaterialTheme.typography.bodySmall,
         )
-        if (diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE)
+        if (
+            diagnostic?.steps?.lastOrNull()?.stage == org.altiro.core.RecognitionStage.INFERENCE &&
+                diagnostic?.engines?.all { it == org.altiro.core.RecognitionEngine.WHISPER } == true
+        )
             LinearProgressIndicator(progress = { progress / 100f })
         else LinearProgressIndicator()
         OutlinedButton(onClick = controller::cancel) { Text("Cancel") }

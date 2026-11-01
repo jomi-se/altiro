@@ -18,6 +18,261 @@ increment. LLM cleanup and a hard native-job watchdog are not installed.
 Existing phone acceptance gates below are unchanged.
 
 ## Android preview
+Two local UI corrections are implemented: pending-result Copy notices derive
+their 48 dp minimum height from the effective action, and an already-open
+Termux paste confirmation honors the settings lock with a fresh busy-state
+check before changing preferences. See [issue 0008](../issues/0008-pending-copy-touch-target.md)
+and [issue 0009](../issues/0009-termux-confirmation-settings-lock.md).
+Independent source review, Kotlin formatting, repository/model/Python checks
+and core/network JVM tests pass. Android compilation/lint still need an Android
+SDK. Rendered touch-target and dialog/overlay interaction checks on a phone
+remain pending.
+
+Version **0.6.9-opencl-int8** implements the owner-authorized next GPU
+campaign with Astra: actual pinned Arm OpenCL kernels and a scale-preserving
+signed-integer Vulkan path. The per-model schedule excludes unsupported FP16
+INT8 cases and retains matched controls and content-free diagnostics. See
+[decision 0024](../decisions/0024-opencl-and-integer-gpu-experiments.md) and the
+[phone procedure](../testing/opencl-int8.md). Host verification passes: 74 JVM
+tests, 54 Python checks, native layout and fake-driver lifecycle checks, and
+host-JNI dispatch/cancellation smoke checks. Android app/fixture builds, lint,
+instrumentation APK compilation, notices, installability and 16 KiB alignment
+checks pass. The [completed phone campaign](../research/mali-kernel-hunt.md#completed-069-opencl-and-int8-campaign)
+passes 27/27 cases, including all 24 ACL and 12 INT8 shape records. INT8 improves
+both large matrix families by 1.23–2.04× against matched Q8 controls, including
+per-call quantization, with 0.329–0.437% floating-reference output error. ACL is
+mixed and contraction loses. These synthetic results motivate a selective
+full-encoder experiment, not a measured model-level gain. Thermal/baseline drift
+limits generalization; new-kernel cancellation and transcription-quality gates
+remain open. Everyday recognition defaults remain unchanged.
+
+Version **0.6.8-packed-gpu** implements the next opt-in **Packed GPU**
+experiment: original register-blocked Vulkan matrix kernels, complete GGML
+controls, fixed/recording-derived shapes, independent products and ordinary-app
+OpenCL/Vulkan capability probes. See [decision 0023](../decisions/0023-packed-gpu-experiments.md)
+and the [phone procedure](../testing/packed-gpu.md). Host verification passes: 73 JVM tests, 40 Python checks, native packing/output
+ownership and fake OpenCL lifecycle tests, plus actual host-JNI capability
+dispatch/cancellation and JSON-schema checks. Android app/fixture builds, lint,
+instrumentation APK compilation, notices, installability and 16 KiB alignment
+checks pass. The signing identity and unchanged Whisper library match the
+previous verified APK. The phone campaign below verifies the exercised paths;
+broad stability and speech quality remain open. This does not include an ACL
+backend or change everyday recognition defaults.
+
+The **0.6.8 phone campaign completed 26/26 cases** on one 18.48-second recording:
+32 packed shape records pass numerical/placement checks, with all GPU timestamps
+available. The original packed expansion reduces matched warm complete-call
+time by 11–31% across single-product shapes, while contraction increases it by
+16–55%; no whole-encoder packed gain has been measured. The app successfully
+executes its OpenCL FP32 probe, and Vulkan reports accelerated signed packed
+8-bit dot products. Actual ACL and scale-correct integer kernels are now viable
+experiments, not measured wins. See the
+[completed campaign analysis](../research/mali-kernel-hunt.md#completed-068-packed-gpu-campaign).
+CPU drift and NONE–LIGHT thermal status qualify comparisons. Defaults remain
+unchanged.
+
+A fresh independent Astra web/source review after the GPU tuning campaign finds
+credible untested implementation leads, especially Arm's G710-specific packed
+GEMM family, exact device capability/counter evidence and verified Fabric graph
+deltas. It does not establish an architectural CPU-only limit or promise a GPU
+speedup. The [reassessment](../research/transcribepsy-gpu-reassessment.md) records
+immutable source pins, arithmetic estimates, ranked bounded experiments and
+stop criteria. Research only; no backend migration or new runtime defaults.
+
+Version **0.6.7-encoder-tuning** implements the authorized opt-in follow-up to
+source review: blocking fence waits, a 256-thread 64×64 scalar tile, selective
+split-K two/four and dense bias/SiLU epilogues. The separate **GPU tuning** campaign
+keeps F32 GPU and CPU controls, actual-length focused shapes, independent route
+counters, boundary GPU timestamps and double/unfused numerical checks. See
+[decision 0022](../decisions/0022-source-guided-encoder-tuning.md) and the
+[phone procedure](../testing/encoder-tuning.md). Host checks pass: 72 JVM tests,
+31 Python checks and production-JNI focused
+CPU execution for both formats (16 shapes, 96 reported graph calls), including
+full boundary references and cancellation. Both public-speech format checks and
+ordinary cancellation pass. The dense fusion guard fixture checks consumers,
+views, outputs and rounding/reduction constraints. Android app/fixture builds,
+lint, instrumentation APK compilation, installability, runtime notices and 16 KiB
+packaging checks pass. The APK preserves its signing identity and the unchanged
+Whisper library. The following phone campaign confirms execution and bounded
+numerical checks; speech quality and ordinary product acceptance remain open.
+Ordinary recognition defaults and insertion behavior are unchanged.
+
+The 0.6.7 phone campaign completed **42/42 cases** on one 16.04-second clip:
+112 focused shapes and 672 reported graph calls pass the route/finite/numerical
+screen, all boundary timestamps are present, and fusion checks match complete
+unfused GPU outputs exactly. Blocking waits reduce full-encoder process CPU work
+about 15–16 times without reducing wall time. The 256-thread tile is slower;
+split-K is near flat and FP16 bias+SiLU fusion shows a roughly 2.2% candidate
+gain against stable F32 controls. Q8 CPU-reference feature error remains above
+the provisional full-encoder screen. CPU baselines drift and thermal status
+reaches LIGHT; no ordinary defaults change. See the
+[completed campaign analysis](../research/mali-kernel-hunt.md#completed-067-gpu-tuning-campaign).
+
+Version **0.6.6-kernel-fixes** corrects two defects exposed by the first live
+Q8 Kernel hunt campaign: GPU synthetic tests excluded integrated Vulkan
+devices, and forced-small scalar tiles had invalid logical-warp geometry on
+subgroup-16 devices. See [defect 0006](../issues/0006-kernel-hunt-gpu-selection-and-small-tiles.md).
+The executable host regression checks explicit backend selection/failure and
+unique, bounded ownership of every output cell for four subgroup sizes.
+Host verification passes: 71 JVM tests, 25 Python checks, Android app/fixture
+builds and lint, instrumentation APK compilation, installability, notices and
+16 KiB packaging. Production-JNI CPU checks cover 64 synthetic shapes (384
+reported graph calls), both speech formats and cancellation. TranscribePsy
+was rebuilt for Android; the unchanged Whisper library matches the prior
+verified APK byte for byte. The following phone campaign accepts the two
+specific harness defects; model-quality acceptance remains separate.
+Everyday dictation settings and the opt-in relay are unchanged. The receiver
+serves its current APK only at the generic download route, avoiding stale
+version-specific aliases.
+
+The 0.6.6 live phone campaign completed **48/48 cases** on one 11.56-second
+recording, with both formats and profiling. All **640 synthetic shapes** pass
+the finite/1% RMS screen, including 576 GPU shapes; there are 3,840 reported
+synthetic graph calls. Forced-small full-encoder features now match stock GPU
+numerics, including finite small-F32 output. Defect 0006 is accepted on hardware.
+Warm encoder medians are 0.923 s for Q8/CPU two threads, 1.815 s for FP16/CPU
+two threads, and roughly 1.45–1.49 s for stock GPU. These exclude setup/decoder.
+Global tile overrides do not provide a large win. The profiler attributes
+80% of encoder wall time to matrix multiplication, with two shape families
+accounting for about 47%. See the [completed campaign analysis](../research/mali-kernel-hunt.md#completed-066-phone-campaign).
+
+Source review identifies explicit busy-spinning for small graphs, mat-vec-only
+bias fusion, and an unpopulated Mali core-count gate that disables automatic
+split-K. Next investigation: blocking waits plus boundary timestamps, a
+256-thread 64×64 specialization that preserves reuse, and selective split-K
+at actual encoder widths. Dense-GEMM epilogues are a separate bounded candidate.
+See the [source-guided candidates](../research/mali-kernel-hunt.md#source-guided-optimization-candidates).
+These are research proposals; no new runtime defaults are applied. Ordinary
+TranscribePsy still uses four CPU threads; a controlled two-thread product path
+is the immediate CPU candidate. CPU baselines drift and the relay was enabled; repeat
+close timing rankings disconnected. FP16/F32 reduces feature error to 0.121%;
+Q8's GPU feature difference remains above the provisional full-encoder screen.
+Neither numerical screens nor this encoder-only campaign establish dictation
+quality or everyday end-to-end latency. Earlier invalid small-tile offline
+compiler results remain withdrawn pending regeneration.
+
+The 0.6.5 live relay is now confirmed on the phone: all 23 planned Q8 case
+records arrived, including the final `FINISHED_WITH_FAILURES` snapshot.
+Thirteen cases finished, ten failed; all nine GPU synthetic cases failed
+before producing shape measurements. Full-encoder GPU execution worked.
+Forced-small features were corrupt, including nonfinite F32 output.
+Warm GPU encoder medians were about 1.42–1.45 seconds; two CPU threads reached
+0.825 seconds, with drifting four-thread baselines. Rectangular F32 candidates
+did not improve timings in this run. These observations do not establish a
+stable ranking or speech quality. See [the investigation](../research/mali-kernel-hunt.md).
+
+The 0.6.3 physical-phone Full run completed all 40 cases and 160 samples on one
+11.08-second recording. Disk-seeded pipeline caching reduced FP16 first-encoder
+time from 4.445 to 1.542 seconds, and Q8 from 4.754 to 1.818 seconds, in fresh
+workers. The files were approximately 181 KB; nested shader setup fell from
+seconds to 28–44 ms. FP16 weights with F32 accumulation reduced relative RMS
+feature differences from 1.24% to 0.137% at roughly 4% warm-time cost. Q8 CPU
+two-thread encoding remains competitive, but CPU baselines drifted during the
+long run. See the [Full measurement analysis](../research/transcribepsy-performance-investigation.md#full-encoder-lab-phone-follow-up-063).
+The phase-capacity defect is accepted on hardware. Next candidates are persistent
+pipeline caching and preparation during recording, with FP16/F32 accumulation
+for GPU. Their combined implementation, end-to-end latency, resource lifecycle
+and transcription quality still need validation; everyday defaults have not changed.
+
+Version 0.6.3 fixes the lab's [diagnostic phase budget](../issues/0005-encoder-lab-phase-capacity.md),
+with regression coverage of all 40 Full-suite worker lifecycles and elapsed
+timings. The 0.6.2 phone Quick report establishes real GPU execution: 13/16 cases
+completed; the last three hit the ordinary 64-phase trace limit before worker
+startup. The lab now explicitly allows 1,024 phases; ordinary sessions keep 64.
+The following Full report confirms the corrected long suite completes. On the same
+7.52-second clip, warm stock FP16 GPU encoding reached 0.834 seconds versus
+1.291 seconds CPU, while the first GPU call spent 4.085 seconds in nested shader
+registration/compilation. See the [measurement analysis](../research/transcribepsy-performance-investigation.md#encoder-lab-phone-follow-up-062).
+
+Version 0.6.2 fixes [encoder-lab backend registration](../issues/0004-encoder-lab-backend-registration.md).
+The maintainer successfully installed the corrected 0.6.1 package and exported
+all 40 Full-suite case records. All 24 attempted GPU cases were rejected by the
+parent's diagnostic identity check before worker startup, not by GPU kernels;
+14 CPU cases completed and two cache-seed cases were skipped. The lab now
+registers both backends for each selected model and labels unclassified setup
+failures. Physical GPU execution is now confirmed by the following Quick report;
+numerical and transcription-quality acceptance remain pending.
+
+The first 0.6.1 APK was unintentionally marked `android:testOnly` by an
+ABI-targeted build, blocking normal tap-to-install updates despite a valid,
+unchanged signing certificate. Verification now explicitly disables that flag,
+checks the packaged binary manifest, and follows AGP's APK artifact providers
+instead of checking an older cached output. Subsequent phone execution confirms
+the corrected package installed; the report above concerns a separate harness bug.
+
+The maintainer's 0.6.0 Pixel 7 comparisons now establish successful CPU and
+Vulkan encoder/decoder execution for Q8 and FP16 in those trials, with no
+unsupported operations. CPU inference was approximately twice as fast as
+Vulkan for the paired short recordings; on one identical 31.88-second CPU
+recording Q8 took 5.44 seconds versus FP16's 7.77 seconds. These are individual
+phone observations, not controlled latency/quality or comprehensive resource
+acceptance. The [code-level performance investigation](../research/transcribepsy-performance-investigation.md)
+traces lazy pipeline compilation inside encoder timings, matrix types/shapes,
+direct versus lowered convolution, graph optimization and decoder dependencies.
+The encoder experiments now ship behind the opt-in [Encoder lab](../testing/encoder-lab.md)
+in 0.6.1 (decision [0019](../decisions/0019-encoder-lab.md)). One recording drives
+first/warm repetitions, CPU threads and Vulkan graph/kernel-routing variants,
+content-free partial reports and an optional timestamp profiler. The decoder
+lookahead proposal remains unimplemented. Everyday runtime defaults are unchanged.
+Host CPU execution checks cover both formats. Physical Quick GPU measurements
+and Full GPU measurements are now available; combined-path numerical/quality
+and product resource/latency acceptance remain pending.
+
+Version 0.6.0 adds the authorized [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md):
+ARM64 Q8 and true FP16 profiles, explicit CPU/Vulkan selection and a frozen
+four-pass same-recording comparison. Q8 has a pinned in-app download; FP16 is
+reproduced from original weights and imported after exact byte/hash verification.
+Existing Whisper selection and recording/insertion paths stay in place.
+Language detection is automatic for this engine; unsupported Whisper controls
+are hidden. Diagnostics include actual graph backends, unsupported operation
+type/shape, CPU features, completed graph counts and sampled process memory.
+Comparison retains the runner's fail-fast behavior; a failed pass prevents the
+remaining passes and discards comparison transcripts, while timings remain.
+See [the test procedure](../testing/transcribepsy.md). Host JNI smoke tests
+have exercised both precisions on CPU, a reference phrase, malformed audio and
+cancellation. Full host verification passes: 52 core and 8 acquisition tests, Android app/fixture
+builds and lint, instrumentation APK compilation, native page alignment and
+packaged notices. The later phone observations above supplement these host
+checks; controlled performance, cancellation/resource gates and multilingual
+quality acceptance remain open.
+
+The maintainer reports improved ordinary insertion before this experiment.
+The earlier comprehensive editor/resource gates remain open. Current work
+targets recognition speed without changing delivery authority.
+
+Version 0.5.9 removes Home's hardcoded “Chilean Small” shortcut, reported as a
+second model selector stuck on Chilean. The remaining capsule and Models radio
+picker share the saved selection. Diagnostics add `Selected model now` while
+preserving the recording trace's frozen `Models` identifier. Source tracing
+finds no model substitution between selection, verified catalog file and native
+load. Phone persistence/selection acceptance and the reported decline in Chilean
+idiom recognition remain unverified; see
+[defect 0003](../issues/0003-misleading-model-selection.md).
+Host verification passes: 50 core and 8 acquisition tests, Android builds/lint,
+native packaging/notices and instrumentation APK compilation. No device model
+selection or speech-quality test ran on this host.
+
+Immediate acceptance priority: basic automatic text delivery and bubble recovery.
+The maintainer reports false “Finish typing” blocks in empty ordinary fields
+and rejects 0.5.7's removal of bubble Copy. Version 0.5.8 selects ordinary paste
+at the cursor, without waiting for composition callbacks or requiring an empty
+field. It uses the freshly focused node's advertised paste action when available,
+otherwise the live input connection's public paste context action, one attempt
+only. Changes after destination capture still invalidate delivery. Copy is
+available directly on the bubble after blocked and unconfirmed results;
+successful Copy releases the retained session and returns to the microphone.
+See [decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md) and
+[the active defect](../issues/0002-overlay-visibility-and-recovery.md).
+Host verification passes: 50 core and 8 acquisition tests, Android application
+and fixture builds/lint, native packaging/notices, and instrumentation APK
+compilation. The two real-editor paste fixtures are compiled, not executed.
+Signing identity is preserved. Phone delivery/appearance remain pending.
+Source review identified hidden-app/no-input visibility and late callback
+knowledge changes; the follow-up patch preserves hide preferences, extends
+no-input recovery only for blocked results and excludes the callback-arrived
+bit from paste authority while retaining real range changes. Follow-up core
+tests, application build/lint and instrumentation compilation pass, and the
+review confirms these corrections. Physical acceptance remains pending.
 
 Version 0.5.5 corrects the active-window-only editor lookup after the maintainer
 reports missing controls in ChatGPT, Termux and Reddit even after fresh setup.
@@ -37,7 +292,55 @@ Android debug assemblies/lint, native packaging/runtime notices and
 instrumentation APK compilation. The update retains the preview's signing
 identity. No device tests or frame-pacing measurements were executed here.
 
+Version 0.5.6 corrects bubble visibility independently of insertion identity.
+The reported missing surfaces are ChatGPT search/composer, Reddit search/comments,
+Twitter comments and Termux terminal. Started TEXT/RAW input in a positively
+matching, visible focused application window can show the ordinary mic with a
+connection or visible keyboard. A present contradictory node and password/lock/
+hidden/display gates still reject it. Mic startup and Hide/Restore use this
+recording host; insertion keeps its stricter identity and lifecycle checks.
+The maintainer rejected the proposed Copy-mode UI, which is removed. No added
+Copy button, label, clipboard behavior or recording delivery mode is shipped.
+See [decision 0015](../decisions/0015-recording-bubble-visibility.md) and
+[phone checks](../testing/interface-rewrite.md). A race is not confirmed; the
+persistent identity gate explains the observed absence. Keyboard and recording
+host facts are now exported to distinguish late metadata from insertion failure.
+Full host verification passes: 43 core and 8 acquisition tests, Android builds/
+lint, native packaging/notices and instrumentation APK compilation. A regression
+checks that a host token cannot gain automatic insertion when a real field appears.
+Physical compatibility remains pending; no device tests were executed. The update
+preserves the signing identity and native runtime.
+
+The 0.5.6 phone follow-up confirms Termux terminal mic visibility but unavailable
+insertion. ChatGPT still lacks the mic with its keyboard open. Repeated matching
+TEXT/connection/keyboard evidence is rejected by a fallback host's `focused=false`
+bit. At the maintainer's request, [upstream source research](../research/android-overlay-compatibility.md)
+now compares four pinned Android dictation implementations and Termux's typing/
+paste paths before more compatibility patches. Next: remove this recording-only
+focus veto while preserving strict insertion authority, add compact copied logs
+and complete file export, then capability-test terminal paste separately. No
+new implementation or device acceptance is claimed by this research increment.
+
 ## Productization direction
+
+Version 0.5.7 implements [automatic delivery and bubble controls](../decisions/0016-automatic-delivery-and-bubble-controls.md):
+connected TEXT identities use input-method epochs/window metadata when node
+focus is incomplete; ordinary selection/composition and stale-token gates stay
+in force. A positively focused Termux terminal has a distinct paste route using
+its documented shortcut after one-time Settings confirmation that Termux's
+hardware shortcuts are enabled, with line breaks flattened and controls stripped.
+Delivery is selected before one consumed attempt; no uncertain retry is added.
+The mic is a larger 76 dp target, language opens an explicit menu, and the old
+Copy/Insert/Discard result cluster is removed. The overlay measures before
+resizing at its dock. Console Copy is bounded; Share exports a complete private
+diagnostic file. Build verification and physical checks are tracked separately;
+the [updated phone procedure](../testing/interface-rewrite.md) remains pending.
+Full host verification passes: 48 core and 8 acquisition tests, Android builds/
+lint, native packaging/runtime notices and instrumentation APK compilation.
+An independent source review resolved terminal classification/shortcut gating,
+clipboard ownership, unrelated window invalidation and language-menu position.
+The file-provider instrumentation regression is compiled, not executed here.
+The signing identity is preserved; hardware compatibility remains unverified.
 
 The maintainer has rejected the tested floating control and the layered
 configuration/console navigation. A chat-field bubble is missing, and restoring
@@ -313,7 +616,8 @@ preservation were not supplied. The full accuracy and lifecycle gates remain
 unverified.
 
 Explicit in-app stock-model download or file-picker import acquires the model.
-The app has Internet permission for acquisition only. Both paths enforce byte size/SHA-256, bounded
+The app uses Internet permission for acquisition and the separately enabled
+debug lab relay (decision 0021). Both acquisition paths enforce byte size/SHA-256, bounded
 copy, cancellation, and atomic installation. Failed imports preserve a valid
 previous model. A model is reverified before native load. Replacement/deletion
 and new inference stay blocked until native work finishes.

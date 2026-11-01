@@ -1,0 +1,30 @@
+#version 450
+// Original register-blocked outer-product Vulkan kernel. This tests a different
+// packed dataflow from GGML shared-memory tiles; it is not an ACL port.
+// Each invocation computes four output rows x four columns with F32 FMA.
+layout(local_size_x=8,local_size_y=8) in;
+layout(binding=0,std430) readonly buffer Weights { uvec2 weights[]; };
+layout(binding=1,std430) readonly buffer Activations { vec4 activations[]; };
+layout(binding=2,std430) writeonly buffer Output { float output_data[]; };
+layout(push_constant) uniform Shape { uint m; uint n; uint k; } p;
+void main() {
+    uint rb=gl_GlobalInvocationID.x, cb=gl_GlobalInvocationID.y;
+    uint row=rb*4,col=cb*4;
+    if(row>=p.m||col>=p.n) return;
+    vec4 s0=vec4(0),s1=vec4(0),s2=vec4(0),s3=vec4(0);
+    for(uint kk=0;kk<p.k;kk++) {
+        uvec2 bits=weights[rb*p.k+kk];
+        vec4 w=vec4(unpackHalf2x16(bits.x),unpackHalf2x16(bits.y));
+        vec4 x=activations[cb*p.k+kk];
+        s0=fma(w,vec4(x.x),s0);
+        s1=fma(w,vec4(x.y),s1);
+        s2=fma(w,vec4(x.z),s2);
+        s3=fma(w,vec4(x.w),s3);
+    }
+    for(uint j=0;j<4;j++) if(row+j<p.m) {
+        output_data[col*p.m+row+j]=s0[j];
+        if(col+1<p.n) output_data[(col+1)*p.m+row+j]=s1[j];
+        if(col+2<p.n) output_data[(col+2)*p.m+row+j]=s2[j];
+        if(col+3<p.n) output_data[(col+3)*p.m+row+j]=s3[j];
+    }
+}

@@ -9,7 +9,7 @@ subscription, trial expiry, or business word quota.
 
 **Status:** everyday-use preview. A focused native home screen, compact floating
 mic/language overlay, model library and diagnostic console wrap the pinned local
-Whisper runtime. Stock models support explicit in-app download and verified
+Whisper runtime and an experimental ARM64 TranscribePsy backend. Stock models support explicit in-app download and verified
 file import; the two experimental Chilean conversions currently use import.
 Phone smoke results exist, but full editor/resource gates and the redesigned
 interface's physical-device acceptance remain open.
@@ -33,6 +33,7 @@ interface's physical-device acceptance remain open.
 - Android 13/API 33 minimum; native Kotlin and Compose.
 - A small accessibility overlay; preserve the selected keyboard.
 - Local multilingual recognition through a pinned `whisper.cpp` integration.
+- Experimental TranscribePsy Q8/FP16 with explicit CPU/Vulkan comparison.
 - Evaluate English, French, and Spanish, including Chilean conversational speech.
 - Explicit Insert and Copy when the original editor is no longer eligible.
 - Optional, independently configured remote recognition and cleanup later.
@@ -53,14 +54,23 @@ On **Home**, tap **Download** to install the selected stock model once. **Models
 shows each model's size, installation state and source, with file import retained
 for offline transfer. Small Q8 is 264 MB; Small FP16 is 488 MB; multilingual Base
 is 148 MB. Downloads use pinned HTTPS sources and exact size/SHA-256 checks before
-atomic installation. Downloading is explicit; recording and recognition never
-make network requests. Test airplane mode after installation.
+atomic installation. Downloading is explicit; everyday recording and recognition
+stay local. Debug builds also offer a separately enabled
+[live lab relay](docs/decisions/0021-live-lab-relay.md) for content-free benchmark
+results. Test airplane mode after installation.
 
 The experimental Chilean Small Q8/FP16 variants are visible in Models. Prepare
 or obtain the exact converted file, select its profile and choose **Import file**.
 The original training repository has no compatible downloadable binary, so the
 app does not offer a misleading one-tap download. See
 [model preparation](docs/development.md#prepare-and-compare-small-models).
+
+**TranscribePsy** is an additional experimental choice in Models on ARM64 phones.
+Q8 downloads in-app (305 MB); FP16 uses a verified file import (570 MB). Language
+is automatic for its eight supported languages, including EN/ES/FR. Console's
+four-way comparison measures both formats on CPU and Vulkan using one recording.
+A failed pass stops the comparison; it never retries another processor.
+See [setup, model preparation and phone checks](docs/testing/transcribepsy.md).
 
 Keep your keyboard and tap the floating mic in your text field. Tap its language
 control to switch EN/ES before recording; Auto and French are available in the

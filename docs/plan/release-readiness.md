@@ -29,9 +29,16 @@ different evidence. A generated concept is not a native screen capture.
 | Portable public repository and security | Initial source public; ignored local skills/artifacts; pinned read-only CI, grouped Dependabot and secret scans | Operator push of newer commits; corrected Android CI execution and required checks green |
 | Runtime, model and dependency provenance | Pinned runtime/catalog and conversion metadata; reviewed runtime-input inventory, Apache/BSD/attribution assets verified inside APK; debug/release graphs match; native libraries pass 16 KiB packaging checks | API 33/37 execution including 16 KiB image; signed-artifact/native/model redistribution qualification |
 
+Recording-host visibility is separate from insertion authority in 0.5.6. The
+ordinary mic can appear for matching started TEXT/RAW input without an editable
+accessibility node. The maintainer rejected the proposed Copy-mode interface;
+it is removed. ChatGPT search/composer, Reddit search/comments, Twitter comments
+and Termux terminal/input-box behavior still need physical confirmation.
+Automatic insertion into unavailable editors is not claimed.
+
 ## Verified host baseline
 
-The 0.5.5 debug artifact passed 38 core and 8 acquisition JVM tests, Android
+The 0.5.6 debug artifact passed 43 core and 8 acquisition JVM tests, Android
 assemblies, lint, native packaging, runtime notice graph/APK checks and
 instrumentation APK compilation. Production JNI checks on the unchanged 0.5.2
 native source used the real runtime and verified multilingual Base, including

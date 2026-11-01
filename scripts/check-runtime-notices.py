@@ -64,6 +64,18 @@ def main():
                 member = f"assets/licenses/{name}"
                 if member not in apk.namelist() or apk.read(member) != (ASSETS / name).read_bytes():
                     errors.append(f"Missing or changed packaged runtime notice: {name}")
+            psy_assets = ROOT / "inference-transcribepsy/src/main/assets"
+            preparation = json.loads((psy_assets / "transcribepsy-model-preparation.json").read_text())
+            for notice in preparation["licenseTexts"]:
+                name = notice["asset"]
+                if Path(name).name != name:
+                    errors.append("A TranscribePsy license path escapes its asset directory.")
+                    continue
+                expected = (psy_assets / "licenses" / name).read_bytes()
+                member = f"assets/licenses/{name}"
+                if (hashlib.sha256(expected).hexdigest() != notice["sha256"]
+                        or member not in apk.namelist() or apk.read(member) != expected):
+                    errors.append(f"Missing or changed packaged TranscribePsy notice: {name}")
 
     if errors:
         print("\n".join(errors), file=sys.stderr)

@@ -20,6 +20,7 @@ import org.altiro.core.EditorVisibilityDiagnostics
 import org.altiro.core.Phase
 import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
+import org.altiro.core.RecognitionEngine
 import org.altiro.core.RecognitionInput
 import org.altiro.core.RecognitionStage
 import org.altiro.core.RecognitionWindow
@@ -42,11 +43,13 @@ class DictationController(private val context: Context) {
     // Fixed content-free reason codes only; never editor names or identifiers.
     val overlayStatus = MutableStateFlow("DISCONNECTED")
     val lastEditorStatus = MutableStateFlow("NONE")
+    val deliveryStatus = MutableStateFlow("NONE")
     val editorVisibility = EditorVisibilityDiagnostics()
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     val models = ModelStore(context)
     val checkpoint = RuntimeCheckpoint(context)
     val recognition = LocalRecognition(context, checkpoint)
+    val encoderLab = EncoderLab(context)
     val progress = MutableStateFlow(0)
     val activeModelName = MutableStateFlow("")
     val lastRun = MutableStateFlow<List<TimedTranscript>>(emptyList())
@@ -57,9 +60,14 @@ class DictationController(private val context: Context) {
     private data class RunPlan(
         val inputs: List<RecognitionInput>,
         val language: String,
+        val labMode: Int = 0,
+        val labProfile: Boolean = false,
     )
 
     private var runPlan: RunPlan? = null
+    val encoderLabActive: Boolean
+        get() = runPlan?.labMode != null && runPlan?.labMode != 0
+
     val processingSeconds = MutableStateFlow(0)
     val language =
         MutableStateFlow(
@@ -111,7 +119,10 @@ class DictationController(private val context: Context) {
     fun isDisabled(packageName: String): Boolean = packageName in mutableHiddenApps.value
 
     fun disableCurrentApp() {
-        val packageName = editor.current.identity?.packageName ?: return
+        val packageName =
+            editor.current.identity?.packageName
+                ?: editor.current.recordingHost?.packageName
+                ?: return
         val disabled = mutableHiddenApps.value + packageName
         preferences.edit().putStringSet("disabled", disabled).apply()
         mutableHiddenApps.value = disabled
@@ -151,8 +162,23 @@ class DictationController(private val context: Context) {
         gpuFirst: Boolean = false,
         windowCompare: Boolean = false,
         dynamicFirst: Boolean = false,
+        precisionCompare: Boolean = false,
+        encoderLabMode: Int = 0,
+        encoderLabBoth: Boolean = false,
+        encoderLabProfile: Boolean = false,
     ): SessionId? {
         checkMain()
+        if (encoderLabMode !in 0..6) return null
+        if (
+            encoderLabMode != 0 &&
+                (!explicit ||
+                    compareIds != null ||
+                    gpuCompare ||
+                    windowCompare ||
+                    precisionCompare ||
+                    models.selected.value.engine != RecognitionEngine.TRANSCRIBEPSY)
+        )
+            return null
         val state = session.value
         if (state.busy || state.phase in setOf(Phase.READY, Phase.AWAITING_USER)) return null
         if (models.busy.value || recognition.busy.value) return null
@@ -165,13 +191,28 @@ class DictationController(private val context: Context) {
             return null
         if (gpuCompare && (!explicit || compareIds != null)) return null
         if (windowCompare && (!explicit || compareIds != null || gpuCompare)) return null
+        if (precisionCompare && (!explicit || compareIds != null || gpuCompare || windowCompare))
+            return null
+        if (windowCompare && models.selected.value.engine != RecognitionEngine.WHISPER) return null
         val profiles =
-            (compareIds ?: listOf(models.selected.value.spec.id)).map { id ->
-                models.profiles.firstOrNull { it.spec.id == id } ?: return null
-            }
-        if (profiles.any { it.spec.id !in models.installed.value }) return null
+            (if (precisionCompare || (encoderLabMode != 0 && encoderLabBoth)) models.precisionIds()
+                else compareIds ?: listOf(models.selected.value.spec.id))
+                .map { id ->
+                    models.profiles.firstOrNull { it.spec.id == id } ?: return null
+                }
+        if (profiles.any { it.spec.id !in models.installed.value || !models.supported(it) })
+            return null
+        if (profiles.map { it.engine }.distinct().size != 1) return null
         val inputs =
-            if (windowCompare) {
+            if (precisionCompare) {
+                val order =
+                    listOf(RecognitionBackend.CPU, RecognitionBackend.VULKAN).let {
+                        if (gpuFirst) it.reversed() else it
+                    }
+                profiles.flatMap { profile ->
+                    order.map { models.snapshot(profile).copy(backend = it) }
+                }
+            } else if (windowCompare) {
                 val order =
                     listOf(RecognitionWindow.FULL, RecognitionWindow.DYNAMIC).let {
                         if (dynamicFirst) it.reversed() else it
@@ -190,29 +231,56 @@ class DictationController(private val context: Context) {
             }
         val configuredInputs = inputs.map {
             it.copy(
-                vocabulary = vocabulary.value,
-                flashAttention = it.backend == RecognitionBackend.VULKAN && flashAttention.value,
+                vocabulary =
+                    if (it.engine == RecognitionEngine.WHISPER) vocabulary.value
+                    else Vocabulary.EMPTY,
+                flashAttention =
+                    it.engine == RecognitionEngine.WHISPER &&
+                        it.backend == RecognitionBackend.VULKAN &&
+                        flashAttention.value,
                 window =
-                    if (windowCompare) it.window
+                    if (it.engine == RecognitionEngine.TRANSCRIBEPSY) RecognitionWindow.NATIVE
+                    else if (windowCompare) it.window
                     else if (dynamicWindow.value) RecognitionWindow.DYNAMIC
                     else RecognitionWindow.FULL,
             )
         }
-        runPlan = RunPlan(configuredInputs, language.value)
-        comparing.value = compareIds != null || gpuCompare || windowCompare
+        runPlan =
+            RunPlan(
+                configuredInputs,
+                if (profiles.first().engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
+                else language.value,
+                encoderLabMode,
+                encoderLabProfile,
+            )
+        comparing.value =
+            encoderLabMode != 0 ||
+                compareIds != null ||
+                gpuCompare ||
+                windowCompare ||
+                precisionCompare
         lastRun.value = emptyList()
         activeModelName.value = profiles.first().name
         val id = SessionId(++generation)
+        deliveryStatus.value = "PENDING"
         diagnosticGeneration = id.value
         checkpoint.beginSession()
+        val diagnosticInputs =
+            if (encoderLabMode != 0)
+                org.altiro.core.EncoderExperiment.diagnosticInputs(configuredInputs)
+            else configuredInputs
         diagnostics.begin(
             runPlan!!.language,
-            inputs.map { it.spec.id },
+            diagnosticInputs.map { it.spec.id },
             comparing.value,
-            inputs.map { it.backend },
-            configuredInputs.map { it.flashAttention },
-            configuredInputs.map { it.window },
-            vocabularyTerms = configuredInputs.first().vocabulary.count,
+            diagnosticInputs.map { it.backend },
+            diagnosticInputs.map { it.flashAttention },
+            diagnosticInputs.map { it.window },
+            vocabularyTerms = diagnosticInputs.first().vocabulary.count,
+            engines = diagnosticInputs.map { it.engine },
+            maxPhases =
+                if (encoderLabMode != 0) org.altiro.core.EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY
+                else 64,
         )
         checkpoint.save(diagnostics.report.value)
         scope.launch {
@@ -271,12 +339,14 @@ class DictationController(private val context: Context) {
                 delay(1000)
                 if (session.value.id != id || session.value.phase != Phase.TRANSCRIBING) break
                 processingSeconds.value += 1
-                if (processingSeconds.value >= 600) {
+                if (processingSeconds.value >= if (encoderLabActive) 2400 else 600) {
                     recognition.cancel()
                     event(
                         SessionEvent.Fail(
                             id,
-                            "Recognition exceeded ten minutes. Try a shorter recording.",
+                            if (encoderLabActive)
+                                "Encoder lab reached its time limit. Partial results are in Console."
+                            else "Recognition exceeded ten minutes. Try a shorter recording.",
                         )
                     )
                     context.stopService(Intent(context, DictationRecordingService::class.java))
@@ -289,6 +359,45 @@ class DictationController(private val context: Context) {
             diagnostics.audioDuration(
                 ((audio.length() - 44).coerceAtLeast(0) / 32).coerceAtMost(300_000)
             )
+            if (plan.labMode != 0) {
+                recognition.benchmark(
+                    audio,
+                    plan.inputs,
+                    diagnostics,
+                    encoderLab,
+                    plan.labMode,
+                    plan.labProfile,
+                    { percent, case ->
+                        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                            progress.value = percent
+                            activeModelName.value = case
+                            onProgress(percent)
+                        }
+                    },
+                ) { result ->
+                    if (diagnosticGeneration == id.value)
+                        diagnostics.finish(
+                            if (diagnostics.report.value?.cancellationRequested == true)
+                                DiagnosticOutcome.CANCELLED
+                            else if (result.isFailure) DiagnosticOutcome.FAILED
+                            else DiagnosticOutcome.COMPLETED
+                        )
+                    if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                        if (result.isSuccess) {
+                            progress.value = 100
+                            event(SessionEvent.ComparisonComplete(id))
+                        } else
+                            event(
+                                SessionEvent.Fail(
+                                    id,
+                                    "Encoder lab stopped. Open Console for partial results.",
+                                )
+                            )
+                    }
+                    complete()
+                }
+                return
+            }
             recognition.transcribe(
                 audio,
                 plan.inputs,
@@ -340,18 +449,18 @@ class DictationController(private val context: Context) {
                             )
                         else -> {
                             event(SessionEvent.Result(id, text))
-                            val target = session.value.destination
-                            if (
-                                target != null &&
-                                    editor.blockReason(target) == null &&
-                                    insertion != null
-                            ) {
+                            if (session.value.destination != null && insertion != null) {
                                 insertion?.invoke()
                             } else {
                                 event(
                                     SessionEvent.AwaitUser(
                                         id,
-                                        "Text ready. Focus a field and tap Insert.",
+                                        if (
+                                            editor.current.identity == null &&
+                                                editor.current.recordingHost != null
+                                        )
+                                            "Not inserted · tap Copy"
+                                        else "Text ready in Altiro.",
                                     )
                                 )
                             }
@@ -413,7 +522,12 @@ class DictationController(private val context: Context) {
     fun selectModel(id: String) {
         if (session.value.busy || recognition.busy.value) return
         models.select(id)
+        refreshSettings?.invoke()
     }
+
+    fun recognitionLanguage(): String =
+        if (models.selected.value.engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
+        else language.value
 
     fun selectLanguage(value: String) {
         require(value in setOf("auto", "en", "fr", "es"))
@@ -451,6 +565,7 @@ class DictationController(private val context: Context) {
     fun clearDiagnostics() {
         if (session.value.busy || recognition.busy.value) return
         diagnostics.clear()
+        encoderLab.clear()
         editorVisibility.clear()
         lastEditorStatus.value = "NONE"
         checkpoint.clear()

@@ -8,6 +8,34 @@ import org.junit.Test
 
 class RecognitionDiagnosticsTest {
     @Test
+    fun largerPhaseBudgetIsBoundedAndDoesNotLeakIntoTheNextSession() {
+        val trace = RecognitionDiagnostics()
+        for (invalid in listOf(63, 1025)) {
+            assertThrows(IllegalArgumentException::class.java) {
+                trace.begin("auto", listOf("model-a"), false, maxPhases = invalid)
+            }
+        }
+        trace.begin("auto", listOf("model-a"), false, maxPhases = 1024)
+        repeat(100) {
+            trace.phase(
+                if (it % 2 == 0) RecognitionStage.WORKER_START else RecognitionStage.WORKER_STOP,
+                "model-a",
+            )
+        }
+        assertTrue(trace.report.value!!.steps.size > 64)
+        trace.begin("auto", listOf("model-a"), false)
+        assertThrows(IllegalStateException::class.java) {
+            repeat(100) {
+                trace.phase(
+                    if (it % 2 == 0) RecognitionStage.WORKER_START
+                    else RecognitionStage.WORKER_STOP,
+                    "model-a",
+                )
+            }
+        }
+    }
+
+    @Test
     fun liveAndFinalTimingsUseMonotonicTimeAndExcludeRecordingFromProcessing() {
         var now = 0L
         val trace = RecognitionDiagnostics { now }

@@ -34,7 +34,6 @@ class DictationOverlay(
     private val context: Context,
     private val controller: DictationController,
     private val record: () -> Unit,
-    private val insert: () -> Unit,
     private val openApp: () -> Unit,
 ) {
     private val windows = context.getSystemService(WindowManager::class.java)
@@ -112,7 +111,7 @@ class DictationOverlay(
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER
             minimumWidth = dp(48)
-            setPaddingRelative(dp(10), 0, dp(14), 0)
+            setPaddingRelative(dp(4), 0, dp(4), 0)
             isClickable = true
             isFocusable = false
             accessibilityDelegate =
@@ -126,19 +125,29 @@ class DictationOverlay(
                     }
                 }
             setOnClickListener {
-                controller.selectLanguage(if (controller.language.value == "en") "es" else "en")
+                toggleLanguageMenu()
             }
         }
     private val cancel =
         iconButton(Glyph.CLOSE, "Cancel and discard recording").apply {
-            setOnClickListener { controller.cancel() }
+            setOnClickListener {
+                if (controller.session.value.busy) controller.cancel() else controller.discard()
+            }
         }
     private val copy =
-        iconButton(Glyph.COPY, "Copy transcript").apply { setOnClickListener { controller.copy() } }
-    private val discard =
-        iconButton(Glyph.DELETE, "Discard transcript").apply {
-            setOnClickListener { controller.discard() }
+        iconButton(Glyph.COPY, "Copy transcript").apply {
+            setOnClickListener { copyResult() }
         }
+    private val languageMenu =
+        LinearLayout(context).apply {
+            orientation = LinearLayout.VERTICAL
+            visibility = View.GONE
+            setPadding(dp(4), dp(4), dp(4), dp(4))
+            elevation = dp(4).toFloat()
+        }
+    private var menuAnchorY: Int? = null
+    private val languageChoices =
+        listOf("auto" to "Auto", "en" to "English", "es" to "Español", "fr" to "Français")
     private val note =
         TextView(context).apply {
             textSize = 12f
@@ -158,7 +167,8 @@ class DictationOverlay(
                 WindowManager.LayoutParams.WRAP_CONTENT,
                 WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
                 WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
-                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL,
+                    WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL or
+                    WindowManager.LayoutParams.FLAG_WATCH_OUTSIDE_TOUCH,
                 PixelFormat.TRANSLUCENT,
             )
             .apply { gravity = Gravity.TOP or Gravity.LEFT }
@@ -230,17 +240,25 @@ class DictationOverlay(
 
     init {
         restorePosition()
-        capsule.addView(primary, LinearLayout.LayoutParams(dp(52), dp(52)))
+        capsule.addView(primary, LinearLayout.LayoutParams(dp(76), dp(64)))
         capsule.addView(separator, LinearLayout.LayoutParams(hairline(), dp(22)))
         slot.addView(language)
         slot.addView(phase, LinearLayout.LayoutParams(-2, -2).apply { topMargin = dp(2) })
-        capsule.addView(slot, LinearLayout.LayoutParams(-2, dp(52)))
-        row.addView(capsule, LinearLayout.LayoutParams(-2, dp(52)))
-        for (view in listOf(cancel, copy, discard)) row.addView(
+        capsule.addView(slot, LinearLayout.LayoutParams(dp(48), dp(64)))
+        row.addView(capsule, LinearLayout.LayoutParams(-2, dp(64)))
+        for (view in listOf(copy, cancel)) row.addView(
             view,
             LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginStart = dp(8) },
         )
-        layout.addView(row)
+        layout.addView(row, LinearLayout.LayoutParams(-2, -2))
+        layout.addView(
+            languageMenu,
+            LinearLayout.LayoutParams(dp(176), -2).apply {
+                marginStart = dp(8)
+                marginEnd = dp(8)
+                bottomMargin = dp(8)
+            },
+        )
         layout.addView(
             note,
             LinearLayout.LayoutParams(-2, -2).apply {
@@ -251,13 +269,13 @@ class DictationOverlay(
         primary.setOnClickListener {
             when (mode) {
                 Mode.RECORDING -> controller.stop()
-                Mode.PENDING -> insert()
+                Mode.PENDING -> copyResult()
                 Mode.NO_MODEL -> openApp()
                 Mode.IDLE -> record()
                 Mode.WORKING -> Unit
             }
         }
-        // No long-press handler on the primary action: slow Stop/Insert presses must click.
+        // No long-press handler on the primary action: slow Stop/Copy presses must click.
         primary.isLongClickable = false
         applyPalette()
         layout.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> clampAndUpdate() }
@@ -276,12 +294,10 @@ class DictationOverlay(
             undoPackage = null
             layout.removeCallbacks(clearNotice)
         }
-        val eligible =
-            editor.identity?.displayId == 0 &&
-                editor.connectionAvailable &&
-                !editor.password &&
-                !editor.blocked
+        val eligible = editor.recordingAvailable
+        if (busy || !eligible) dismissLanguageMenu()
         val pending = session.text != null && !session.attemptConsumed
+        val hasResult = session.text != null && !busy
         val now = SystemClock.uptimeMillis()
         val current = notice?.takeIf { now < it.until }
         // A just-hidden app keeps only the Undo note until it expires; nothing else is shown.
@@ -289,8 +305,10 @@ class DictationOverlay(
         if (
             editor.locked ||
                 editor.password ||
+                (editor.blocked && !undoing) ||
                 editor.identity?.displayId?.let { it != 0 } == true ||
-                (!busy && !eligible && !undoing)
+                editor.recordingHost?.displayId?.let { it != 0 } == true ||
+                (!busy && !eligible && !undoing && !pending)
         ) {
             close()
             return
@@ -317,7 +335,7 @@ class DictationOverlay(
             when (mode) {
                 Mode.RECORDING -> Face.STOP
                 Mode.WORKING -> Face.PROGRESS
-                Mode.PENDING -> Face.ARROW
+                Mode.PENDING -> Face.RECOVERY
                 Mode.NO_MODEL -> Face.DOWNLOAD
                 Mode.IDLE -> Face.MIC
             }
@@ -326,7 +344,7 @@ class DictationOverlay(
             when (mode) {
                 Mode.RECORDING,
                 Mode.NO_MODEL -> true
-                Mode.PENDING,
+                Mode.PENDING -> true
                 Mode.IDLE -> eligible
                 Mode.WORKING -> false
             }
@@ -334,7 +352,7 @@ class DictationOverlay(
         primary.contentDescription =
             when (mode) {
                 Mode.RECORDING -> "Stop and transcribe"
-                Mode.PENDING -> "Insert transcript in selected field"
+                Mode.PENDING -> "Copy transcript"
                 Mode.WORKING ->
                     if (modelBusy && !busy) "Preparing model" else "Microphone off; recognizing"
                 Mode.NO_MODEL -> "Install a model in Altiro"
@@ -344,18 +362,24 @@ class DictationOverlay(
             when (mode) {
                 Mode.RECORDING -> "Recording"
                 Mode.WORKING -> "Processing"
-                Mode.PENDING -> "Text ready; insertion needs your action"
+                Mode.PENDING -> "Text retained; automatic delivery was blocked"
                 Mode.NO_MODEL -> "No model installed"
                 Mode.IDLE -> "Ready"
             }
 
-        val code = controller.language.value
+        val code = controller.recognitionLanguage()
         language.text = if (code == "auto") "Auto" else code.uppercase(java.util.Locale.ROOT)
-        slot.isEnabled = mode == Mode.IDLE || mode == Mode.NO_MODEL
+        val automaticLanguage =
+            controller.models.selected.value.engine ==
+                org.altiro.core.RecognitionEngine.TRANSCRIBEPSY
+        slot.isEnabled = !automaticLanguage && (mode == Mode.IDLE || mode == Mode.NO_MODEL)
+        slot.layoutParams.width =
+            if (slot.isEnabled) dp(48) else LinearLayout.LayoutParams.WRAP_CONTENT
         language.alpha = if (slot.isEnabled) 1f else 0.5f
         slot.contentDescription = "Dictation language ${language.text}"
         slot.stateDescription =
-            if (slot.isEnabled) "Tap to switch English and Spanish"
+            if (automaticLanguage) "TranscribePsy detects language automatically"
+            else if (slot.isEnabled) "Choose dictation language"
             else "Language fixed for this recording"
 
         val recordingWarning = recording && session.elapsedSeconds >= Wav.MAX_SECONDS - 30
@@ -370,7 +394,7 @@ class DictationOverlay(
                 session.phase == Phase.TRANSCRIBING -> "Preparing"
                 busy -> "Finishing"
                 modelBusy -> "Preparing"
-                mode == Mode.PENDING -> "Insert"
+                mode == Mode.PENDING -> "Copy"
                 else -> ""
             }
         language.textSize = if (phaseText.isEmpty()) 14f else 12f
@@ -386,10 +410,14 @@ class DictationOverlay(
         phase.visibility = if (phaseText.isEmpty()) View.GONE else View.VISIBLE
         lastRecordingWarning = recordingWarning
 
-        cancel.visibility = if (busy) View.VISIBLE else View.GONE
-        cancel.contentDescription = if (recording) "Cancel and discard recording" else "Cancel"
-        copy.visibility = if (mode == Mode.PENDING && eligible) View.VISIBLE else View.GONE
-        discard.visibility = copy.visibility
+        copy.visibility = if (hasResult && !pending) View.VISIBLE else View.GONE
+        cancel.visibility = if (busy || pending) View.VISIBLE else View.GONE
+        cancel.contentDescription =
+            when {
+                pending -> "Discard transcript"
+                recording -> "Cancel and discard recording"
+                else -> "Cancel"
+            }
 
         val persistent =
             when {
@@ -404,8 +432,8 @@ class DictationOverlay(
         note.text = shown?.let { n -> n.action?.let { "${n.text} · $it" } ?: n.text }.orEmpty()
         note.contentDescription = note.text
         note.visibility = if (shown == null) View.GONE else View.VISIBLE
-        note.minHeight = dp(if (shown?.onTap != null) 48 else 32)
-        val onTap = shown?.onTap
+        val onTap = shown?.onTap ?: if (mode == Mode.PENDING) ::copyResult else null
+        note.minHeight = dp(if (onTap != null) 48 else 32)
         if (onTap != null) note.setOnClickListener { onTap() }
         else {
             note.setOnClickListener(null)
@@ -415,6 +443,7 @@ class DictationOverlay(
         material.busy = mode != Mode.IDLE || shown != null
         lastPhase = session.phase
         lastBusy = busy
+        updateLanguageSelection()
         primary.syncMotion()
         capsule.invalidate()
         primary.invalidate()
@@ -424,6 +453,7 @@ class DictationOverlay(
         params.flags =
             if (busy) flags or WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON
             else flags and WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON.inv()
+        val resized = fitWindow()
         if (!attached) {
             runCatching { windows.addView(layout, params) }
                 .onSuccess {
@@ -435,10 +465,130 @@ class DictationOverlay(
                 knownWindowId = layout.createAccessibilityNodeInfo().windowId.takeIf { it >= 0 }
                 clampAndUpdate()
             }
-        } else if (flags != params.flags) windows.updateViewLayout(layout, params)
+        } else if (resized || flags != params.flags) windows.updateViewLayout(layout, params)
         // Layout changes and IME appearance can move the safe bounds, but never animate window
         // size.
         layout.post { clampAndUpdate() }
+    }
+
+    private fun toggleLanguageMenu() {
+        if (!slot.isEnabled || !attached) return
+        if (languageMenu.visibility == View.VISIBLE) dismissLanguageMenu()
+        else {
+            menuAnchorY = params.y
+            languageMenu.removeAllViews()
+            for ((code, name) in languageChoices) {
+                val item =
+                    LinearLayout(context).apply {
+                        gravity = Gravity.CENTER_VERTICAL
+                        setPadding(dp(12), 0, dp(12), 0)
+                        background = touchBackground()
+                        isClickable = true
+                        isFocusable = false
+                        contentDescription = name
+                        setOnClickListener {
+                            dismissLanguageMenu()
+                            controller.selectLanguage(code)
+                            fitWindow()
+                            if (attached) windows.updateViewLayout(layout, params)
+                        }
+                    }
+                item.addView(
+                    TextView(context).apply {
+                        text = name
+                        textSize = 14f
+                        setTextColor(ink)
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    },
+                    LinearLayout.LayoutParams(0, -2, 1f),
+                )
+                item.addView(
+                    android.widget.ImageView(context).apply {
+                        setImageDrawable(GlyphDrawable(Glyph.CHECK, forest))
+                        tag = code
+                        importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+                    },
+                    LinearLayout.LayoutParams(dp(20), dp(20)),
+                )
+                languageMenu.addView(item, LinearLayout.LayoutParams(-1, dp(48)))
+            }
+            languageMenu.visibility = View.VISIBLE
+            val metrics = windows.currentWindowMetrics
+            val bottom =
+                metrics.bounds.height() -
+                    metrics.windowInsets
+                        .getInsets(WindowInsets.Type.systemBars() or WindowInsets.Type.ime())
+                        .bottom
+            languageMenu.measure(
+                View.MeasureSpec.makeMeasureSpec(dp(176), View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+            )
+            val menuHeight = languageMenu.measuredHeight + dp(8)
+            if (params.y + row.measuredHeight + menuHeight > bottom) {
+                val lp = languageMenu.layoutParams
+                layout.removeView(languageMenu)
+                layout.addView(languageMenu, 0, lp)
+                params.y -= menuHeight
+            }
+            updateLanguageSelection()
+        }
+        fitWindow()
+        if (attached) windows.updateViewLayout(layout, params)
+    }
+
+    private fun dismissLanguageMenu() {
+        if (languageMenu.visibility != View.VISIBLE) return
+        languageMenu.visibility = View.GONE
+        menuAnchorY?.let { params.y = it }
+        menuAnchorY = null
+        if (layout.indexOfChild(languageMenu) == 0) {
+            val lp = languageMenu.layoutParams
+            layout.removeView(languageMenu)
+            layout.addView(languageMenu, 1, lp)
+        }
+    }
+
+    private fun updateLanguageSelection() {
+        for (i in 0 until languageMenu.childCount) {
+            val item = languageMenu.getChildAt(i) as LinearLayout
+            val check = item.getChildAt(1)
+            item.isSelected = check.tag == controller.language.value
+            check.visibility = if (item.isSelected) View.VISIBLE else View.INVISIBLE
+            item.stateDescription = if (item.isSelected) "Selected" else ""
+        }
+    }
+
+    // Measure new controls BEFORE resizing/reanchoring the docked window. Using the old
+    // layout.width leaves an expanded row offscreen for one frame (or clipped by WM).
+    private fun fitWindow(): Boolean {
+        val previous = listOf(params.x, params.y, params.width, params.height)
+        val metrics = windows.currentWindowMetrics
+        val insets =
+            metrics.windowInsets.getInsets(
+                WindowInsets.Type.systemBars() or WindowInsets.Type.ime()
+            )
+        val maxWidth = (metrics.bounds.width() - insets.left - insets.right).coerceAtLeast(1)
+        val maxHeight = (metrics.bounds.height() - insets.top - insets.bottom).coerceAtLeast(1)
+        layout.measure(
+            View.MeasureSpec.makeMeasureSpec(maxWidth, View.MeasureSpec.AT_MOST),
+            View.MeasureSpec.makeMeasureSpec(maxHeight, View.MeasureSpec.AT_MOST),
+        )
+        params.width = layout.measuredWidth
+        params.height = layout.measuredHeight
+        if (!draggingWindow)
+            params.x =
+                if (dockRight) metrics.bounds.width() - params.width - insets.right else insets.left
+        params.x =
+            params.x.coerceIn(
+                insets.left,
+                maxOf(insets.left, metrics.bounds.width() - params.width - insets.right),
+            )
+        params.y =
+            params.y.coerceIn(
+                insets.top,
+                maxOf(insets.top, metrics.bounds.height() - params.height - insets.bottom),
+            )
+        return previous != listOf(params.x, params.y, params.width, params.height)
     }
 
     fun showMessage(text: String, action: String? = null, run: (() -> Unit)? = null) {
@@ -459,6 +609,7 @@ class DictationOverlay(
     }
 
     fun close() {
+        dismissLanguageMenu()
         hideTarget()
         primary.syncMotion(force = false)
         layout.removeCallbacks(rest)
@@ -473,6 +624,7 @@ class DictationOverlay(
     }
 
     fun reposition() {
+        dismissLanguageMenu()
         if (paletteNight != dark) {
             paletteNight = dark
             applyPalette()
@@ -487,7 +639,10 @@ class DictationOverlay(
 
     /** Explicit hide for the current app with a short Undo; never revives a destination token. */
     private fun hideHere() {
-        val packageName = controller.editor.current.identity?.packageName ?: return
+        val packageName =
+            controller.editor.current.identity?.packageName
+                ?: controller.editor.current.recordingHost?.packageName
+                ?: return
         if (!hideAllowed) return
         // Set the Undo note first: disabling refreshes the editor and renders synchronously.
         notice =
@@ -562,6 +717,19 @@ class DictationOverlay(
     // Own gestures at the window root so disabled microphone/language controls remain draggable.
     // Child views retain their real disabled semantics and receive normal taps below the slop.
     private fun dispatchDrag(event: MotionEvent, dispatch: (MotionEvent) -> Boolean): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_OUTSIDE) {
+            if (languageMenu.visibility != View.VISIBLE) return true
+            dismissLanguageMenu()
+            fitWindow()
+            if (attached) windows.updateViewLayout(layout, params)
+            return true
+        }
+        if (
+            languageMenu.visibility == View.VISIBLE &&
+                event.y >= languageMenu.top &&
+                event.y < languageMenu.bottom
+        )
+            return dispatch(event)
         when (event.actionMasked) {
             MotionEvent.ACTION_DOWN -> {
                 wake()
@@ -580,6 +748,8 @@ class DictationOverlay(
                 val deltaX = event.getRawX(index) - downX
                 val deltaY = event.getRawY(index) - downY
                 if (!dragging && kotlin.math.hypot(deltaX, deltaY) > dragSlop) {
+                    dismissLanguageMenu()
+                    fitWindow()
                     dragging = true
                     draggingWindow = true
                     originX = params.x
@@ -698,6 +868,15 @@ class DictationOverlay(
         if (force || oldX != params.x || oldY != params.y) windows.updateViewLayout(layout, params)
     }
 
+    private fun copyResult() {
+        val session = controller.session.value
+        if (session.busy || session.text == null || controller.recognition.busy.value) return
+        if (runCatching { controller.copy() }.isSuccess) {
+            controller.discard()
+            showMessage("Copied")
+        } else showMessage("Couldn't copy · try again")
+    }
+
     private fun applyPalette() {
         language.setTextColor(ink)
         phase.setTextColor(ink)
@@ -710,7 +889,12 @@ class DictationOverlay(
                 setStroke(hairline(), withAlpha(ink, 26))
                 cornerRadius = dp(16).toFloat()
             }
-        for (view in listOf(cancel, copy, discard)) view.background =
+        languageMenu.background =
+            GradientDrawable().apply {
+                setColor(chalk)
+                cornerRadius = dp(16).toFloat()
+            }
+        for (view in listOf(copy, cancel)) view.background =
             StateListDrawable().apply {
                 addState(
                     intArrayOf(android.R.attr.state_pressed),
@@ -731,7 +915,6 @@ class DictationOverlay(
             }
         cancel.setImageDrawable(GlyphDrawable(Glyph.CLOSE, ink))
         copy.setImageDrawable(GlyphDrawable(Glyph.COPY, ink))
-        discard.setImageDrawable(GlyphDrawable(Glyph.DELETE, ink))
         capsule.invalidate()
         primary.invalidate()
         target.invalidate()
@@ -779,7 +962,7 @@ class DictationOverlay(
         MIC,
         STOP,
         PROGRESS,
-        ARROW,
+        RECOVERY,
         DOWNLOAD,
     }
 
@@ -841,7 +1024,7 @@ class DictationOverlay(
         @Suppress("DEPRECATION") override fun getOpacity(): Int = PixelFormat.TRANSLUCENT
     }
 
-    /** The one backed control: mic, Stop, progress ring, insert arrow or model download. */
+    /** The one backed control: mic, Stop, progress, retained result or model download. */
     private inner class PrimaryFace(context: Context) : View(context) {
         var face = Face.MIC
             set(value) {
@@ -929,7 +1112,7 @@ class DictationOverlay(
             val d = density
             val cx = width / 2f
             val cy = height / 2f
-            val r = 20 * d
+            val r = 25 * d
             p.style = Paint.Style.FILL
             when (face) {
                 Face.MIC,
@@ -938,10 +1121,10 @@ class DictationOverlay(
                     canvas.drawCircle(cx, cy, r, p)
                     glyph(canvas, if (face == Face.MIC) Glyph.MIC else Glyph.DOWNLOAD, ink)
                 }
-                Face.ARROW -> {
+                Face.RECOVERY -> {
                     p.color = withAlpha(ink, if (isPressed) 210 else 255)
                     canvas.drawCircle(cx, cy, r, p)
-                    glyph(canvas, Glyph.ARROW, chalk)
+                    glyph(canvas, Glyph.COPY, chalk)
                 }
                 Face.STOP -> {
                     p.style = Paint.Style.STROKE

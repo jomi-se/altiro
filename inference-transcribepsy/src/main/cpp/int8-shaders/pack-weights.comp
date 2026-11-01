@@ -1,0 +1,24 @@
+#version 450
+// Preserve the exact Q8_0 half scale and signed bytes of every 32-value block.
+layout(local_size_x=64) in;
+layout(binding=0,std430) readonly buffer Input { uint source[]; };
+struct Block { uint q[8]; float scale; };
+layout(binding=1,std430) writeonly buffer Output { Block packed[]; };
+layout(push_constant) uniform Shape { uint m; uint n; uint k; } p;
+uint byte_at(uint at) { return (source[at/4]>>((at%4)*8))&255u; }
+void main() {
+    uint i=gl_GlobalInvocationID.x,blocks=p.k/32;
+    if(i>=((p.m+3)/4)*4*blocks) return;
+    uint row=(i/(4*blocks))*4+i%4,block=(i/4)%blocks;
+    if(row>=p.m) {
+        packed[i].scale=0;
+        for(uint j=0;j<8;j++) packed[i].q[j]=0;
+        return;
+    }
+    uint at=(row*blocks+block)*34;
+    packed[i].scale=unpackHalf2x16(byte_at(at)|(byte_at(at+1)<<8)).x;
+    for(uint j=0;j<8;j++) {
+        uint start=at+2+j*4;
+        packed[i].q[j]=byte_at(start)|(byte_at(start+1)<<8)|(byte_at(start+2)<<16)|(byte_at(start+3)<<24);
+    }
+}

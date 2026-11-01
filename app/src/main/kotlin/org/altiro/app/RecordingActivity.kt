@@ -48,7 +48,16 @@ class RecordingActivity : ComponentActivity() {
                 val compareIds = intent.getStringArrayListExtra("compare-models")
                 val gpuCompare = intent.getBooleanExtra("compare-backends", false)
                 val windowCompare = intent.getBooleanExtra("compare-windows", false)
-                val allReady = if (compareIds != null) compareIds.all { it in installed } else ready
+                val precisionCompare = intent.getBooleanExtra("compare-precision-backends", false)
+                val encoderLab = intent.getIntExtra("encoder-lab", 0) != 0
+                val labSummary by controller.encoderLab.summary.collectAsState()
+                val allReady =
+                    if (
+                        precisionCompare ||
+                            (encoderLab && intent.getBooleanExtra("encoder-lab-both", false))
+                    )
+                        controller.models.precisionIds().all { it in installed }
+                    else if (compareIds != null) compareIds.all { it in installed } else ready
                 Column(
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -57,7 +66,11 @@ class RecordingActivity : ComponentActivity() {
                     verticalArrangement = Arrangement.spacedBy(16.dp),
                 ) {
                     Text(
-                        if (windowCompare) {
+                        if (encoderLab) {
+                            "Encoder lab"
+                        } else if (precisionCompare) {
+                            "Compare precision and processor"
+                        } else if (windowCompare) {
                             "Compare audio windows"
                         } else if (gpuCompare) {
                             "Compare CPU and GPU"
@@ -69,7 +82,11 @@ class RecordingActivity : ComponentActivity() {
                         style = MaterialTheme.typography.headlineMedium,
                     )
                     Text(
-                        if (windowCompare) {
+                        if (encoderLab) {
+                            "Record 10–15 seconds, then Stop. The suite runs automatically."
+                        } else if (precisionCompare) {
+                            "Q8 and FP16 on CPU and GPU. Four sequential passes, one recording, no insertion."
+                        } else if (windowCompare) {
                             "One recording uses full and dynamic windows with the same model, processor and attention setting. Record less than 30 seconds. Compare the text, especially sentence endings. Nothing is inserted automatically."
                         } else if (gpuCompare) {
                             "The same ${selected.name} model processes one recording on CPU and Vulkan GPU, sequentially. Nothing is inserted automatically. Keep this screen open while testing."
@@ -79,15 +96,19 @@ class RecordingActivity : ComponentActivity() {
                             "Using ${selected.name} · ${backend.label}. Change settings in Altiro."
                         }
                     )
-                    Text(
-                        "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control."
-                    )
+                    if (!encoderLab)
+                        Text(
+                            "Start while this screen is visible. Once Recording appears, you may return to your editor. Stop and Cancel stay available in the notification and floating control."
+                        )
                     Text(
                         when (session.phase) {
                             Phase.STARTING -> "Starting…"
                             Phase.RECORDING -> "Recording · ${session.elapsedSeconds}s"
                             Phase.FINALIZING -> "Finishing recording…"
-                            Phase.TRANSCRIBING -> "Recognizing your speech…"
+                            Phase.TRANSCRIBING ->
+                                if (encoderLab)
+                                    "${controller.activeModelName.collectAsState().value} · ${controller.progress.collectAsState().value}%"
+                                else "Recognizing your speech…"
                             else ->
                                 if (allReady) "Ready to record"
                                 else "Open Altiro and import the supported model first."
@@ -120,7 +141,20 @@ class RecordingActivity : ComponentActivity() {
                         if (session.busy || nativeBusy)
                             OutlinedButton(onClick = controller::cancel) { Text("Cancel") }
                     }
-                    ResultControls(controller)
+                    if (encoderLab) {
+                        if (labSummary.isNotEmpty())
+                            Text(labSummary, style = MaterialTheme.typography.bodySmall)
+                        OutlinedButton(
+                            onClick = {
+                                shareDiagnostics(
+                                    this@RecordingActivity,
+                                    controller.encoderLab.export(),
+                                )
+                            }
+                        ) {
+                            Text("Share results")
+                        }
+                    } else ResultControls(controller)
                     OutlinedButton(onClick = { finish() }) { Text("Return to editor") }
                 }
             }
@@ -142,6 +176,10 @@ class RecordingActivity : ComponentActivity() {
                 gpuFirst = intent.getBooleanExtra("gpu-first", false),
                 windowCompare = intent.getBooleanExtra("compare-windows", false),
                 dynamicFirst = intent.getBooleanExtra("dynamic-first", false),
+                precisionCompare = intent.getBooleanExtra("compare-precision-backends", false),
+                encoderLabMode = intent.getIntExtra("encoder-lab", 0),
+                encoderLabBoth = intent.getBooleanExtra("encoder-lab-both", false),
+                encoderLabProfile = intent.getBooleanExtra("encoder-lab-profile", false),
             ) ?: return
         try {
             startForegroundService(

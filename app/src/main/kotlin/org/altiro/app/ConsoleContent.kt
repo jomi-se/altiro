@@ -1,6 +1,5 @@
 package org.altiro.app
 
-import android.content.Intent
 import android.os.Build
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.text.selection.SelectionContainer
@@ -16,6 +15,7 @@ import org.altiro.core.Phase
 
 @androidx.compose.runtime.Composable
 internal fun ConsoleContent(controller: DictationController, microphoneAllowed: Boolean) {
+    EncoderLabTools(controller, microphoneAllowed)
     val report by controller.diagnostics.report.collectAsState()
     val session by controller.session.collectAsState()
     val nativeBusy by controller.recognition.busy.collectAsState()
@@ -49,7 +49,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
             }
         }
         OutlinedButton(
-            onClick = { controller.copyText(exportDiagnostics(controller, microphoneAllowed)) }
+            onClick = { controller.copyText(compactDiagnostics(controller, microphoneAllowed)) }
         ) {
             AltiroIcon(Glyph.COPY)
             Spacer(Modifier.width(6.dp))
@@ -57,18 +57,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
         }
         OutlinedButton(
             onClick = {
-                context.startActivity(
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = "text/plain"
-                            putExtra(
-                                Intent.EXTRA_TEXT,
-                                exportDiagnostics(controller, microphoneAllowed),
-                            )
-                        },
-                        "Share diagnostics",
-                    )
-                )
+                shareDiagnostics(context, exportDiagnostics(controller, microphoneAllowed))
             }
         ) {
             AltiroIcon(Glyph.SHARE)
@@ -89,7 +78,8 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
     } else {
         HorizontalDivider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f))
         Text(
-            if (current.comparison) "Comparison · ${current.modelIds.size} passes"
+            if (controller.encoderLabActive) "Encoder lab · session"
+            else if (current.comparison) "Comparison · ${current.modelIds.size} passes"
             else "Latest dictation",
             style = MaterialTheme.typography.titleMedium,
         )
@@ -103,7 +93,7 @@ internal fun ConsoleContent(controller: DictationController, microphoneAllowed: 
                 style = MaterialTheme.typography.bodySmall,
             )
         }
-        for (step in current.steps) {
+        for (step in if (controller.encoderLabActive) emptyList() else current.steps) {
             Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 ConsoleRow(
                     step.stage.label,
@@ -237,6 +227,8 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
         appendLine(
             "Overlay status: ${controller.overlayStatus.value}; last editor: ${controller.lastEditorStatus.value}; hidden apps: ${controller.hiddenApps.value.size}"
         )
+        appendLine("Delivery: ${controller.deliveryStatus.value}")
+        appendLine("Selected model now: ${controller.models.selected.value.spec.id}")
         append(controller.editorVisibility.report.value.export())
         appendLine("App startup checks (separate from dictation):")
         appendLine(
@@ -248,9 +240,46 @@ internal fun exportDiagnostics(controller: DictationController, microphone: Bool
         for (check in controller.models.startupChecks.value) appendLine(
             "${check.modelId}: ${DiagnosticReport.seconds(check.elapsedMillis)} s; verified: ${check.verified}"
         )
-        append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLabActive)
+            appendLine(
+                "Encoder lab: use structured results below; ordinary dictation runtime counters do not apply."
+            )
+        else append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLab.summary.value.isNotEmpty()) {
+            appendLine("Encoder lab · structured measurements")
+            appendLine(controller.encoderLab.export())
+        }
         controller.checkpoint.saved.value?.let {
             appendLine("\nSaved checkpoint:")
             appendLine(it)
         }
     }
+
+internal fun compactDiagnostics(controller: DictationController, microphone: Boolean): String {
+    val report = buildString {
+        appendLine(
+            "Altiro ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE}); ${Build.MODEL}; Android ${Build.VERSION.RELEASE}/API ${Build.VERSION.SDK_INT}"
+        )
+        appendLine(
+            "Microphone=$microphone; connected=${controller.connected.value}; overlay=${controller.overlayStatus.value}; hidden=${controller.hiddenApps.value.size}"
+        )
+        appendLine("Delivery: ${controller.deliveryStatus.value}")
+        appendLine("Selected model now: ${controller.models.selected.value.spec.id}")
+        appendLine(
+            "Models: ${controller.models.installed.value.size}; selected ready=${controller.models.ready.value}"
+        )
+        append(controller.editorVisibility.report.value.compactExport())
+        if (controller.encoderLabActive)
+            appendLine(
+                "Encoder lab: use structured results below; ordinary dictation runtime counters do not apply."
+            )
+        else append(controller.diagnostics.report.value?.export() ?: "No recording trace yet.\n")
+        if (controller.encoderLab.summary.value.isNotEmpty())
+            appendLine(controller.encoderLab.summary.value)
+    }
+    return if (report.length <= 8000) report
+    else
+        report.take(5800) +
+            "\n[Copy shortened; Share contains the full log.]\n" +
+            report.takeLast(2000)
+}

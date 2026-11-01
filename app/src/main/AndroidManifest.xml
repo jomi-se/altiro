@@ -1,5 +1,5 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <!-- Explicit model downloads only; see docs/decisions/0008-explicit-model-acquisition.md. -->
+    <!-- Explicit model downloads and opt-in debug lab relay; decisions 0008 and 0021. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -15,6 +15,14 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Altiro"
         android:usesCleartextTraffic="false">
+        <uses-native-library android:name="libOpenCL.so" android:required="false" />
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.diagnostics"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data android:name="android.support.FILE_PROVIDER_PATHS" android:resource="@xml/diagnostic_paths" />
+        </provider>
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />

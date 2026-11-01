@@ -78,6 +78,7 @@ internal fun runtimeDetails(
 ): RuntimeDetails {
     require(json.length <= 8192)
     val value = JSONObject(json)
+    require(!value.has("engine") || value.getString("engine") == previous.engine.name)
 
     fun number(
         key: String,
@@ -107,6 +108,22 @@ internal fun runtimeDetails(
         shaderFloat16 = boolean("float16", previous.shaderFloat16),
         shaderInt8 = boolean("int8", previous.shaderInt8),
         gpuActive = boolean("gpu_active", previous.gpuActive),
+        nativeBackend = label("native_backend", previous.nativeBackend),
+        unsupportedOp = label("unsupported_op", previous.unsupportedOp),
+        encoderBackend = label("encoder_backend", previous.encoderBackend),
+        decoderBackend = label("decoder_backend", previous.decoderBackend),
+        cpuFp16 = boolean("cpu_fp16", previous.cpuFp16),
+        cpuDotprod = boolean("cpu_dotprod", previous.cpuDotprod),
+        cpuI8mm = boolean("cpu_i8mm", previous.cpuI8mm),
+        graphChecks =
+            number("graph_checks", previous.graphChecks?.toLong())?.let { Math.toIntExact(it) },
+        unsupportedOps =
+            number("unsupported_ops", previous.unsupportedOps?.toLong())?.let {
+                Math.toIntExact(it)
+            },
+        preprocessMillis = number("preprocess_ms", previous.preprocessMillis),
+        totalMillis = number("total_ms", previous.totalMillis),
+        sampledPeakPssKiB = number("sampled_peak_pss_kib", previous.sampledPeakPssKiB),
         flashAttention = boolean("flash_attention", previous.flashAttention),
         audioContextFrames =
             number("audio_ctx", previous.audioContextFrames?.toLong())?.let { Math.toIntExact(it) },

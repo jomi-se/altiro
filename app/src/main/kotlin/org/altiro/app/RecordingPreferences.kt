@@ -11,4 +11,12 @@ internal class RecordingPreferences(context: Context) {
         set(value) {
             preferences.edit().putBoolean("record-in-place", value).apply()
         }
+
+    // Termux can disable the shortcut and interpret it as control input instead.
+    // Enable only after the user confirms its hardware shortcuts are available.
+    var termuxPaste: Boolean
+        get() = preferences.getBoolean("termux-paste-confirmed", false)
+        set(value) {
+            preferences.edit().putBoolean("termux-paste-confirmed", value).apply()
+        }
 }

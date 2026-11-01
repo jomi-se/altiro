@@ -8,6 +8,15 @@ data class EditorIdentity(
     val displayId: Int,
 )
 
+/** A recording location, never an insertion destination. No editor contents. */
+data class RecordingHost(val packageName: String, val windowId: Int, val displayId: Int)
+
+enum class TextDelivery {
+    COMMIT,
+    PASTE,
+    TERMUX_PASTE,
+}
+
 data class EditorState(
     val identity: EditorIdentity?,
     val selectionStart: Int = -1,
@@ -19,7 +28,16 @@ data class EditorState(
     val blocked: Boolean = false,
     val locked: Boolean = false,
     val connectionAvailable: Boolean = false,
+    val recordingHost: RecordingHost? = null,
+    val delivery: TextDelivery = TextDelivery.COMMIT,
 ) {
+    val recordingAvailable: Boolean
+        get() =
+            !locked &&
+                !password &&
+                !blocked &&
+                ((connectionAvailable && identity?.displayId == 0) || recordingHost?.displayId == 0)
+
     val composing: Boolean
         get() = composingStart >= 0 || composingEnd >= 0
 }
@@ -71,7 +89,7 @@ class EditorAuthority {
     }
 
     fun observe(state: EditorState) {
-        if (state != current) revision++
+        if (authorityState(state) != authorityState(current)) revision++
         current = state
     }
 
@@ -79,7 +97,13 @@ class EditorAuthority {
         revision++
     }
 
-    fun capture(): DestinationToken = DestinationToken(serviceEpoch, editorEpoch, revision, current)
+    // Learning whether a callback has arrived is not a cursor/composition mutation.
+    // Preserve actual ranges and all other fields; only this knowledge bit is ignored for paste.
+    private fun authorityState(state: EditorState): EditorState =
+        if (state.delivery == TextDelivery.PASTE) state.copy(compositionKnown = false) else state
+
+    fun capture(): DestinationToken =
+        DestinationToken(serviceEpoch, editorEpoch, revision, authorityState(current))
 
     fun blockReason(token: DestinationToken): InsertionBlockReason? {
         val state = current
@@ -89,9 +113,12 @@ class EditorAuthority {
             state.blocked -> InsertionBlockReason.DISABLED_APP
             !state.connectionAvailable || state.identity == null -> InsertionBlockReason.NO_EDITOR
             state.identity.displayId != 0 -> InsertionBlockReason.UNSUPPORTED_DISPLAY
-            state.composing -> InsertionBlockReason.COMPOSING
-            !state.compositionKnown -> InsertionBlockReason.UNKNOWN_COMPOSITION
-            state.selectionStart < 0 || state.selectionEnd < 0 ->
+            state.delivery == TextDelivery.COMMIT && state.composing ->
+                InsertionBlockReason.COMPOSING
+            state.delivery == TextDelivery.COMMIT && !state.compositionKnown ->
+                InsertionBlockReason.UNKNOWN_COMPOSITION
+            state.delivery == TextDelivery.COMMIT &&
+                (state.selectionStart < 0 || state.selectionEnd < 0) ->
                 InsertionBlockReason.UNKNOWN_SELECTION
             token != capture() -> InsertionBlockReason.DESTINATION_CHANGED
             else -> null

@@ -22,6 +22,7 @@ or whole-field `ACTION_SET_TEXT` fallback.
 | `app` | Activities, accessibility/input tracking, overlay, capture service, settings, composition root |
 | `core` | Pure Kotlin session contracts, reducer, destination eligibility, and policies |
 | `inference-whisper` | Pinned native runtime, JNI, model lifecycle, progress, cancellation |
+| `inference-transcribepsy` | Experimental pinned FastConformer-TDT runtime, isolated JNI, CPU/Vulkan graph checks |
 | `network` | Optional recognition and cleanup transports; no Android UI or screen access |
 | `editor-fixture` | Separate application exposing real editors and controlled mutations |
 | `server/` | Optional independently runnable GPU speech endpoint and portable WSL2 setup; outside Gradle |
@@ -36,7 +37,12 @@ injection or a small container, not a global Activity reference.
 Capture destination authority at recording start. Invalidate it on relevant
 editor, content, selection, composition, lifecycle, and focus changes.
 Recheck before dispatch using the current input connection. Consume one attempt
-before invoking the public accessibility commit API. Successful dispatch is
+before invoking one public paste/commit operation. Ordinary TEXT uses the
+editor's paste command at its current cursor/selection. A missing composition
+callback or stable pre-existing typed word does not veto that route; direct
+commit retains composition checks. See
+[decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md).
+Successful dispatch is
 unconfirmed delivery, and must never trigger an automatic fallback mutation.
 
 Stop releases capture then transcribes; Cancel invalidates the session and
@@ -70,6 +76,14 @@ Local dictation makes no network calls. Remote STT and cleanup are independently
 configured and opt-in, with exact HTTPS endpoints, bounded responses, safe
 secret storage, no cross-origin credential forwarding, and no automatic POST
 retry. Cleanup failure retains raw text.
+
+The [TranscribePsy experiment](../decisions/0018-transcribepsy-comparison.md)
+adds ARM64 Q8/FP16 profiles without changing existing saved selection. Its
+language detection and bounded 30-second encoder chunks are engine-specific;
+Whisper language hints, Flash Attention and audio-context switches do not apply.
+Its statically linked backend symbols stay private to the new JNI library.
+Explicit GPU initialization and graph support/execution evidence are required;
+upstream's direct execution cannot silently fall back to CPU operations.
 
 ## Evidence
 

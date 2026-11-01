@@ -1,0 +1,69 @@
+parakeet.cpp
+Copyright 2026 QVAC contributors
+
+This product includes third-party components under their respective
+licenses. parakeet.cpp itself is licensed under Apache-2.0; bundled
+dependencies are governed by the licenses listed below. Python packages
+listed under Python Dependencies are optional and apply only to scripts/
+(GGUF conversion and Core ML export), not to C++ inference binaries.
+
+=========================================================================
+C++ Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  OpenCL-Headers v2024.10.24
+    Copyright (c) 2008-2020 The Khronos Group Inc.
+    https://github.com/KhronosGroup/OpenCL-Headers/tree/v2024.10.24
+    SHA256 of source archive:
+    159f2a550592bae49859fee83d372acd152328fdf95c0dcd8b9409f8fad5db93
+    Header-only ABI declarations for an opt-in public OpenCL loader probe.
+    No OpenCL implementation or driver is bundled.
+    License: OpenCL-Headers-Apache-2.0.txt.
+
+  The Altiro packed register4 Vulkan kernels are original experimental code.
+  They do not include Arm Compute Library source and are not ACL kernels.
+
+--- mit (MIT License) ---
+
+  ggml
+    https://github.com/ggml-org/ggml
+
+--- dual-license (Unlicense or MIT-0; recipient may choose either; see file) ---
+
+  dr_wav (dr_libs)
+    src/dr_wav.h
+    https://github.com/mackron/dr_libs
+
+--- apache-2.0-with-llvm-exception ---
+
+  libc++ (LLVM C++ Standard Library), when linked (e.g. some Linux toolchains)
+    https://github.com/llvm/llvm-project
+
+=========================================================================
+Python Dependencies
+=========================================================================
+
+--- apache-2.0 (Apache License 2.0) ---
+
+  sentencepiece
+    https://github.com/google/sentencepiece
+  huggingface_hub
+    https://github.com/huggingface/huggingface_hub
+
+--- bsd-3-clause ---
+
+  coremltools
+    https://github.com/apple/coremltools
+  numpy
+    https://numpy.org/
+  torch (PyTorch)
+    https://pytorch.org/
+
+--- mit (MIT License) ---
+
+  gguf
+    https://pypi.org/project/gguf/
+  PyYAML
+    https://github.com/yaml/pyyaml

@@ -55,6 +55,7 @@ data class DiagnosticReport(
     val flashAttention: List<Boolean> = modelIds.map { false },
     val windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
     val vocabularyTerms: Int = 0,
+    val engines: List<RecognitionEngine> = modelIds.map { RecognitionEngine.WHISPER },
 ) {
     val processingMillis: Long
         get() =
@@ -69,18 +70,32 @@ data class DiagnosticReport(
         appendLine("Vocabulary hints configured: $vocabularyTerms terms; words withheld")
         appendLine("Requested backends: ${backends.joinToString { it.name }}")
         appendLine("Requested audio windows: ${windows.joinToString { it.name }}")
-        appendLine(
-            "Requested Flash Attention: ${flashAttention.joinToString { if (it) "ON" else "OFF" }}"
-        )
-        appendLine(
-            "Flash Attention settings describe the Whisper graph; individual GPU operation placement is not traced"
-        )
-        appendLine(
-            "Runtime: whisper.cpp 1.9.4; 4 CPU threads; greedy; temperature 0; no translation"
-        )
-        appendLine(
-            "GPU mode uses Vulkan with CPU operations as scheduled by Whisper; no automatic CPU retry"
-        )
+        appendLine("Engines: ${engines.joinToString { it.label }}")
+        if (RecognitionEngine.TRANSCRIBEPSY in engines) {
+            appendLine(
+                "TranscribePsy 364ec361; 4 CPU threads; greedy TDT; automatic language; no vocabulary hints"
+            )
+            appendLine(
+                "TranscribePsy Vulkan uses direct graph execution with support preflight; no CPU retry"
+            )
+            appendLine(
+                "TranscribePsy: native short-clip length; 30s encoder cap with context for longer audio"
+            )
+        }
+        if (RecognitionEngine.WHISPER in engines) {
+            appendLine(
+                "Requested Flash Attention: ${flashAttention.joinToString { if (it) "ON" else "OFF" }}"
+            )
+            appendLine(
+                "Flash Attention settings describe the Whisper graph; individual GPU operation placement is not traced"
+            )
+            appendLine(
+                "Runtime: whisper.cpp 1.9.4; 4 CPU threads; greedy; temperature 0; no translation"
+            )
+            appendLine(
+                "GPU mode uses Vulkan with CPU operations as scheduled by Whisper; no automatic CPU retry"
+            )
+        }
         appendLine("Model lifecycle: verify, cold load, release on every run; no resident model")
         appendLine("Audio: ${audioMillis?.let { seconds(it) + " s" } ?: "not finalized"}")
         appendLine(
@@ -110,12 +125,18 @@ data class DiagnosticReport(
             )
         }
         for (runtime in runtimes) append(runtime.export())
-        appendLine(
-            "Whisper counters are upstream compute counters, not an additive breakdown of wall time."
-        )
-        appendLine(
-            "Inference includes audio features, language detection when Auto, encoder and decoder."
-        )
+        if (RecognitionEngine.WHISPER in engines) {
+            appendLine(
+                "Whisper counters are upstream compute counters, not an additive breakdown of wall time."
+            )
+            appendLine(
+                "Whisper inference includes audio features, language detection when Auto, encoder and decoder."
+            )
+        }
+        if (RecognitionEngine.TRANSCRIBEPSY in engines)
+            appendLine(
+                "TranscribePsy timings exclude model loading; completed graph counters establish execution, not just GPU initialization."
+            )
         appendLine(
             "No dictated text, audio, editor identity, file paths or exception messages included."
         )
@@ -137,6 +158,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
     private var activeBackend: RecognitionBackend? = null
     private var window: RecognitionWindow? = null
     private var activeWindow: RecognitionWindow? = null
+    private var phaseCapacity = 64
 
     @Synchronized
     fun begin(
@@ -147,7 +169,10 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         flashAttention: List<Boolean> = modelIds.map { false },
         windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
         vocabularyTerms: Int = 0,
+        engines: List<RecognitionEngine> = modelIds.map { RecognitionEngine.WHISPER },
+        maxPhases: Int = 64,
     ) {
+        require(maxPhases in 64..1024)
         require(vocabularyTerms in 0..Vocabulary.MAX_TERMS)
         require(language in setOf("auto", "en", "fr", "es"))
         require(modelIds.size in 1..4 && modelIds.all { it.matches(Regex("[a-z0-9-]{1,80}")) })
@@ -160,7 +185,9 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                     .size == modelIds.size
         )
         require(flashAttention.size == modelIds.size)
+        require(engines.size == modelIds.size)
         started = clockNanos()
+        phaseCapacity = maxPhases
         completed = emptyList()
         active = null
         backend = null
@@ -174,6 +201,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                 flashAttention = flashAttention.toList(),
                 windows = windows.toList(),
                 vocabularyTerms = vocabularyTerms,
+                engines = engines.toList(),
             )
         phase(RecognitionStage.STARTUP)
     }
@@ -220,7 +248,7 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
         )
             return
         require(modelId == null || modelId in report.modelIds)
-        check(completed.size < 64)
+        check(completed.size < phaseCapacity)
         val now = clockNanos()
         closeStep(now)
         active = stage to modelId

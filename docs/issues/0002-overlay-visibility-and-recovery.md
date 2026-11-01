@@ -67,3 +67,85 @@ checks plus a content-free visibility timeline. See
 [decision 0013](../decisions/0013-focused-editor-lookup.md). Termux still needs
 positive focused/editable identity; no insertion guard is relaxed. Physical
 execution and the three reported editor results remain pending.
+
+Version 0.5.5 phone feedback identifies two failures: connected TEXT input with
+no accessible focused node, and connected RAW input with a focused noneditable
+host. ChatGPT search/composer and Reddit search/comments fail, according to the
+maintainer's follow-up correction;
+Termux's terminal still fails. The limited ring cannot assign each timestamp to
+an app. All five models are now verified, so further storage resets are not a
+recovery step.
+
+The maintainer adds Twitter comments to the failed surfaces and rejects the
+proposed Copy-mode direction. Version 0.5.6 instead corrects mic visibility and
+startup independently of insertion identity. See
+[decision 0015](../decisions/0015-recording-bubble-visibility.md). Matching started
+input with a connection or visible keyboard can show the ordinary mic; positive
+window/package and password/lock/hidden gates remain. There is no extra Copy UI.
+A race remains possible, but the repeated node/editability gate itself explains
+persistent absence. Phone visibility/startup confirmation is pending.
+
+The 0.5.6 follow-up confirms that the mic appears in Termux's main terminal,
+while insertion there is unavailable. ChatGPT's supplied capture has the keyboard
+open without a mic. The Reddit search capture has no visible keyboard, so that
+image alone does not establish a keyboard-up failure. The new trace repeatedly
+rejects a matching, visible TEXT input with a connection and visible keyboard
+because its fallback node reports `OTHER`, `focused=false`. The recording-host
+focus requirement remains too strict; it is distinct from insertion authority.
+The exported report is truncated when pasted; the responsible clipboard or
+receiving-editor limit is not yet identified.
+
+At the maintainer's request, investigate upstream implementations before another
+patch. [Pinned source research](../research/android-overlay-compatibility.md)
+finds independent keyboard/focus visibility signals, bounded pre-dispatch
+recovery, and explicit terminal limitations. Apply the useful patterns within
+Altiro's insertion contract; upstream source does not pass our phone gates.
+
+Version 0.5.7 applies the comparison in
+[decision 0016](../decisions/0016-automatic-delivery-and-bubble-controls.md).
+Matching connected TEXT input no longer depends on a fallback host's focus bit;
+input epochs/window metadata anchor delivery, with ordinary composition/selection
+and stale-destination checks retained. Known keyboard/system geometry no longer
+invalidates a healthy token by itself. Termux paste has a distinct route gated
+by one-time shortcut confirmation. Its default accessibility class is a base
+View, so the implementation class is not used as its identity check.
+
+The maintainer's new terminal capture also shows a clipped leftmost result
+control and misleading “Finish the word” feedback. Remove the bubble's result
+cluster, use terminal paste semantics separately from ordinary composition, and
+measure/clamp before window resizing. Language choices now open an explicit menu.
+Console copying is bounded and sharing uses a complete file. These are source
+corrections; physical visibility/delivery and native appearance remain pending.
+
+The maintainer clarifies that insertion did not work in any app they tried in
+the previously tested build; 0.5.7 has not yet been tried. Treat basic delivery
+as an unresolved baseline, rather than assuming only terminal compatibility
+remains. Start with one short ordinary notes-field dictation and its fixed
+`Delivery:` diagnostic code before comparing more custom editors.
+
+Source inspection identifies a possible general blocker, not a confirmed phone
+cause: input start sets `compositionKnown=false`, and only an input-method
+selection update sets it true. Ordinary insertion rejects that unknown state.
+A provider that sends no update can therefore remain blocked without any word
+actually being composed. The current “Finish typing” notice conflates unknown
+composition with active composition; neither the notice nor compilation proves
+that the user had an unfinished word. Preserve composition protection while
+investigating a supported way to establish the initial state.
+
+The maintainer then tests 0.5.7 and reports worse recovery: a failed result has
+no bubble Copy, and returning to the app is slow. “Finish typing” appears in
+empty regular inputs. The requested behavior is continuation at the cursor,
+including existing typed text, and an immediately accessible bubble Copy when
+automatic delivery fails. No field-emptiness restriction is requested or present
+in the delivery contract.
+
+Version 0.5.8 follows [decision 0017](../decisions/0017-paste-at-cursor-and-bubble-copy.md):
+ordinary TEXT selects one native editor paste operation rather than a commit
+that needs composition metadata. Missing composition/selection callbacks and
+stable pre-existing composition do not block paste; changes after capture,
+passwords, lock and cancellation still do. Blocked results expose primary Copy
+and discard directly on the bubble; dispatched results keep a secondary Copy
+for ignored/unconfirmed delivery. Copy succeeds before releasing the result.
+The bubble may retain recovery controls after its original input disappears,
+while recording still requires a live eligible input. Physical delivery remains
+unverified until the next phone check.

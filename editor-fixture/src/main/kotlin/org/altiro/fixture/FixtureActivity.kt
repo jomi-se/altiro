@@ -1,10 +1,13 @@
 package org.altiro.fixture
 
+import android.os.Build
 import android.os.Bundle
 import android.text.InputFilter
 import android.text.InputType
+import android.view.View
 import android.webkit.WebView
 import android.widget.EditText
+import android.widget.FrameLayout
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.layout.Arrangement
@@ -100,6 +103,38 @@ class FixtureActivity : ComponentActivity() {
                         modifier = Modifier.fillMaxWidth(),
                     )
                     var composeText by remember { mutableStateOf("") }
+                    if (Build.VERSION.SDK_INT >= 34) {
+                        Text("Sensitive editor · expect mic, never automatic insertion")
+                        AndroidView(
+                            factory = { context ->
+                                EditText(context).apply {
+                                    id = R.id.sensitive_editor
+                                    hint = "Hidden from general accessibility services"
+                                    inputType = InputType.TYPE_CLASS_TEXT
+                                    setAccessibilityDataSensitive(
+                                        View.ACCESSIBILITY_DATA_SENSITIVE_YES
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                        Text("Obscured-touch filtering on parent · expect mic")
+                        AndroidView(
+                            factory = { context ->
+                                FrameLayout(context).apply {
+                                    filterTouchesWhenObscured = true
+                                    addView(
+                                        EditText(context).apply {
+                                            id = R.id.obscured_editor
+                                            hint = "Sensitivity inherited from parent"
+                                            inputType = InputType.TYPE_CLASS_TEXT
+                                        }
+                                    )
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     OutlinedTextField(
                         value = composeText,
                         onValueChange = {

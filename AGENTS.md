@@ -51,6 +51,17 @@ short-window accuracy and GPU behavior remain phone gates.
 Visible recording/diagnostics screens stay awake during work; manual lock still
 cancels. See `docs/decisions/0005-vulkan-device-experiment.md`.
 
+The opt-in Encoder lab (decision 0019) measures TranscribePsy directly, without
+its decoder. Each case gets a separate worker; only that lab worker retains its
+model for one first candidate execution plus three warm repeats. CPU reference
+setup precedes the candidate, so this is not a completely cold process benchmark.
+Experimental flags never affect ordinary dictation. See `docs/testing/encoder-lab.md`.
+The opt-in Kernel hunt (decision 0020) adds synthetic matrix isolation and full
+encoder tile experiments. Synthetic calls never load audio-derived features or
+emit text, and never establish speech quality or everyday latency. Keep shape,
+precision, backend placement and numerical screens attached to every claim.
+See `docs/testing/kernel-hunt.md`; phone execution remains a gate.
+
 The everyday interface now separates Home, Models, Setup and Console. The owner
 approved sage/chalk/charcoal centered-mic geometry and prioritizes the actual
 non-focusable cross-app overlay above the app screen. See decision 0009. Explicit
@@ -62,6 +73,15 @@ Keep the implementation native: Kotlin, coroutines, StateFlow, Compose for
 ordinary screens, and a small View for the accessibility overlay. Use C++ only
 for the inference/JNI boundary. Start with `app`, `core`, `inference-whisper`,
 `network`, and the separate `editor-fixture` application.
+
+The authorized TranscribePsy experiment adds `inference-transcribepsy` as a
+separate pinned, symbol-isolated native runtime. Q8 and original-weight FP16
+are compared on CPU/Vulkan using identical audio. ARM64 CPU flags must omit
+I8MM and retain dot-product/FP16. Language is automatic; Whisper vocabulary,
+Flash Attention and audio-context switches do not apply. Preflight direct GPU
+graphs and report actual execution; never call CPU fallback a GPU success.
+See `docs/decisions/0018-transcribepsy-comparison.md`. Pixel execution/quality
+and speed remain phone gates.
 
 Do not introduce desktop targets, a replacement keyboard, always-listening
 audio, broad screen extraction, cloud accounts, billing, automatic sending,
@@ -77,8 +97,10 @@ scoped guidance before changing it. Android remote transport remains separate.
 - Compile against public APIs. Accessibility `commitText(text, 1, null)` returns
   no success flag; dispatch does not prove delivery.
 - Keep one serialized session owner. A stale result, changed field, cursor,
-  composition, password field, cancellation, or lock must block automatic
-  insertion. Never revive an invalid destination token.
+  composition after capture, password field, cancellation, or lock must block
+  automatic insertion. Never revive an invalid destination token. Ordinary
+  TEXT uses the editor's paste operation without waiting for a composition
+  callback; see `docs/decisions/0017-paste-at-cursor-and-bubble-copy.md`.
 - Consume one insertion attempt before dispatch. Do not retry uncertain
   insertion or use whole-field replacement as a fallback.
 - Preserve Stop versus Cancel. Release capture before transcription; connect
