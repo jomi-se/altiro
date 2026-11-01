@@ -42,3 +42,18 @@ Cold/loading/busy servers are unavailable for that attempt; no waiting room or
 remote job retry is added. Keep the server model resident for its warm latency.
 Measure whole time after Stop separately from GPU processing reported by the
 server. Mock/JVM tests do not prove these phone gates.
+
+## Host wire verification
+
+`./scripts/verify.sh --core-only` also runs `RemoteSpeechWireTest`. It uses actual
+loopback HTTPS sockets and the production client with a temporary localhost
+certificate trusted only by that test connection. Default trust and hostname
+verification rejection are checked separately; production TLS trust is unchanged.
+The JDK's bundled `keytool` generates the temporary key/certificate, which JUnit
+removes after the class. No certificate or private key is committed.
+
+The wire checks cover exact fixed-length multipart audio/metadata, Unicode text,
+unavailable health without uploading, failed/redirected/lost POST responses
+without replay or credential forwarding, and cancellation while a TLS response
+body is pending. Server readiness and text are scripted fixture responses. These
+tests establish HTTP/TLS behavior, not CUDA inference or phone/VPN integration.
