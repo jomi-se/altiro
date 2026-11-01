@@ -1,0 +1,10 @@
+[Unit]
+Description=Loopback-only test endpoint for the isolated Altiro worker
+
+[Socket]
+ListenStream=127.0.0.1:8875
+Accept=no
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target

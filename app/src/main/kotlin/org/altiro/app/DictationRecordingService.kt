@@ -309,9 +309,13 @@ class DictationRecordingService : Service() {
                                         )
                                 },
                             ) {
-                                notificationObserver?.cancel()
-                                stopForeground(STOP_FOREGROUND_REMOVE)
-                                stopSelf()
+                                // A cancelled network call may finish after a newer recording
+                                // starts.
+                                if (controller.session.value.id == id) {
+                                    notificationObserver?.cancel()
+                                    stopForeground(STOP_FOREGROUND_REMOVE)
+                                    stopSelf()
+                                }
                             }
                             return@post
                         } catch (_: Exception) {

@@ -1,0 +1,15 @@
+[Unit]
+Description=Disable Windows executable interop before starting isolated speech
+Before=altiro.service
+
+[Service]
+Type=oneshot
+ExecStart=/bin/bash /opt/altiro/wsl/disable-interop.sh
+RemainAfterExit=true
+NoNewPrivileges=true
+ProtectHome=true
+PrivateTmp=true
+RestrictAddressFamilies=AF_UNIX
+
+[Install]
+WantedBy=multi-user.target

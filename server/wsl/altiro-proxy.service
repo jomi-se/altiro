@@ -1,0 +1,23 @@
+[Unit]
+Description=System proxy from loopback TCP to Altiro's Unix socket
+Requires=altiro.service
+After=altiro.service
+
+[Service]
+ExecStart=/lib/systemd/systemd-socket-proxyd /run/altiro/api.sock
+User=altiro-proxy
+Group=altiro
+NoNewPrivileges=true
+CapabilityBoundingSet=
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryMax=64M
+TasksMax=16

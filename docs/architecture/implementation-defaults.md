@@ -25,6 +25,7 @@ or whole-field `ACTION_SET_TEXT` fallback.
 | `inference-transcribepsy` | Experimental pinned FastConformer-TDT runtime, isolated JNI, CPU/Vulkan graph checks |
 | `network` | Optional recognition and cleanup transports; no Android UI or screen access |
 | `editor-fixture` | Separate application exposing real editors and controlled mutations |
+| `server/` | Optional independently runnable GPU speech endpoint and portable WSL2 setup; outside Gradle |
 
 Keep Android objects out of the domain layer. The accessibility service owns
 editor access and overlay lifetime; the recording service owns capture. One
@@ -71,7 +72,9 @@ short recordings from decoded sample count, with padding and a full-context
 switch. Long recordings retain full windows. Same-recording window comparison
 does not insert automatically; Auto detection still uses its full context.
 
-Local dictation makes no network calls. Remote STT and cleanup are independently
+The configured self-hosted server can be preferred with automatic local fallback
+per [decision 0025](../decisions/0025-remote-first-local-fallback.md). Local-only
+dictation makes no recognition network calls. Remote STT and cleanup are independently
 configured and opt-in, with exact HTTPS endpoints, bounded responses, safe
 secret storage, no cross-origin credential forwarding, and no automatic POST
 retry. Cleanup failure retains raw text.

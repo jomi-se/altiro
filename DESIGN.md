@@ -3,6 +3,8 @@ name: Altiro
 description: A quiet native microphone for everyday offline dictation.
 colors:
   light-forest: "#385D48"
+  light-local-route: "#245B91"
+  light-checking-route: "#4C5C51"
   light-chalk: "#F4F6F0"
   light-sage: "#DCE2DA"
   light-charcoal: "#222621"
@@ -11,6 +13,8 @@ colors:
   light-selected: "#CAD8CC"
   light-on-selected: "#243C2D"
   dark-forest: "#B6D4BE"
+  dark-local-route: "#A8CFFF"
+  dark-checking-route: "#B8C5BB"
   dark-on-forest: "#182E21"
   dark-ground: "#1C2420"
   dark-chalk: "#303A33"
@@ -74,12 +78,12 @@ components:
     rounded: "{rounded.disc}"
     size: "116dp"
   microphone-recording-light:
-    backgroundColor: "{colors.light-forest}"
+    backgroundColor: "{colors.light-local-route}"
     textColor: "{colors.light-chalk}"
     rounded: "{rounded.disc}"
     size: "116dp"
   microphone-recording-dark:
-    backgroundColor: "{colors.dark-forest}"
+    backgroundColor: "{colors.dark-local-route}"
     textColor: "{colors.dark-chalk}"
     rounded: "{rounded.disc}"
     size: "116dp"
@@ -313,8 +317,8 @@ creates insertion authority.
 
 - **Idle:** mic glyph over faint ink backing, unbacked language and no phase
   text. Idle settles as described above; no continuous idle animation runs.
-- **Recording:** forest-backed Stop with chalk glyph and a faint surrounding
-  forest rule. Elapsed time appears in the language slot; Cancel stays separate.
+- **Recording:** route-colored Stop with chalk glyph and a faint surrounding
+  route-colored rule. Elapsed time appears in the language slot; Cancel stays separate.
 - **Working:** a progress ring replaces the mic. Preparation uses a 90-degree
   indeterminate arc rotating linearly every 1,400 ms; inference uses a percentage
   arc with a minimum 8-degree sweep. The primary is disabled but stays at full
@@ -326,8 +330,9 @@ creates insertion authority.
   secondary Copy available; consuming an attempt prevents another insertion
   of that result. Copy writes the clipboard before clearing the retained result
   and briefly confirms “Copied”. A failed copy retains the result and controls.
-- **Missing model:** download glyph opens Altiro, with a concise installation
-  note. This is a distinct state, not a recognition action.
+- **Missing recognition setup:** when neither an installed local model nor an
+  enabled server endpoint is available, the download glyph opens Altiro with a
+  concise installation note.
 - **Failure:** persistent content-free feedback includes recognition failure or
   “Insertion uncertain · check the field.” Consumed uncertain insertion cannot
   be retried. Ordinary consumed dispatch stays quiet.
@@ -360,6 +365,23 @@ Compose Canvas. Rounded strokes are usually 1.7 units; Stop is a filled rounded
 square. Ordinary Compose icons are 24 dp. Use this family with accessibility
 names rather than emoji, icon fonts or raster controls.
 
+### Recognition route
+
+Local recognition uses blue (`#245B91` light, `#A8CFFF` dark); verified Remote GPU
+uses forest green (`#385D48` light, `#B6D4BE` dark). Checking server uses muted ink
+(`#4C5C51` light, `#B8C5BB` dark), so a pending request does not imply GPU execution.
+These accents apply to recording discs/rules, progress arcs and route labels.
+They leave the existing sage/chalk/charcoal materials and control geometry intact.
+
+The floating primary contains a passive phone/server/clock glyph for Local,
+Remote GPU or Checking server. Its chalk backing has a 9 dp radius at an offset
+of 22 dp right and 18 dp down from the primary center, with a 13 dp glyph. It is
+part of the existing primary View, without another touch target or focus stop.
+The primary's state description names the route. Home exposes the same glyph
+and route label beneath the dial; the recording screen also names the route.
+Source integration does not establish physical-device contrast, badge legibility,
+TalkBack behavior or route transitions; those remain phone checks.
+
 ### Settings and native controls
 
 Access rows expose microphone permission, accessibility connection, the last
@@ -375,6 +397,17 @@ Attention additionally requires Vulkan. Concise permission rationale appears
 when access is missing; longer guidance appears under “About these settings.”
 Native press, keyboard focus, error and disabled treatments remain library-owned.
 
+Your speech server contains an empty-by-default HTTPS URL field, Save, Test
+connection, Remote first and content-free connection feedback. The field accepts
+a server root or full transcription route. Upload/fallback disclosure precedes
+Save. Endpoint edits stay separate from saved configuration until Save; Test uses
+the saved endpoint and is disabled for an unsaved draft. These controls lock
+during dictation/model work and connection checks. The endpoint never appears in
+Console. Remote first can only toggle once an endpoint is saved. Ordinary
+recording is available with a configured server alone; explicit comparison tools
+still require their local models. Language controls remain available for remote
+recognition even when the selected local fallback detects language automatically.
+
 Names & terms expands a multiline Material outlined field with explicit Save,
 Clear and Cancel, validation and count/UTF-8 budget feedback. Saving empty text
 clears the saved list; Cancel preserves it. The field and actions lock during
@@ -382,8 +415,9 @@ session/native work. No vocabulary enters diagnostic export.
 
 ### Models and acquisition
 
-Home has one model capsule showing the selected name and Offline/Install state;
-it opens Models. A fixed Chilean recommendation row was removed because it
+Home has one model capsule showing the selected local name and Offline/Install
+state; it opens Models. With a configured server it names Remote first and the
+selected local fallback. Local installation remains offered for fallback. A fixed Chilean recommendation row was removed because it
 looked like a second, contradictory selection. Models uses native
 radio rows with size, installation and experimental state. Stock download,
 verified import, transfer progress/cancel and Source/License/Delete are explicit.

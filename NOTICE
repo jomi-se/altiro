@@ -66,3 +66,8 @@ coroutines attribution notices are retained in Kotlin-distribution-NOTICE.txt
 and Coroutines-NOTICE.txt in that directory. The Kotlin compiler is build tooling;
 retaining its upstream distribution attribution does not bundle that compiler.
 The app license does not relicense those artifacts.
+
+The optional server is independently installed and is not bundled in the APK.
+Its Python, inference, audio, NVIDIA and model dependencies retain their upstream
+licenses. No downloaded binaries or weights are committed. See
+server/DEPENDENCIES.md for provenance and redistribution boundaries.

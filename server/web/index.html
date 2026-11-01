@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Altiro · Private dictation</title>
+<style>
+:root{color-scheme:dark;font:16px/1.6 system-ui,sans-serif;background:#111b1b;color:#e7eee9}*{box-sizing:border-box}body{max-width:720px;margin:0 auto;padding:48px 24px}header{display:flex;align-items:center;justify-content:space-between}h1{font-size:36px;letter-spacing:-1px;margin:0}p{color:#acbdb5}small{color:#acbdb5}section{margin-top:30px;padding:24px;border:1px solid #354841;border-radius:20px;background:#192623}label{display:block;margin:14px 0 6px}select,input,textarea{font:inherit;color:inherit;border:1px solid #496056;border-radius:9px;background:#111b1b;padding:10px;width:100%}textarea{min-height:180px;resize:vertical}button{font:inherit;border:0;border-radius:30px;padding:12px 22px;background:#c5dfc9;color:#15241c;cursor:pointer;margin:12px 8px 0 0}button:disabled{opacity:.4;cursor:wait}.secondary{background:#354841;color:#e7eee9}#status{font-size:14px;border:1px solid #496056;border-radius:24px;padding:6px 12px}.error{color:#ffb8a8!important}#message{min-height:26px}details{margin-top:20px}a{color:#c5dfc9}
+</style>
+<header><h1>Altiro<span style="color:#93b29a">.</span></h1><span id="status">Connecting</span></header>
+<p>Your voice, transcribed on your laptop.<br>Connected privately through your tailnet.</p>
+<section>
+<label for="language">Spoken language</label>
+<select id="language"><option value="auto">Detect automatically</option><option value="en">English</option><option value="es">Español</option><option value="fr">Français</option></select>
+<button id="record" disabled>Record</button><button id="stop" class="secondary" disabled>Stop & transcribe</button>
+<label for="audio">Or choose a recording</label><input id="audio" type="file" accept="audio/*">
+<button id="upload" class="secondary" disabled>Transcribe file</button>
+<p id="message" role="status" aria-live="polite">Checking the speech model…</p>
+</section>
+<section>
+<label for="result">Transcript</label><textarea id="result" readonly placeholder="Your words will appear here."></textarea>
+<button id="copy" class="secondary">Copy text</button><small id="timing"></small>
+<details><summary>About this connection</summary><p>Whisper large-v3-turbo runs on the laptop's NVIDIA GPU. Recordings are processed locally on that computer. This service does not save an audio or transcript history. Processing is limited to one recording at a time, up to five minutes or 16 MiB.</p><p>Language-model cleanup is not enabled. The text shown is the speech model's transcript.</p><a href="/health">Server health</a></details>
+</section>
+<script>
+const $=id=>document.getElementById(id);let recorder,stream,chunks=[],timer,ready=false,working=false;
+function controls(){ $('record').disabled=!ready||working||!!recorder; $('upload').disabled=!ready||working; $('stop').disabled=!recorder; }
+async function health(){try{const r=await fetch('/health',{cache:'no-store'});const h=await r.json();ready=h.ready;$('status').textContent=h.ready?(h.busy?'Busy':'GPU ready'):(h.status==='error'?'GPU error':'Warming up');if(!working&&!recorder)$('message').textContent=h.ready?'Ready for a recording.':h.status==='error'?'GPU startup failed. Check the laptop log.':'Loading and warming the speech model…';}catch(e){ready=false;$('status').textContent='Offline';if(!working)$('message').textContent='Cannot reach the laptop. Check Tailscale and whether it is awake.';}controls();}
+async function transcribe(blob,name){working=true;controls();$('message').className='';$('message').textContent='Transcribing on your laptop…';$('timing').textContent='';try{const form=new FormData();form.append('file',blob,name);form.append('model','large-v3-turbo');form.append('language',$('language').value);const r=await fetch('/v1/audio/transcriptions',{method:'POST',body:form,signal:AbortSignal.timeout(180000)});const data=await r.json();if(!r.ok)throw Error(data.detail||'Transcription failed');$('result').value=data.text;$('timing').textContent=`${data.duration}s audio · ${data.processing_seconds}s processing`;$('message').textContent=data.text?'Done.':'No speech detected.';}catch(e){$('message').className='error';$('message').textContent=e.message;}finally{working=false;controls();}}
+$('record').onclick=async()=>{try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Microphone recording needs the HTTPS tailnet address. You can still upload a file.');stream=await navigator.mediaDevices.getUserMedia({audio:true});chunks=[];recorder=new MediaRecorder(stream);recorder.ondataavailable=e=>{if(e.data.size)chunks.push(e.data)};recorder.onstop=()=>{const type=recorder.mimeType;recorder=null;stream.getTracks().forEach(t=>t.stop());clearTimeout(timer);transcribe(new Blob(chunks,{type}),'recording.webm');};recorder.start();timer=setTimeout(()=>{if(recorder?.state==='recording')recorder.stop()},299000);$('message').textContent='Recording… Tap Stop when you finish.';controls();}catch(e){$('message').className='error';$('message').textContent=e.message;}};
+$('stop').onclick=()=>{if(recorder?.state==='recording')recorder.stop()};
+$('upload').onclick=()=>{const f=$('audio').files[0];if(!f){$('message').textContent='Choose a recording first.';return}if(f.size>16777216){$('message').textContent='Choose a recording smaller than 16 MiB.';return}transcribe(f,f.name)};
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText($('result').value);$('message').textContent='Copied.';}catch(e){$('message').textContent='Select the transcript and copy it manually.'}};
+health();setInterval(health,10000);
+</script>
+</html>

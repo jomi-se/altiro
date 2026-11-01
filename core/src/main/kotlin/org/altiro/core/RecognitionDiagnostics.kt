@@ -21,6 +21,8 @@ enum class RecognitionStage(val label: String) {
     MODEL_RELEASE("Releasing model memory"),
     AUDIO_DELETE("Deleting temporary audio"),
     WORKER_RELEASE("Finishing recognition worker"),
+    REMOTE_CHECK("Checking speech server"),
+    REMOTE_REQUEST("Recognizing on remote GPU"),
 }
 
 enum class DiagnosticOutcome {
@@ -56,6 +58,9 @@ data class DiagnosticReport(
     val windows: List<RecognitionWindow> = modelIds.map { RecognitionWindow.FULL },
     val vocabularyTerms: Int = 0,
     val engines: List<RecognitionEngine> = modelIds.map { RecognitionEngine.WHISPER },
+    val routes: List<RecognitionRoute> = emptyList(),
+    val remoteFailure: String? = null,
+    val remoteProbeMillis: Long? = null,
 ) {
     val processingMillis: Long
         get() =
@@ -66,12 +71,25 @@ data class DiagnosticReport(
     fun export(): String = buildString {
         appendLine("Altiro recognition diagnostics · content-free")
         appendLine("Language: $language; mode: ${if (comparison) "comparison" else "single model"}")
-        appendLine("Models: ${modelIds.joinToString()}")
+        val remoteResult = routes.lastOrNull() == RecognitionRoute.REMOTE_GPU
+        if (routes.isNotEmpty()) appendLine("Recognition route: ${routes.joinToString(" → ")}")
+        remoteFailure?.let {
+            appendLine("Remote fallback reason: $it")
+            if (RecognitionEngine.TRANSCRIBEPSY in engines)
+                appendLine("Local fallback language: auto (TranscribePsy)")
+        }
+        remoteProbeMillis?.let {
+            appendLine("Server readiness check (can overlap recording): ${seconds(it)} s")
+        }
+        if (remoteResult) appendLine("Remote model: large-v3-turbo; HTTPS; no audio POST retry")
+        appendLine(
+            "${if (remoteResult) "Configured local fallback models" else "Models"}: ${modelIds.joinToString()}"
+        )
         appendLine("Vocabulary hints configured: $vocabularyTerms terms; words withheld")
         appendLine("Requested backends: ${backends.joinToString { it.name }}")
         appendLine("Requested audio windows: ${windows.joinToString { it.name }}")
         appendLine("Engines: ${engines.joinToString { it.label }}")
-        if (RecognitionEngine.TRANSCRIBEPSY in engines) {
+        if (!remoteResult && RecognitionEngine.TRANSCRIBEPSY in engines) {
             appendLine(
                 "TranscribePsy 364ec361; 4 CPU threads; greedy TDT; automatic language; no vocabulary hints"
             )
@@ -82,7 +100,7 @@ data class DiagnosticReport(
                 "TranscribePsy: native short-clip length; 30s encoder cap with context for longer audio"
             )
         }
-        if (RecognitionEngine.WHISPER in engines) {
+        if (!remoteResult && RecognitionEngine.WHISPER in engines) {
             appendLine(
                 "Requested Flash Attention: ${flashAttention.joinToString { if (it) "ON" else "OFF" }}"
             )
@@ -96,7 +114,11 @@ data class DiagnosticReport(
                 "GPU mode uses Vulkan with CPU operations as scheduled by Whisper; no automatic CPU retry"
             )
         }
-        appendLine("Model lifecycle: verify, cold load, release on every run; no resident model")
+        if (!remoteResult)
+            appendLine(
+                "Model lifecycle: verify, cold load, release on every run; no resident model"
+            )
+        else appendLine("Model lifecycle: managed by the configured server")
         appendLine("Audio: ${audioMillis?.let { seconds(it) + " s" } ?: "not finalized"}")
         appendLine(
             "Outcome: ${outcome?.name ?: "RUNNING"}; cancellation requested: $cancellationRequested"
@@ -204,6 +226,25 @@ class RecognitionDiagnostics(private val clockNanos: () -> Long = System::nanoTi
                 engines = engines.toList(),
             )
         phase(RecognitionStage.STARTUP)
+    }
+
+    @Synchronized
+    fun route(value: RecognitionRoute, failureCode: String? = null) {
+        require(failureCode == null || failureCode.matches(Regex("remote_[a-z0-9_]{1,48}")))
+        val current = mutableReport.value ?: return
+        if (current.outcome != null) return
+        val history =
+            if (current.routes.lastOrNull() == value) current.routes
+            else (current.routes + value).takeLast(8)
+        mutableReport.value =
+            current.copy(routes = history, remoteFailure = failureCode ?: current.remoteFailure)
+    }
+
+    @Synchronized
+    fun remoteProbe(millis: Long) {
+        require(millis in 0..60_000)
+        val current = mutableReport.value ?: return
+        if (current.outcome == null) mutableReport.value = current.copy(remoteProbeMillis = millis)
     }
 
     @Synchronized

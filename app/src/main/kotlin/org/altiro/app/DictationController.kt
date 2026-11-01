@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Looper
 import java.io.File
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -22,6 +23,7 @@ import org.altiro.core.RecognitionBackend
 import org.altiro.core.RecognitionDiagnostics
 import org.altiro.core.RecognitionEngine
 import org.altiro.core.RecognitionInput
+import org.altiro.core.RecognitionRoute
 import org.altiro.core.RecognitionStage
 import org.altiro.core.RecognitionWindow
 import org.altiro.core.Session
@@ -31,6 +33,8 @@ import org.altiro.core.TimedTranscript
 import org.altiro.core.Vocabulary
 import org.altiro.core.VocabularyValidation
 import org.altiro.core.reduce
+import org.altiro.network.RemoteSpeechDecision
+import org.altiro.network.RemoteSpeechEndpoint
 
 class DictationController(private val context: Context) {
     val editor = EditorAuthority()
@@ -56,12 +60,55 @@ class DictationController(private val context: Context) {
     val comparing = MutableStateFlow(false)
     val diagnostics = RecognitionDiagnostics()
     private var diagnosticGeneration = 0L
+    private val remoteRecognition = RemoteRecognition(context, scope)
+    val remoteEndpoint = remoteRecognition.endpoint
+    val remoteEnabled = remoteRecognition.enabled
+    val recognitionRoute = remoteRecognition.route
+    val remoteStatus = remoteRecognition.status
+    val remoteChecking = remoteRecognition.checking
+    val remoteConfigured: Boolean
+        get() = remoteRecognition.configured
+
+    val canRecognize: Boolean
+        get() = models.ready.value || remoteConfigured
+
+    private fun settingsAvailable() =
+        !session.value.busy && !recognition.busy.value && !models.busy.value
+
+    fun saveRemoteEndpoint(value: String): Boolean {
+        checkMain()
+        if (!settingsAvailable()) return false
+        return remoteRecognition.save(value).also { refreshSettings?.invoke() }
+    }
+
+    fun enableRemote(value: Boolean) {
+        checkMain()
+        if (!settingsAvailable()) return
+        remoteRecognition.enable(value)
+        refreshSettings?.invoke()
+    }
+
+    fun testRemote() {
+        checkMain()
+        if (settingsAvailable()) remoteRecognition.test()
+    }
+
+    fun routeLabel(): String =
+        when (recognitionRoute.value) {
+            RecognitionRoute.LOCAL -> "Local"
+            RecognitionRoute.CHECKING -> "Checking server"
+            RecognitionRoute.REMOTE_GPU -> "Remote GPU"
+        }
 
     private data class RunPlan(
         val inputs: List<RecognitionInput>,
         val language: String,
         val labMode: Int = 0,
         val labProfile: Boolean = false,
+        val remoteEndpoint: RemoteSpeechEndpoint? = null,
+        val localReady: Boolean = true,
+        val remoteLanguage: String = "auto",
+        val remotePrompt: String = "",
     )
 
     private var runPlan: RunPlan? = null
@@ -200,8 +247,21 @@ class DictationController(private val context: Context) {
                 .map { id ->
                     models.profiles.firstOrNull { it.spec.id == id } ?: return null
                 }
-        if (profiles.any { it.spec.id !in models.installed.value || !models.supported(it) })
-            return null
+        val remoteTarget =
+            if (
+                compareIds == null &&
+                    !gpuCompare &&
+                    !windowCompare &&
+                    !precisionCompare &&
+                    encoderLabMode == 0 &&
+                    remoteConfigured
+            )
+                RemoteSpeechEndpoint.parse(remoteEndpoint.value)
+            else null
+        val localReady = profiles.all {
+            it.spec.id in models.installed.value && models.supported(it)
+        }
+        if (!localReady && remoteTarget == null) return null
         if (profiles.map { it.engine }.distinct().size != 1) return null
         val inputs =
             if (precisionCompare) {
@@ -252,6 +312,10 @@ class DictationController(private val context: Context) {
                 else language.value,
                 encoderLabMode,
                 encoderLabProfile,
+                remoteTarget,
+                localReady,
+                language.value,
+                vocabulary.value.text,
             )
         comparing.value =
             encoderLabMode != 0 ||
@@ -270,13 +334,15 @@ class DictationController(private val context: Context) {
                 org.altiro.core.EncoderExperiment.diagnosticInputs(configuredInputs)
             else configuredInputs
         diagnostics.begin(
-            runPlan!!.language,
+            if (remoteTarget != null) language.value else runPlan!!.language,
             diagnosticInputs.map { it.spec.id },
             comparing.value,
             diagnosticInputs.map { it.backend },
             diagnosticInputs.map { it.flashAttention },
             diagnosticInputs.map { it.window },
-            vocabularyTerms = diagnosticInputs.first().vocabulary.count,
+            vocabularyTerms =
+                if (remoteTarget != null) vocabulary.value.count
+                else diagnosticInputs.first().vocabulary.count,
             engines = diagnosticInputs.map { it.engine },
             maxPhases =
                 if (encoderLabMode != 0) org.altiro.core.EncoderExperiment.DIAGNOSTIC_PHASE_CAPACITY
@@ -295,6 +361,11 @@ class DictationController(private val context: Context) {
             if (diagnosticGeneration == id.value && !recognition.busy.value) diagnostics.clear()
         }
         event(SessionEvent.Start(id, if (explicit) null else editor.capture()))
+        if (remoteTarget != null) remoteRecognition.prepare(id, remoteTarget, diagnostics)
+        else {
+            remoteRecognition.cancel()
+            remoteRecognition.local(diagnostics)
+        }
         return id
     }
 
@@ -304,10 +375,12 @@ class DictationController(private val context: Context) {
         mutableSession.value = reduce(previous, event)
         if (previous.id != event.id || diagnosticGeneration != event.id.value) return
         if (event is SessionEvent.Cancel && !previous.attemptConsumed) {
+            remoteRecognition.cancel()
             diagnostics.requestCancellation()
             if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.CANCELLED)
             checkpoint.save(diagnostics.report.value)
         } else if (event is SessionEvent.Fail && !previous.attemptConsumed) {
+            remoteRecognition.cancel()
             diagnostics.markFailure()
             if (!recognition.busy.value) diagnostics.finish(DiagnosticOutcome.FAILED)
             checkpoint.save(diagnostics.report.value)
@@ -398,76 +471,82 @@ class DictationController(private val context: Context) {
                 }
                 return
             }
-            recognition.transcribe(
-                audio,
-                plan.inputs,
-                plan.language,
-                diagnostics,
-                { percent, modelId ->
-                    if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
-                        activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
-                        progress.value = percent
-                        onProgress(percent)
-                    }
-                },
-            ) { result ->
-                if (diagnosticGeneration == id.value) {
-                    diagnostics.finish(
-                        when {
-                            session.value.phase == Phase.FAILED || result.isFailure ->
-                                DiagnosticOutcome.FAILED
-                            diagnostics.report.value?.cancellationRequested == true ->
-                                DiagnosticOutcome.CANCELLED
-                            else -> DiagnosticOutcome.COMPLETED
-                        }
-                    )
-                }
-                if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
-                    val transcripts = result.getOrNull().orEmpty()
-                    lastRun.value = transcripts
-                    val text = transcripts.firstOrNull()?.text
-                    scope.launch {
-                        delay(600_000)
-                        if (session.value.id == id && !session.value.busy) discard()
-                    }
-                    when {
-                        comparing.value && result.isSuccess && transcripts.isNotEmpty() ->
-                            event(SessionEvent.ComparisonComplete(id))
-                        result.isFailure ->
-                            event(
-                                SessionEvent.Fail(
-                                    id,
-                                    "Recognition failed. Open diagnostics for the backend and failure code. Try CPU if testing GPU.",
-                                )
+            if (plan.remoteEndpoint == null) {
+                startLocalRecognition(id, audio, plan, onProgress, complete)
+            } else {
+                activeModelName.value = "Your speech server · large-v3-turbo"
+                scope.launch {
+                    var handedToLocal = false
+                    try {
+                        val started = System.nanoTime()
+                        val decision =
+                            remoteRecognition.transcribe(
+                                id,
+                                audio,
+                                plan.remoteLanguage,
+                                plan.remotePrompt,
+                                diagnostics,
                             )
-                        text.isNullOrBlank() ->
-                            event(
-                                SessionEvent.Fail(
+                        if (session.value.id != id || session.value.phase != Phase.TRANSCRIBING)
+                            return@launch
+                        when (decision) {
+                            is RemoteSpeechDecision.Transcript -> {
+                                activeModelName.value = "Remote GPU · large-v3-turbo"
+                                diagnostics.phase(RecognitionStage.AUDIO_DELETE)
+                                audio.delete()
+                                recognitionComplete(
                                     id,
-                                    "No speech was recognized. Try again or choose a language.",
-                                )
-                            )
-                        else -> {
-                            event(SessionEvent.Result(id, text))
-                            if (session.value.destination != null && insertion != null) {
-                                insertion?.invoke()
-                            } else {
-                                event(
-                                    SessionEvent.AwaitUser(
-                                        id,
-                                        if (
-                                            editor.current.identity == null &&
-                                                editor.current.recordingHost != null
+                                    Result.success(
+                                        listOf(
+                                            TimedTranscript(
+                                                "remote-large-v3-turbo",
+                                                decision.text.trim(),
+                                                (System.nanoTime() - started) / 1_000_000,
+                                                route = RecognitionRoute.REMOTE_GPU,
+                                            )
                                         )
-                                            "Not inserted · tap Copy"
-                                        else "Text ready in Altiro.",
-                                    )
+                                    ),
+                                    complete,
                                 )
                             }
+                            is RemoteSpeechDecision.LocalFallback -> {
+                                if (!plan.localReady) {
+                                    event(
+                                        SessionEvent.Fail(
+                                            id,
+                                            "Server unavailable. Install a local fallback model in Models.",
+                                        )
+                                    )
+                                    complete()
+                                } else {
+                                    startLocalRecognition(id, audio, plan, onProgress, complete)
+                                    handedToLocal = true
+                                }
+                            }
                         }
+                    } catch (_: CancellationException) {
+                        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING)
+                            event(SessionEvent.Cancel(id))
+                        complete()
+                    } catch (_: Exception) {
+                        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING)
+                            event(
+                                SessionEvent.Fail(id, "Recognition could not complete. Try again.")
+                            )
+                        complete()
+                    } catch (_: LinkageError) {
+                        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING)
+                            event(
+                                SessionEvent.Fail(
+                                    id,
+                                    "The local runtime is unavailable. Check your speech server or choose another model.",
+                                )
+                            )
+                        complete()
+                    } finally {
+                        if (!handedToLocal) audio.delete()
                     }
                 }
-                complete()
             }
         } catch (_: Exception) {
             audio.delete()
@@ -477,6 +556,98 @@ class DictationController(private val context: Context) {
             audio.delete()
             event(SessionEvent.Fail(id, "The native runtime is unavailable for this device."))
             complete()
+        }
+    }
+
+    private fun recognitionComplete(
+        id: SessionId,
+        result: Result<List<TimedTranscript>>,
+        complete: () -> Unit,
+    ) {
+        if (diagnosticGeneration == id.value) {
+            diagnostics.finish(
+                when {
+                    session.value.phase == Phase.FAILED || result.isFailure ->
+                        DiagnosticOutcome.FAILED
+                    diagnostics.report.value?.cancellationRequested == true ->
+                        DiagnosticOutcome.CANCELLED
+                    else -> DiagnosticOutcome.COMPLETED
+                }
+            )
+            checkpoint.save(diagnostics.report.value)
+        }
+        if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+            val transcripts = result.getOrNull().orEmpty()
+            lastRun.value = transcripts
+            val text = transcripts.firstOrNull()?.text
+            scope.launch {
+                delay(600_000)
+                if (session.value.id == id && !session.value.busy) discard()
+            }
+            when {
+                comparing.value && result.isSuccess && transcripts.isNotEmpty() ->
+                    event(SessionEvent.ComparisonComplete(id))
+                result.isFailure ->
+                    event(
+                        SessionEvent.Fail(
+                            id,
+                            "Recognition failed. Open diagnostics for the backend and failure code. Try CPU if testing GPU.",
+                        )
+                    )
+                text.isNullOrBlank() ->
+                    event(
+                        SessionEvent.Fail(
+                            id,
+                            "No speech was recognized. Try again or choose a language.",
+                        )
+                    )
+                else -> {
+                    event(SessionEvent.Result(id, text))
+                    if (session.value.destination != null && insertion != null) {
+                        insertion?.invoke()
+                    } else {
+                        event(
+                            SessionEvent.AwaitUser(
+                                id,
+                                if (
+                                    editor.current.identity == null &&
+                                        editor.current.recordingHost != null
+                                )
+                                    "Not inserted · tap Copy"
+                                else "Text ready in Altiro.",
+                            )
+                        )
+                    }
+                }
+            }
+        }
+        complete()
+    }
+
+    private fun startLocalRecognition(
+        id: SessionId,
+        audio: File,
+        plan: RunPlan,
+        onProgress: (Int) -> Unit,
+        complete: () -> Unit,
+    ) {
+        remoteRecognition.local(diagnostics)
+        activeModelName.value =
+            models.profiles.first { it.spec.id == plan.inputs.first().spec.id }.name
+        recognition.transcribe(
+            audio,
+            plan.inputs,
+            plan.language,
+            diagnostics,
+            { percent, modelId ->
+                if (session.value.id == id && session.value.phase == Phase.TRANSCRIBING) {
+                    activeModelName.value = models.profiles.first { it.spec.id == modelId }.name
+                    progress.value = percent
+                    onProgress(percent)
+                }
+            },
+        ) { result ->
+            recognitionComplete(id, result, complete)
         }
     }
 
@@ -526,7 +697,13 @@ class DictationController(private val context: Context) {
     }
 
     fun recognitionLanguage(): String =
-        if (models.selected.value.engine == RecognitionEngine.TRANSCRIBEPSY) "auto"
+        if (
+            models.selected.value.engine == RecognitionEngine.TRANSCRIBEPSY &&
+                (!remoteConfigured ||
+                    comparing.value ||
+                    (session.value.busy && recognitionRoute.value == RecognitionRoute.LOCAL))
+        )
+            "auto"
         else language.value
 
     fun selectLanguage(value: String) {

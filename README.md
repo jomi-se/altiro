@@ -36,7 +36,8 @@ interface's physical-device acceptance remain open.
 - Experimental TranscribePsy Q8/FP16 with explicit CPU/Vulkan comparison.
 - Evaluate English, French, and Spanish, including Chilean conversational speech.
 - Explicit Insert and Copy when the original editor is no longer eligible.
-- Optional, independently configured remote recognition and cleanup later.
+- Optional self-hosted GPU recognition with visible automatic local fallback.
+- Independently configured text cleanup remains future work.
 
 Physical-device gates cover microphone startup, Gboard composition, real
 editors, recognition quality, and resource behavior. Keep the visible
@@ -54,8 +55,9 @@ On **Home**, tap **Download** to install the selected stock model once. **Models
 shows each model's size, installation state and source, with file import retained
 for offline transfer. Small Q8 is 264 MB; Small FP16 is 488 MB; multilingual Base
 is 148 MB. Downloads use pinned HTTPS sources and exact size/SHA-256 checks before
-atomic installation. Downloading is explicit; everyday recording and recognition
-stay local. Debug builds also offer a separately enabled
+atomic installation. Downloading is explicit; local-only recognition stays on the phone. With a
+configured speech server, remote first sends recorded audio to that endpoint
+and falls back to the selected local model when unavailable. Debug builds also offer a separately enabled
 [live lab relay](docs/decisions/0021-live-lab-relay.md) for content-free benchmark
 results. Test airplane mode after installation.
 
@@ -115,6 +117,19 @@ See the [product interface checks](docs/testing/everyday-interface.md),
 [rewrite checks](docs/testing/interface-rewrite.md),
 [Gate A](docs/testing/gate-a.md), [Gate B](docs/testing/gate-b.md), and
 [recognition diagnostics](docs/testing/recognition-diagnostics.md).
+
+## Optional self-hosted speech server
+
+[`server/`](server/README.md) contains the independently runnable GPU speech
+endpoint, browser client, pinned dependencies/model downloads and portable
+Windows/WSL2 setup. The default worker runs in a restricted dedicated Linux
+environment, reachable through private Tailscale HTTPS. Connect it in Android
+under **Settings → Your speech server**: paste the HTTPS address, Save and Test.
+Remote first defaults on once configured; turn it off for local only. The bubble
+uses green/server for the remote GPU, blue/phone for local and neutral/clock
+while checking. Install a local model for fallback. See the
+[phone checks](docs/testing/remote-first.md), [API](server/API.md) and
+[isolation policy](server/wsl/README.md).
 
 ## Development checks
 

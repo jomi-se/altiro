@@ -23,6 +23,7 @@ import android.view.accessibility.AccessibilityNodeInfo
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import androidx.compose.ui.graphics.toArgb
 import org.altiro.core.EditorState
 import org.altiro.core.Phase
 import org.altiro.core.RecognitionStage
@@ -53,6 +54,9 @@ class DictationOverlay(
 
     private val forest
         get() = if (dark) Color.rgb(182, 212, 190) else Color.rgb(56, 93, 72)
+
+    private val routeAccent
+        get() = recognitionRouteColor(controller.recognitionRoute.value, dark).toArgb()
 
     private val layout =
         object : LinearLayout(context) {
@@ -313,7 +317,7 @@ class DictationOverlay(
             close()
             return
         }
-        val modelReady = controller.models.ready.value
+        val modelReady = controller.canRecognize
         val modelBusy = controller.models.busy.value
         val recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING)
         mode =
@@ -365,13 +369,14 @@ class DictationOverlay(
                 Mode.PENDING -> "Text retained; automatic delivery was blocked"
                 Mode.NO_MODEL -> "No model installed"
                 Mode.IDLE -> "Ready"
-            }
+            } + ". ${controller.routeLabel()}"
 
         val code = controller.recognitionLanguage()
         language.text = if (code == "auto") "Auto" else code.uppercase(java.util.Locale.ROOT)
         val automaticLanguage =
-            controller.models.selected.value.engine ==
-                org.altiro.core.RecognitionEngine.TRANSCRIBEPSY
+            !controller.remoteConfigured &&
+                controller.models.selected.value.engine ==
+                    org.altiro.core.RecognitionEngine.TRANSCRIBEPSY
         slot.isEnabled = !automaticLanguage && (mode == Mode.IDLE || mode == Mode.NO_MODEL)
         slot.layoutParams.width =
             if (slot.isEnabled) dp(48) else LinearLayout.LayoutParams.WRAP_CONTENT
@@ -406,7 +411,7 @@ class DictationOverlay(
                 else View.ACCESSIBILITY_LIVE_REGION_NONE
         }
         phase.text = phaseText
-        phase.setTextColor(if (recording && !recordingWarning) forest else ink)
+        phase.setTextColor(if (recording && !recordingWarning) routeAccent else ink)
         phase.visibility = if (phaseText.isEmpty()) View.GONE else View.VISIBLE
         lastRecordingWarning = recordingWarning
 
@@ -1129,10 +1134,10 @@ class DictationOverlay(
                 Face.STOP -> {
                     p.style = Paint.Style.STROKE
                     p.strokeWidth = 1.4f * d
-                    p.color = withAlpha(forest, 110)
+                    p.color = withAlpha(routeAccent, 110)
                     canvas.drawCircle(cx, cy, r + 3 * d, p)
                     p.style = Paint.Style.FILL
-                    p.color = if (isPressed) withAlpha(forest, 210) else forest
+                    p.color = if (isPressed) withAlpha(routeAccent, 210) else routeAccent
                     canvas.drawCircle(cx, cy, r, p)
                     glyph(canvas, Glyph.STOP, chalk, 0.8f)
                 }
@@ -1144,7 +1149,7 @@ class DictationOverlay(
                     p.strokeCap = Paint.Cap.ROUND
                     p.color = withAlpha(ink, 36)
                     canvas.drawCircle(cx, cy, ring, p)
-                    p.color = forest
+                    p.color = routeAccent
                     val value = progress
                     if (value != null)
                         canvas.drawArc(
@@ -1157,6 +1162,23 @@ class DictationOverlay(
                     else canvas.drawArc(arc, angle - 90f, 90f, false, p)
                 }
             }
+            // A passive route badge shares the primary target; it never captures editor focus.
+            val badgeX = cx + 22 * d
+            val badgeY = cy + 18 * d
+            p.style = Paint.Style.FILL
+            p.color = chalk
+            canvas.drawCircle(badgeX, badgeY, 9 * d, p)
+            val half = (6.5f * d).toInt()
+            GlyphDrawable(recognitionRouteGlyph(controller.recognitionRoute.value), routeAccent)
+                .apply {
+                    setBounds(
+                        badgeX.toInt() - half,
+                        badgeY.toInt() - half,
+                        badgeX.toInt() + half,
+                        badgeY.toInt() + half,
+                    )
+                    draw(canvas)
+                }
         }
 
         private fun glyph(canvas: Canvas, glyph: Glyph, color: Int, scale: Float = 1f) {

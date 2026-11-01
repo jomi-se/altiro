@@ -1,6 +1,6 @@
 # 07 — Optional remote recognition and cleanup
 
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 06
 
 ## Authority
@@ -25,4 +25,7 @@ and no screen or clipboard content. Preserve useful local-only behavior.
 
 ## Comments
 
-No execution evidence recorded yet.
+The fixed self-hosted recognition adapter is implemented under
+[decision 0025](../../../decisions/0025-remote-first-local-fallback.md). Android
+build/phone acceptance is tracked in current work; independent cleanup and
+general provider credentials remain outside this increment.
