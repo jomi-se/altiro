@@ -20,12 +20,16 @@ local-only mode does not probe/upload. Green/server, blue/phone and neutral/chec
 indicators cover the actual route without changing overlay geometry or insertion
 authority. Remote-only startup is supported; comparisons remain local-only.
 See [decision 0025](../decisions/0025-remote-first-local-fallback.md) and
-[phone checks](../testing/remote-first.md). Verification passes: 94 JVM tests,
+[phone checks](../testing/remote-first.md). Verification passes: 99 JVM tests,
 54 Python checks, Android app/fixture builds, lint, instrumentation APK
 compilation, runtime notices, installability and native 16 KiB alignment.
 Independent source review fixes are included; no phone end-to-end networking,
 rendered bubble or real-server Android acceptance is claimed. LLM cleanup and
 a hard server native-job watchdog remain outside this increment.
+The additional five host wire tests use actual loopback TLS sockets for framing,
+trust/hostname rejection, redirect/replay refusal and late-response cancellation.
+They run without changing production code, dependencies or the verified Android
+APK; scripted server responses are not evidence of actual GPU execution.
 
 ## Android preview
 Two local UI corrections are implemented: pending-result Copy notices derive

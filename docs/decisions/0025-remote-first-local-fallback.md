@@ -63,3 +63,8 @@ JVM tests cover endpoint parsing, request/response bounds, strict Unicode JSON,
 timeouts/cancellation, one POST and local-fallback decisions. Android compilation
 does not establish phone networking, GPU recognition quality or overlay appearance.
 Use the [phone procedure](../testing/remote-first.md) for those gates.
+
+The subsequent host wire tests exercise real loopback HTTPS with an ephemeral,
+per-connection test trust store, including default-trust and hostname rejection.
+They verify streamed multipart bytes and cancellation/replay boundaries using
+scripted server responses; they do not establish real GPU or phone execution.
