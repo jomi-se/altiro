@@ -23,6 +23,9 @@ import androidx.compose.ui.unit.dp
 
 /** Shared geometry keeps overlay and Compose controls in the same icon family. */
 internal enum class Glyph {
+    PHONE,
+    SERVER,
+    CHECKING,
     MIC,
     STOP,
     CLOSE,
@@ -62,6 +65,22 @@ internal fun drawGlyph(canvas: NativeCanvas, glyph: Glyph, color: Int) {
         canvas.drawPath(shape, p)
     }
     when (glyph) {
+        Glyph.PHONE -> {
+            canvas.drawRoundRect(6f, 2f, 18f, 22f, 2f, 2f, p)
+            line(10f, 18f, 14f, 18f)
+        }
+        Glyph.SERVER -> {
+            canvas.drawRoundRect(3f, 3f, 21f, 21f, 2f, 2f, p)
+            line(3f, 12f, 21f, 12f)
+            line(7f, 7f, 8f, 7f)
+            line(7f, 17f, 8f, 17f)
+            line(12f, 7f, 17f, 7f)
+            line(12f, 17f, 17f, 17f)
+        }
+        Glyph.CHECKING -> {
+            canvas.drawCircle(12f, 12f, 9f, p)
+            path(12f, 6f, 12f, 12f, 16f, 14f)
+        }
         Glyph.MIC -> {
             canvas.drawRoundRect(9f, 3f, 15f, 15f, 3f, 3f, p)
             canvas.drawArc(RectF(6f, 8f, 18f, 19f), 0f, 180f, false, p)
@@ -227,3 +246,20 @@ internal fun AltiroTheme(content: @Composable () -> Unit) {
         Surface(Modifier.fillMaxSize(), color = colors.background, content = content)
     }
 }
+
+/** Execution route accents, shared by Compose and the non-focusable overlay. */
+internal fun recognitionRouteColor(route: org.altiro.core.RecognitionRoute, dark: Boolean): Color =
+    when (route) {
+        org.altiro.core.RecognitionRoute.LOCAL -> if (dark) Color(0xFFA8CFFF) else Color(0xFF245B91)
+        org.altiro.core.RecognitionRoute.REMOTE_GPU ->
+            if (dark) Color(0xFFB6D4BE) else Color(0xFF385D48)
+        org.altiro.core.RecognitionRoute.CHECKING ->
+            if (dark) Color(0xFFB8C5BB) else Color(0xFF4C5C51)
+    }
+
+internal fun recognitionRouteGlyph(route: org.altiro.core.RecognitionRoute): Glyph =
+    when (route) {
+        org.altiro.core.RecognitionRoute.LOCAL -> Glyph.PHONE
+        org.altiro.core.RecognitionRoute.REMOTE_GPU -> Glyph.SERVER
+        org.altiro.core.RecognitionRoute.CHECKING -> Glyph.CHECKING
+    }

@@ -10,6 +10,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.liveRegion
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.unit.dp
 import org.altiro.core.RecognitionBackend
 
@@ -131,6 +133,8 @@ internal fun SettingsContent(
             dismissButton = { TextButton(onClick = { confirmTermux = false }) { Text("Cancel") } },
         )
 
+    RemoteServerSettings(controller, available)
+
     SettingsSection("Recognition")
     LanguageControls(controller)
     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -165,12 +169,72 @@ internal fun SettingsContent(
     TextButton(onClick = { info = !info }) { Text(if (info) "Less" else "About these settings") }
     if (info) {
         Text(
-            "Your keyboard stays selected. Accessibility supplies the floating mic and safe insertion; microphone access records only after you tap. Downloads use the Internet; recognition stays on this phone. Audio is temporary.",
+            "Your keyboard stays selected. Accessibility supplies the floating mic and safe insertion; microphone access records only after you tap. Downloads use the Internet. Recognition is local unless you connect your speech server. Audio is temporary.",
             style = MaterialTheme.typography.bodySmall,
         )
         Text(
             "GPU and Flash Attention are experimental. GPU failures do not retry on CPU. Dynamic windows reduce short-clip work. Recordings stop at five minutes. If in-place capture is blocked, record from Altiro.",
             style = MaterialTheme.typography.bodySmall,
+        )
+    }
+}
+
+@Composable
+private fun RemoteServerSettings(controller: DictationController, available: Boolean) {
+    val endpoint by controller.remoteEndpoint.collectAsState()
+    val enabled by controller.remoteEnabled.collectAsState()
+    val checking by controller.remoteChecking.collectAsState()
+    val status by controller.remoteStatus.collectAsState()
+    var draft by remember(endpoint) { mutableStateOf(endpoint) }
+    val editable = available && !checking
+    SettingsSection("Your speech server")
+    OutlinedTextField(
+        value = draft,
+        onValueChange = { draft = it },
+        label = { Text("HTTPS server URL") },
+        supportingText = { Text("Server address or full transcription URL") },
+        singleLine = true,
+        enabled = editable,
+        modifier = Modifier.fillMaxWidth(),
+        keyboardOptions =
+            androidx.compose.foundation.text.KeyboardOptions(
+                keyboardType = androidx.compose.ui.text.input.KeyboardType.Uri,
+                autoCorrectEnabled = false,
+            ),
+    )
+    Text(
+        "Recordings go to your server. If it is unavailable, Altiro uses your selected local model.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
+    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Button(
+            enabled = editable && draft != endpoint,
+            onClick = { controller.saveRemoteEndpoint(draft) },
+        ) {
+            Text("Save")
+        }
+        OutlinedButton(
+            enabled = editable && endpoint.isNotEmpty() && draft == endpoint,
+            onClick = controller::testRemote,
+        ) {
+            Text(if (checking) "Checking…" else "Test connection")
+        }
+    }
+    SettingsToggle(
+        "Remote first",
+        enabled,
+        editable && endpoint.isNotEmpty(),
+        controller::enableRemote,
+    )
+    status?.let {
+        Text(
+            it,
+            style = MaterialTheme.typography.bodySmall,
+            modifier =
+                Modifier.semantics {
+                    liveRegion = androidx.compose.ui.semantics.LiveRegionMode.Polite
+                },
         )
     }
 }

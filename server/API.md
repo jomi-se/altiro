@@ -36,6 +36,8 @@ The browser demo targets the default tailnet-only mode and does not currently
 collect bearer credentials. Do not turn this profile into public internet hosting
 without a separate deployment review.
 
-Android integration must remain explicit and independently tested. It must not
+Android integration is explicit and independently tested under
+[decision 0025](../docs/decisions/0025-remote-first-local-fallback.md). Configured
+remote first may fall back automatically to the selected on-device model. It must not
 silently replay a failed audio POST or bypass destination/cancellation guards.
 Follow the [canonical specification](../docs/plan/android-dictation/spec.md).

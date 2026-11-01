@@ -2,8 +2,11 @@
 
 This component serves multilingual Whisper large-v3-turbo using the operator's
 NVIDIA GPU. The Android app remains useful offline and builds independently of
-this directory. Android remote-provider integration is still pending; the included
-browser client can record/upload audio and copy transcripts today.
+this directory. Android integrates this endpoint through Settings → Your speech server, with
+remote first and selected-local-model fallback. See the
+[phone procedure](../docs/testing/remote-first.md); end-to-end phone acceptance
+remains separate from the reference server smoke checks. The browser client
+can also record/upload audio and copy transcripts.
 
 The reference deployment uses Windows 11, WSL2/Ubuntu 24.04 and a restricted Linux
 worker. Its generic bootstrap scripts are versioned; machine data and downloaded
@@ -60,8 +63,8 @@ Existing tailnet access rules govern access. The default profile is private,
 with no Funnel, router forwarding or public internet signup.
 
 The main endpoint accepts `POST /v1/audio/transcriptions`; configure the full
-URL `https://speech.example.net/v1/audio/transcriptions` in an eventual Android
-adapter. Its minimal compatible response is `{"text":"..."}`. See
+URL `https://speech.example.net/v1/audio/transcriptions` in the Android
+adapter (the HTTPS origin alone is also accepted). Its minimal compatible response is `{"text":"..."}`. See
 [the API contract](API.md).
 
 ## Operation

@@ -38,6 +38,10 @@ class RecordingActivity : ComponentActivity() {
             AltiroTheme {
                 val session by controller.session.collectAsState()
                 val ready by controller.models.ready.collectAsState()
+                val remoteEndpoint by controller.remoteEndpoint.collectAsState()
+                val remoteEnabled by controller.remoteEnabled.collectAsState()
+                val route by controller.recognitionRoute.collectAsState()
+                val remoteConfigured = remoteEnabled && remoteEndpoint.isNotEmpty()
                 val modelBusy by controller.models.busy.collectAsState()
                 val nativeBusy by controller.recognition.busy.collectAsState()
                 KeepAwake(session.busy || nativeBusy)
@@ -57,7 +61,9 @@ class RecordingActivity : ComponentActivity() {
                             (encoderLab && intent.getBooleanExtra("encoder-lab-both", false))
                     )
                         controller.models.precisionIds().all { it in installed }
-                    else if (compareIds != null) compareIds.all { it in installed } else ready
+                    else if (compareIds != null) compareIds.all { it in installed }
+                    else if (gpuCompare || windowCompare || encoderLab || comparing) ready
+                    else ready || remoteConfigured
                 Column(
                     Modifier.fillMaxSize()
                         .windowInsetsPadding(WindowInsets.safeDrawing)
@@ -77,7 +83,7 @@ class RecordingActivity : ComponentActivity() {
                         } else if (compareIds != null || comparing) {
                             "Compare speech models"
                         } else {
-                            "Dictate offline"
+                            "Dictate"
                         },
                         style = MaterialTheme.typography.headlineMedium,
                     )
@@ -93,7 +99,10 @@ class RecordingActivity : ComponentActivity() {
                         } else if (compareIds != null || comparing) {
                             "One recording is processed by each model sequentially. Nothing is inserted automatically. Copy the result you prefer. Starting another recording clears these results."
                         } else {
-                            "Using ${selected.name} · ${backend.label}. Change settings in Altiro."
+                            if (remoteConfigured)
+                                "Remote first · ${selected.name} local fallback. Change settings in Altiro."
+                            else
+                                "Using ${selected.name} · ${backend.label}. Change settings in Altiro."
                         }
                     )
                     if (!encoderLab)
@@ -121,6 +130,12 @@ class RecordingActivity : ComponentActivity() {
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
                         MicrophoneDial(
+                            accent =
+                                recognitionRouteColor(
+                                    route,
+                                    androidx.compose.foundation.isSystemInDarkTheme(),
+                                ),
+                            routeLabel = controller.routeLabel(),
                             recording = session.phase in setOf(Phase.STARTING, Phase.RECORDING),
                             working =
                                 (session.busy || nativeBusy) &&
@@ -137,6 +152,15 @@ class RecordingActivity : ComponentActivity() {
                                     controller.stop()
                                 else startRecording()
                             },
+                        )
+                        Text(
+                            controller.routeLabel(),
+                            color =
+                                recognitionRouteColor(
+                                    route,
+                                    androidx.compose.foundation.isSystemInDarkTheme(),
+                                ),
+                            style = MaterialTheme.typography.labelLarge,
                         )
                         if (session.busy || nativeBusy)
                             OutlinedButton(onClick = controller::cancel) { Text("Cancel") }

@@ -262,6 +262,11 @@ internal fun HomeContent(
     setup: () -> Unit,
 ) {
     val selected by controller.models.selected.collectAsState()
+    val remoteEndpoint by controller.remoteEndpoint.collectAsState()
+    val remoteEnabled by controller.remoteEnabled.collectAsState()
+    val route by controller.recognitionRoute.collectAsState()
+    val remoteConfigured = remoteEnabled && remoteEndpoint.isNotEmpty()
+    val routeColor = recognitionRouteColor(route, androidx.compose.foundation.isSystemInDarkTheme())
     val ready by controller.models.ready.collectAsState()
     val modelBusy by controller.models.busy.collectAsState()
     val modelStatus by controller.models.status.collectAsState()
@@ -301,7 +306,7 @@ internal fun HomeContent(
         ) {
             AltiroIcon(Glyph.MODEL)
             Text(
-                selected.name,
+                if (remoteConfigured) "Remote first · ${selected.name} fallback" else selected.name,
                 style = MaterialTheme.typography.labelLarge,
                 modifier = Modifier.weight(1f, false),
             )
@@ -323,6 +328,8 @@ internal fun HomeContent(
             if (!ready) {
                 Text(
                     if (modelBusy) modelStatus
+                    else if (remoteConfigured)
+                        "Install ${selected.name} for local fallback when your server is unavailable."
                     else "Install ${selected.name} once. Dictate offline after that.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
@@ -350,9 +357,22 @@ internal fun HomeContent(
         MicrophoneDial(
             recording = recording,
             working = busy && !recording,
-            enabled = recording || (!busy && !modelBusy && ready && !pending),
+            enabled = recording || (!busy && !modelBusy && controller.canRecognize && !pending),
             onClick = { if (recording) controller.stop() else record() },
+            accent = routeColor,
+            routeLabel = controller.routeLabel(),
         )
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            AltiroIcon(recognitionRouteGlyph(route), Modifier.size(18.dp), color = routeColor)
+            Text(
+                controller.routeLabel(),
+                color = routeColor,
+                style = MaterialTheme.typography.labelLarge,
+            )
+        }
         Text(
             when {
                 recording ->
@@ -362,7 +382,7 @@ internal fun HomeContent(
                 busy ->
                     if (nativeBusy && !session.busy) "Cancelling…" else controller.processingLabel()
                 pending -> "Text ready"
-                !ready -> "Your voice, on your phone"
+                !controller.canRecognize -> "Your voice, on your phone"
                 else -> "Ready when you are"
             },
             style = MaterialTheme.typography.titleLarge,
@@ -418,6 +438,8 @@ internal fun MicrophoneDial(
     working: Boolean,
     enabled: Boolean,
     onClick: () -> Unit,
+    accent: Color = MaterialTheme.colorScheme.primary,
+    routeLabel: String? = null,
 ) {
     val animate = android.animation.ValueAnimator.areAnimatorsEnabled()
     val angle: State<Float> =
@@ -431,7 +453,6 @@ internal fun MicrophoneDial(
             )
         } else remember { mutableFloatStateOf(0f) }
     val colors = MaterialTheme.colorScheme
-    val accent = colors.primary
     val rule = colors.outline.copy(alpha = 0.3f)
     Box(
         Modifier.size(248.dp)
@@ -493,7 +514,7 @@ internal fun MicrophoneDial(
                             recording -> "Stop and transcribe"
                             working -> "Microphone stopped; recognizing speech"
                             else -> "Start recording"
-                        }
+                        } + (routeLabel?.let { ". $it" } ?: "")
                 },
         ) {
             Box(contentAlignment = Alignment.Center) {
@@ -510,7 +531,12 @@ internal fun MicrophoneDial(
 @Composable
 internal fun LanguageControls(controller: DictationController) {
     val selected by controller.models.selected.collectAsState()
-    if (selected.engine == org.altiro.core.RecognitionEngine.TRANSCRIBEPSY) {
+    val remoteEndpoint by controller.remoteEndpoint.collectAsState()
+    val remoteEnabled by controller.remoteEnabled.collectAsState()
+    if (
+        selected.engine == org.altiro.core.RecognitionEngine.TRANSCRIBEPSY &&
+            !(remoteEnabled && remoteEndpoint.isNotEmpty())
+    ) {
         Text("Auto · EN, ES, FR +5", style = MaterialTheme.typography.labelLarge)
         return
     }

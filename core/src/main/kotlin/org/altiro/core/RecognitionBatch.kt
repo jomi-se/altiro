@@ -21,6 +21,7 @@ data class TimedTranscript(
     val backend: RecognitionBackend = RecognitionBackend.CPU,
     val flashAttention: Boolean = false,
     val window: RecognitionWindow = RecognitionWindow.FULL,
+    val route: RecognitionRoute = RecognitionRoute.LOCAL,
 )
 
 object RecognitionBatch {

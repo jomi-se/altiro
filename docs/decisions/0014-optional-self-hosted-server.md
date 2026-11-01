@@ -57,3 +57,10 @@ its own adapter/contract tests. Preserve raw transcripts, reject stale results,
 never automatically replay audio POSTs and offer explicit local retry on failure.
 Availability probing and any future preference policy need their own accepted
 Android design. Cleanup remains independently opt-in and is not installed.
+
+## Follow-up
+
+The maintainer subsequently authorized the Android integration and automatic
+local fallback in [decision 0025](0025-remote-first-local-fallback.md). Its explicit
+configuration/consent and phone gates supersede the manual-local-retry preference
+above; the server still never retries requests or selects another provider.

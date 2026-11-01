@@ -3,7 +3,8 @@
 This component is an independently runnable, optional self-hosted recognition
 endpoint. It does not change Android's local-only behavior or make the server
 a prerequisite for building/running the Android app. Follow root guidance and
-decision 0014. Android remote-adapter implementation remains separate work.
+decision 0014. Android remote-adapter implementation follows decision 0025 in the app/network
+modules; server operation remains independent.
 
 Keep portable source and generic setup scripts here. Keep actual hostnames,
 tailnets, IPs, home paths, credentials, models, recordings, virtual disks,

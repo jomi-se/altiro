@@ -86,6 +86,9 @@ and speed remain phone gates.
 Do not introduce desktop targets, a replacement keyboard, always-listening
 audio, broad screen extraction, cloud accounts, billing, automatic sending,
 automatic cross-provider failover, or a mandatory hosted backend.
+The explicitly authorized configured-server-to-local fallback is documented in
+`docs/decisions/0025-remote-first-local-fallback.md`; it never retries a remote
+POST and never changes the one-insertion-attempt policy.
 
 The optional independently runnable `server/` component is accepted in
 `docs/decisions/0014-optional-self-hosted-server.md`. Its portable setup belongs

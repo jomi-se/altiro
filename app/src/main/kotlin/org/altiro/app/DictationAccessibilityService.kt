@@ -48,6 +48,7 @@ class DictationAccessibilityService : AccessibilityService() {
     private val pasteClipboard by lazy { PasteClipboard(this, controller.scope) }
     private var observer: Job? = null
     private var languageObserver: Job? = null
+    private var routeObserver: Job? = null
     private var settleJob: Job? = null
     private var settledInput: EditorMetadata? = null
     private var settleContentChanged = false
@@ -101,6 +102,17 @@ class DictationAccessibilityService : AccessibilityService() {
             controller.scope.launch {
                 combine(controller.language, controller.models.busy, controller.progress) { _, _, _
                         ->
+                        Unit
+                    }
+                    .collect { renderOverlay() }
+            }
+        routeObserver =
+            controller.scope.launch {
+                combine(
+                        controller.recognitionRoute,
+                        controller.remoteEndpoint,
+                        controller.remoteEnabled,
+                    ) { _, _, _ ->
                         Unit
                     }
                     .collect { renderOverlay() }
@@ -203,6 +215,8 @@ class DictationAccessibilityService : AccessibilityService() {
         observer = null
         languageObserver?.cancel()
         languageObserver = null
+        routeObserver?.cancel()
+        routeObserver = null
         overlay?.dispose()
         overlay = null
         controller.insertion = null

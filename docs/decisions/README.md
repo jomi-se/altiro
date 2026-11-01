@@ -35,3 +35,7 @@ Record meaningful departures or newly resolved forks as numbered Markdown
 files with title, status, date, context, decision, consequences, and evidence.
 Use `proposed`, `accepted`, or `superseded`; a proposal does not authorize an
 architecture change.
+
+- [0025 — Remote first with local fallback](0025-remote-first-local-fallback.md):
+  explicitly configured self-hosted GPU recognition, bounded one-POST attempts,
+  visible automatic local fallback, and route-aware bubble states.

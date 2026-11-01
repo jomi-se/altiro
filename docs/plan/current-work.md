@@ -1,6 +1,6 @@
 # Current work
 
-Updated: 2026-10-31.
+Updated: 2026-11-01.
 
 ## Optional self-hosted recognition
 
@@ -12,10 +12,20 @@ passed 18 containment checks plus real speech, silence, malformed audio and
 restart checks. The default sign-in launcher selects WSL2. Machine state,
 weights, environments, disks and measurements remain ignored.
 
-The Android transport is not connected yet. Endpoint consent/configuration,
-availability policy, cancellation and no-replay behavior require a separate
-increment. LLM cleanup and a hard native-job watchdog are not installed.
-Existing phone acceptance gates below are unchanged.
+Version **0.7.0-remote-first** integrates the configured HTTPS speech server.
+Saving an endpoint enables remote first unless explicitly disabled. Readiness is
+checked while recording; an unavailable/busy server or failed single POST falls
+back visibly to the selected installed local model. No endpoint is bundled and
+local-only mode does not probe/upload. Green/server, blue/phone and neutral/check
+indicators cover the actual route without changing overlay geometry or insertion
+authority. Remote-only startup is supported; comparisons remain local-only.
+See [decision 0025](../decisions/0025-remote-first-local-fallback.md) and
+[phone checks](../testing/remote-first.md). Verification passes: 94 JVM tests,
+54 Python checks, Android app/fixture builds, lint, instrumentation APK
+compilation, runtime notices, installability and native 16 KiB alignment.
+Independent source review fixes are included; no phone end-to-end networking,
+rendered bubble or real-server Android acceptance is claimed. LLM cleanup and
+a hard server native-job watchdog remain outside this increment.
 
 ## Android preview
 Two local UI corrections are implemented: pending-result Copy notices derive
